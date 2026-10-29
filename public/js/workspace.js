@@ -365,9 +365,12 @@ function renderLiveInfo() {
     const midnight = d.getHours() === 0 && x !== d0;
     html += `<div class="tl-tick${midnight ? ' day' : ''}" style="left:${((x - d0) / 60e3) * px}px">${midnight ? esc(d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })) : fmtTime(x)}</div>`;
   }
+  let prevEnd = 0;
   for (const p of list) {
     if (p[1] <= d0 || p[0] >= d1) continue;
-    const s = Math.max(p[0], d0), e = Math.min(p[1], d1);
+    if (p[1] <= prevEnd) continue;
+    const s = Math.max(p[0], d0, prevEnd), e = Math.min(p[1], d1);
+    prevEnd = p[1];
     const left = ((s - d0) / 60e3) * px;
     const w = Math.max(6, ((e - s) / 60e3) * px - 4);
     const live = p[0] <= t && t < p[1];
@@ -461,10 +464,13 @@ function drawGuide() {
     let cells = '';
     if (!list) cells = `<div class="g-none" style="left:${G.left}px">No guide data</div>`;
     else {
+      let prevEnd = 0;   // providers sometimes send overlapping entries: draw each one only after the previous has ended
       for (let j = 0; j < list.length; j++) {
         const p = list[j];
         if (p[1] <= t0 || p[0] >= tEnd) continue;
-        const s = Math.max(p[0], t0);
+        if (p[1] <= prevEnd) continue;
+        const s = Math.max(p[0], t0, prevEnd);
+        prevEnd = p[1];
         const e = Math.min(p[1], tEnd);
         const x = G.left + ((s - t0) / 60e3) * G.px;
         const w = Math.max(4, ((e - s) / 60e3) * G.px - 3);
