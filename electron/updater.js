@@ -25,6 +25,20 @@ const reason = () => {
   return '';
 };
 
+async function manualCheck() {
+  if (!releasesUrl) { send({ state: 'error', message: 'No GitHub repository is configured yet: set your username and repository in package.json (see RELEASING.md).' }); return status; }
+  send({ state: 'checking' });
+  try {
+    const r = await fetch(`https://api.github.com/repos/${pub.owner}/${pub.repo}/releases/latest`, { headers: { 'User-Agent': 'AG-Horizon', Accept: 'application/vnd.github+json' } });
+    if (r.status === 404) { send({ state: 'error', message: 'No published release found. Draft releases are invisible: open the release on GitHub and press Publish.' }); return status; }
+    if (!r.ok) throw new Error('GitHub answered ' + r.status);
+    const j = await r.json();
+    const tag = String(j.tag_name || '');
+    send(newer(tag, app.getVersion()) ? { state: 'available', version: tag.replace(/^v/i, ''), manual: true } : { state: 'current', checkedAt: Date.now() });
+  } catch (e) { send({ state: 'error', message: String((e && e.message) || e).slice(0, 200) }); }
+  return status;
+}
+
 function init() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(), platform: process.platform, arch: process.arch,
@@ -34,7 +48,8 @@ function init() {
   ipcMain.handle('updater:open', () => { if (releasesUrl) shell.openExternal(releasesUrl); });
 
   if (reason()) {
-    ipcMain.handle('updater:check', () => ({ state: 'unsupported', message: reason() }));
+    // No in-app installer here (started from source, or no repository configured): still tell the person whether a newer release exists.
+    ipcMain.handle('updater:check', () => manualCheck());
     ipcMain.handle('updater:download', () => status);
     ipcMain.handle('updater:install', () => status);
     return;

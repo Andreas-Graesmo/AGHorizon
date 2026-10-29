@@ -578,7 +578,8 @@ function updatesCard() {
   const st = upd.st || { state: 'idle' };
   let line = 'Not checked yet.';
   let btn = '<button class="btn" data-act="upd-check">Check for updates</button>';
-  if (info.updater === false) { line = esc(info.updaterReason || 'Updates are not available.'); btn = info.releasesUrl ? '<button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''; }
+  if (info.updater === false && st.state === 'idle') line = esc(info.updaterReason || 'Automatic updates are not available.') + ' You can still check whether a newer version exists.';
+  if (st.state === 'available' && st.manual) { line = `Version <b>${esc(st.version || '')}</b> is available. ${esc(info.updaterReason || '')}`; btn = '<button class="btn" data-act="upd-open"><svg class="ic"><use href="#i-download"/></svg>Download from GitHub</button>'; }
   else if (st.state === 'checking') { line = 'Checking…'; btn = '<button class="btn" disabled>Checking…</button>'; }
   else if (st.state === 'current') { line = `You have the latest version${st.checkedAt ? ' · checked ' + ago(st.checkedAt) : ''}.`; }
   else if (st.state === 'available') { line = `Version <b>${esc(st.version || '')}</b> is available.`; btn = '<button class="btn" data-act="upd-download"><svg class="ic"><use href="#i-download"/></svg>Download update</button>'; }
