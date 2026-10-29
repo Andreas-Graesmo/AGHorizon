@@ -10,7 +10,14 @@ const pkg = require('../package.json');
 let autoUpdater = null;
 try { ({ autoUpdater } = require('electron-updater')); } catch { /* dependency missing: updates are simply unavailable */ }
 
-const pub = [].concat((pkg.build && pkg.build.publish) || [])[0] || {};
+function findRepo() {
+  const r = pkg.repository && (typeof pkg.repository === 'string' ? pkg.repository : pkg.repository.url);
+  const m = r && /github\.com[/:]([^/]+)\/([^/#]+?)(?:\.git)?$/i.exec(String(r).trim()) || (r && /^github:([^/]+)\/(.+)$/i.exec(String(r).trim()));
+  if (m) return { owner: m[1], repo: m[2] };
+  const p = [].concat((pkg.build && pkg.build.publish) || [])[0];
+  return p && p.owner && p.repo ? { owner: p.owner, repo: p.repo } : {};
+}
+const pub = findRepo();
 const releasesUrl = pub.owner && pub.repo && !/^YOUR-/i.test(pub.owner) ? `https://github.com/${pub.owner}/${pub.repo}/releases/latest` : '';
 
 let status = { state: 'idle' };
