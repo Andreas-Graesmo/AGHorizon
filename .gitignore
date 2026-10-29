@@ -1,0 +1,5 @@
+node_modules/
+dist/
+public/vendor/*
+!public/vendor/.gitkeep
+.DS_Store

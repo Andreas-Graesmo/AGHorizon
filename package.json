@@ -1,0 +1,101 @@
+{
+  "name": "ag-horizon",
+  "productName": "AG Horizon",
+  "version": "1.5.0",
+  "description": "A desktop IPTV player: Xtream Codes and M3U playlists, live TV with EPG, movies and series, second-screen mirroring, ffmpeg compatibility mode.",
+  "author": "AG Horizon",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js",
+    "setup": "node scripts/get-vendor.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "app.aghorizon.desktop",
+    "productName": "AG Horizon",
+    "files": [
+      "electron/**",
+      "public/**",
+      "server.js",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.entertainment"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "AudioVideo"
+    },
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Andreas-Graesmo",
+        "repo": "AGHorizon",
+        "releaseType": "draft"
+      }
+    ]
+  },
+  "license": "MIT",
+  "private": true,
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Andreas-Graesmo/AGHorizon.git"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

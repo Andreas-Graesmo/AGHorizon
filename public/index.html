@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>AG Horizon</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ffb347'/%3E%3Cpath d='M9 11h14v10H9z' fill='none' stroke='%231a1204' stroke-width='2.4' stroke-linejoin='round'/%3E%3Cpath d='M12 8l4 3 4-3' fill='none' stroke='%231a1204' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21.1 7 14.2 2 9.3l6.9-1z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="m17 2-5 5-5-5"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7zM2 17l10 5 10-5M2 12l10 5 10-5"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+    <symbol id="i-cast" viewBox="0 0 24 24"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6M2 12a9 9 0 0 1 8 8M2 16a5 5 0 0 1 4 4M2 20h.01"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24"><path d="M21 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><rect x="12" y="12" width="10" height="8" rx="1.5"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3.5v17L20.5 12z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M9 16h6"/></symbol>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5" fill="currentColor" stroke="none"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" fill="currentColor" stroke="none"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" fill="currentColor" stroke="none"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.4-9A6 6 0 0 1 18 9.5 4.3 4.3 0 0 1 17.5 18z" fill="currentColor"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C1 8.6 3 5 6.5 5c2 0 3.6 1.1 5.5 3.1C13.9 6.1 15.5 5 17.5 5 21 5 23 8.6 21.6 11.8 19.5 16.4 12 21 12 21z"/></symbol>
+    <symbol id="i-heart-fill" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C1 8.6 3 5 6.5 5c2 0 3.6 1.1 5.5 3.1C13.9 6.1 15.5 5 17.5 5 21 5 23 8.6 21.6 11.8 19.5 16.4 12 21 12 21z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-clapper" viewBox="0 0 24 24"><path d="M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM3 9l1.6-4.8 16 4.300M7.5 4.200l3 4.500M13 5.500l3 4.5" fill="currentColor"/></symbol>
+    <symbol id="i-live" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-guide" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="19" cy="14" r="2.5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.800l.1.100a2 2 0 1 1-2.8 2.800l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.100a2 2 0 1 1-2.8-2.800l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.8-2.800l.1.100a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.800l-.1.100a1.7 1.7 0 0 0-.3 1.800V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3.500v16H7zM13.5 4H17v16h-3.500z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zM15.5 8.500a5 5 0 0 1 0 7M18.5 5.500a9 9 0 0 1 0 13"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zM22 9l-6 6M16 9l6 6"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></symbol>
+    <symbol id="i-rows" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.300M8 11h6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3"/></symbol>
+    <symbol id="i-youtube" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4" fill="currentColor"/><path d="m10 9 5 3-5 3z" fill="#111" stroke="none"/></symbol>
+      <symbol id="i-check-plain" viewBox="0 0 24 24"><path d="m5 12.5 4.500 4.500L19 7.500"/></symbol>
+    <symbol id="i-more-v" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-broom" viewBox="0 0 24 24"><path d="M19 3l-6 6M11 7l6 6-3 3-3-1-3 5-5-5 5-3-1-3zM3 21l3-3"/></symbol>
+    <symbol id="i-updown" viewBox="0 0 24 24"><path d="M8 4v16M4 16l4 4 4-4M16 20V4M12 8l4-4 4 4"/></symbol>
+    <symbol id="i-enter" viewBox="0 0 24 24"><path d="M20 5v8a2 2 0 0 1-2 2H5M9 11l-4 4 4 4"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  </defs>
+</svg>
+
+<div id="app">
+
+  <!-- ───────────── top bar ───────────── -->
+  <header id="topbar">
+    <button id="btnHome" class="tb-btn" title="Dashboard" aria-label="Dashboard"><svg class="ic"><use href="#i-dashboard"/></svg></button>
+    <button id="btnBack" class="tb-btn" title="Back (Alt+←)" aria-label="Back" hidden><svg class="ic"><use href="#i-arrow-left"/></svg></button>
+    <button id="plSwitch" class="pl-switch" title="Switch playlist"><span class="src-ico xs"><svg class="ic"><use href="#i-cloud"/></svg><i class="dot unknown" id="plDot"></i></span><span class="ps-text"><b id="plName">No playlist</b><small id="plType">Add one to start</small></span><svg class="ic chev"><use href="#i-chev-down"/></svg></button>
+    <div id="topSearch" class="top-search">
+      <svg class="ic"><use href="#i-search"/></svg>
+      <button id="scopeChip" class="scope-chip" type="button" title="Search everything">Advanced search</button>
+      <input id="topInput" placeholder="Search in this playlist…" autocomplete="off" spellcheck="false">
+      <kbd id="btnPalette" title="Command palette (Ctrl+K)">Ctrl+K</kbd>
+    </div>
+    <button id="btnKeys" class="tb-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><svg class="ic"><use href="#i-keyboard"/></svg></button>
+    <button id="btnAdd" class="tb-btn" title="Add playlist" aria-label="Add playlist"><svg class="ic"><use href="#i-plus"/></svg></button>
+    <button id="wsSideToggle" class="tb-btn" title="Show / hide categories (Ctrl+B)" aria-label="Toggle categories" hidden><svg class="ic"><use href="#i-panel"/></svg></button>
+    <div class="grow"></div>
+    <button id="wsRefresh" class="tb-btn" title="Reload playlist and guide" aria-label="Reload" hidden><svg class="ic"><use href="#i-refresh"/></svg></button>
+    <button id="btnMirror" class="tb-btn" title="Show on a second screen" aria-label="Second screen"><svg class="ic"><use href="#i-cast"/></svg></button>
+    <button id="btnTheme" class="tb-btn" title="Switch light / dark theme" aria-label="Switch theme"><svg class="ic"><use href="#i-sun"/></svg></button>
+  </header>
+
+  <!-- ───────────── icon rail ───────────── -->
+  <nav id="nav" aria-label="Main">
+    <button class="nav-item" data-route="playlists" title="Playlists"><svg class="ic"><use href="#i-list"/></svg></button>
+    <button class="nav-item" data-route="search" title="Global search (Ctrl+F)"><svg class="ic"><use href="#i-search"/></svg></button>
+    <button class="nav-item" data-route="favorites" title="Favorites"><svg class="ic"><use href="#i-heart"/></svg></button>
+    <button class="nav-item" data-route="recent" title="Recently viewed (Ctrl+R)"><svg class="ic"><use href="#i-history"/></svg></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item" data-mode="movie" title="Movies"><svg class="ic"><use href="#i-clapper"/></svg></button>
+    <button class="nav-item" data-mode="live" title="Live TV"><svg class="ic"><use href="#i-live"/></svg></button>
+    <button class="nav-item" data-mode="series" title="Series"><svg class="ic"><use href="#i-monitor"/></svg></button>
+    <button class="nav-item" data-mode="guide" title="TV guide"><svg class="ic"><use href="#i-guide"/></svg></button>
+    <div class="spacer"></div>
+    <button class="nav-item" data-route="settings" title="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+  </nav>
+
+  <!-- ───────────── content ───────────── -->
+  <div id="content">
+    <main id="views">
+      <section class="view" id="v-dashboard" hidden></section>
+      <section class="view" id="v-playlists" hidden></section>
+      <section class="view" id="v-favorites" hidden></section>
+      <section class="view" id="v-recent" hidden></section>
+      <section class="view" id="v-search" hidden></section>
+      <section class="view" id="v-settings" hidden></section>
+
+      <!-- playlist workspace -->
+      <section class="view ws" id="v-ws" hidden>
+        <div class="ws-body" id="wsBody">
+
+          <!-- LIVE: categories | (grid of channels) or (channel list | player + timeline) -->
+          <div class="live" id="wsLive" data-view="grid">
+            <aside class="cats-col" id="liveCats">
+              <div class="cats-head"><b>Live Categories</b><span class="grow"></span>
+                <button class="icon-btn sm" id="liveCatSearchBtn" title="Search categories" aria-label="Search categories"><svg class="ic"><use href="#i-search"/></svg></button>
+                <button class="icon-btn sm" id="liveCatCompact" title="Compact list" aria-label="Compact list"><svg class="ic"><use href="#i-rows"/></svg></button>
+                <button class="icon-btn sm" id="liveCatReset" title="Show all categories" aria-label="Show all categories"><svg class="ic"><use href="#i-sliders"/></svg></button>
+                <button class="icon-btn sm" data-act="cats-collapse" title="Hide categories (Ctrl+B)" aria-label="Hide categories"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+              </div>
+              <div class="cat-search" id="liveCatSearchBox" hidden><svg class="ic"><use href="#i-search"/></svg><input id="liveCatSearch" placeholder="Search categories" autocomplete="off" spellcheck="false"><button class="icon-btn sm" id="liveCatClear" aria-label="Clear"><svg class="ic"><use href="#i-x"/></svg></button></div>
+              <div id="liveCatList" class="cat-list"></div>
+            </aside>
+
+            <aside class="chan-col" id="liveSide">
+              <div class="list-head"><b id="liveListTitle"></b><span class="pill" id="liveListCount"></span><span class="grow"></span>
+                <button class="icon-btn sm az" id="liveSort" title="Sort A–Z" aria-label="Sort A–Z">AZ</button>
+                <button class="icon-btn sm" id="liveListColl" title="Hide this list" aria-label="Hide list"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+              </div>
+              <div id="liveStatus" class="side-status" role="status"></div>
+              <div id="liveList" class="vlist" tabindex="0">
+                <div id="liveSpacer"></div>
+                <div id="liveRows"></div>
+                <div id="liveEmpty" class="empty" hidden></div>
+              </div>
+            </aside>
+
+            <div class="live-main" id="liveMain">
+              <div id="liveSlot" class="player-slot"><div class="slot-hint"><svg class="ic"><use href="#i-live"/></svg><span>Select a channel to start watching</span></div></div>
+              <section class="timeline" id="tl">
+                <div class="tl-head">
+                  <button class="icon-btn sm" id="tlCollapse" title="Show / hide the guide" aria-label="Show / hide the guide"><svg class="ic"><use href="#i-chev-down"/></svg></button>
+                  <div class="tl-title"><b id="tlChan">TV guide</b><small id="tlProg"></small></div>
+                  <span class="grow"></span>
+                  <button class="icon-btn round" id="tlLocate" title="Jump to now" aria-label="Jump to now"><svg class="ic"><use href="#i-locate"/></svg></button>
+                  <button class="icon-btn round" id="tlZoom" title="Zoom the timeline" aria-label="Zoom"><svg class="ic"><use href="#i-zoom"/></svg></button>
+                  <div class="tl-date"><button class="icon-btn sm" id="tlPrev" aria-label="Previous day"><svg class="ic"><use href="#i-chev-left"/></svg></button><span><b id="tlDayA">Today</b><small id="tlDayB"></small></span><button class="icon-btn sm" id="tlNext" aria-label="Next day"><svg class="ic"><use href="#i-chev-right"/></svg></button></div>
+                </div>
+                <div class="tl-body" id="tlBody"><div class="tl-scroll" id="tlScroll"><div id="tlInner"></div></div><div class="tl-empty" id="tlEmpty"></div></div>
+              </section>
+            </div>
+
+            <div class="grid-main" id="liveGridWrap">
+              <div class="grid-head"><div class="gh-title"><b id="liveGridTitle">All items</b><small id="liveGridCount"></small></div></div>
+              <div class="grid-scroll" id="liveGridScroll">
+                <div id="liveGrid" class="grid tiles"></div>
+                <div id="liveGridMore" class="more"></div>
+                <div id="liveGridEmpty" class="empty" hidden></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LIVE: guide grid -->
+          <div class="guide" id="wsGuide" hidden>
+            <div class="guide-bar">
+              <b class="gb-title">TV guide</b>
+              <button id="gPrev" class="pill-btn">‹ Earlier</button>
+              <button id="gNow" class="pill-btn on">Now</button>
+              <button id="gNext" class="pill-btn">Later ›</button>
+              <label class="check"><input type="checkbox" id="gOnlyEpg" checked> Only channels with guide data</label>
+              <span id="gRange" class="muted"></span>
+            </div>
+            <div id="guideScroll" class="guide-scroll">
+              <div id="guideInner">
+                <div id="guideHead"></div>
+                <div id="guideRows"></div>
+                <div id="guideNow"></div>
+              </div>
+              <div id="guideEmpty" class="empty" hidden></div>
+            </div>
+            <div id="guideDetail" class="guide-detail" hidden></div>
+          </div>
+
+          <!-- MOVIES / SERIES: categories | poster grid -->
+          <div class="vod" id="wsVod" hidden>
+            <aside class="cats-col" id="vodSide">
+              <div class="cats-head"><b id="vodCatsTitle">Movie Categories</b><span class="grow"></span>
+                <button class="icon-btn sm" id="vodCatSearchBtn" title="Search categories" aria-label="Search categories"><svg class="ic"><use href="#i-search"/></svg></button>
+                <button class="icon-btn sm" id="vodCatCompact" title="Compact list" aria-label="Compact list"><svg class="ic"><use href="#i-rows"/></svg></button>
+                <button class="icon-btn sm" id="vodCatReset" title="Show all" aria-label="Show all"><svg class="ic"><use href="#i-sliders"/></svg></button>
+                <button class="icon-btn sm" data-act="cats-collapse" title="Hide categories (Ctrl+B)" aria-label="Hide categories"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+              </div>
+              <div class="cat-search" id="vodCatSearchBox" hidden><svg class="ic"><use href="#i-search"/></svg><input id="catSearch" placeholder="Search categories" autocomplete="off" spellcheck="false"><button class="icon-btn sm" id="vodCatClear" aria-label="Clear"><svg class="ic"><use href="#i-x"/></svg></button></div>
+              <div id="catList" class="cat-list"></div>
+            </aside>
+            <div class="grid-main" id="vodMain">
+              <div class="grid-head">
+                <div class="gh-title"><b id="vodTitle">All items</b><small id="vodCount"></small></div>
+                <span class="grow"></span>
+                <button class="pill-btn" id="vodSortBtn"><svg class="ic"><use href="#i-sort"/></svg><span id="vodSortLabel">Newest</span></button>
+                <button class="pill-btn" id="vodRefine"><svg class="ic"><use href="#i-sliders"/></svg><span>Refine</span><svg class="ic chev"><use href="#i-chev-down"/></svg></button>
+              </div>
+              <div class="grid-scroll" id="vodScroll">
+                <div id="vodStatus" class="side-status" role="status"></div>
+                <div id="vodGrid" class="grid posters"></div>
+                <div id="vodMore" class="more"></div>
+                <div id="vodEmpty" class="empty" hidden></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MOVIE / SERIES detail (player docks into #detailSlot) -->
+          <div class="detail" id="wsDetail" hidden></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ───────────── the one player (fixed; docks into the slot of the current page, or floats as a mini player) ───────────── -->
+  <div id="player" class="player" hidden>
+    <video id="video" playsinline></video>
+    <div id="overlay" class="overlay" hidden></div>
+    <div id="osd" class="osd" hidden></div>
+    <div id="tcBadge" class="tc-badge" hidden title="This stream is being converted with ffmpeg because the player can't decode it directly">Compatibility mode</div>
+    <div class="p-top" id="pTop">
+      <span id="pTitle" class="p-title"></span>
+      <button class="p-btn" id="pFav" title="Favorite (D)" aria-label="Favorite"><svg class="ic"><use href="#i-heart"/></svg></button>
+      <button class="p-btn p-mini" id="pExpand" title="Go to this video" aria-label="Open"><svg class="ic"><use href="#i-expand"/></svg></button>
+      <button class="p-btn p-mini" id="pClose" title="Stop" aria-label="Stop"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="p-ctl" id="pCtl">
+      <div class="pc-seekrow" id="pcSeekRow"><span id="pcCur" class="pc-time">0:00</span><input id="pcSeek" type="range" min="0" max="0" step="1" value="0" aria-label="Seek"><span id="pcDur" class="pc-time">0:00</span></div>
+      <div class="pc-row">
+        <span id="pcLiveTime" class="pc-time pc-livetime">0:00</span>
+        <button class="p-btn" id="pcMute" title="Mute (M)" aria-label="Mute"><svg class="ic"><use href="#i-volume"/></svg></button>
+        <input id="pcVol" class="pc-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+        <span class="grow"></span>
+        <button class="pc-big" id="pcPlay" title="Play / pause (Space)" aria-label="Play / pause"><svg class="ic fill"><use href="#i-pause"/></svg></button>
+        <span class="grow"></span>
+        <span id="pcLive" class="live-badge"><i></i>LIVE</span>
+        <button class="p-btn pc-speed" id="pcSpeed" title="Playback speed" aria-label="Playback speed">1×</button>
+        <button class="p-btn" id="pMirror" title="Show on a second screen" aria-label="Second screen"><svg class="ic"><use href="#i-cast"/></svg></button>
+        <button class="p-btn" id="pPip" title="Picture in picture" aria-label="Picture in picture"><svg class="ic"><use href="#i-pip"/></svg></button>
+        <button class="p-btn" id="pFull" title="Full screen (F)" aria-label="Full screen"><svg class="ic"><use href="#i-full"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+</div>
+
+<!-- popup menu (second-screen picker etc.) -->
+<div id="menu" class="menu" hidden></div>
+
+<!-- ───────────── add / edit playlist ───────────── -->
+<dialog id="addDlg">
+  <div class="dlg-head">
+    <h2 id="formTitle">Add playlist</h2>
+    <button id="mClose" class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+  </div>
+  <form id="plForm" autocomplete="off">
+    <div class="type-tiles" id="typeTiles" role="tablist">
+      <button type="button" data-type="xtream" role="tab"><svg class="ic"><use href="#i-server"/></svg><b>Xtream Codes</b><small>Server + login</small></button>
+      <button type="button" data-type="m3u" role="tab"><svg class="ic"><use href="#i-link"/></svg><b>M3U URL</b><small>Link to a playlist</small></button>
+      <button type="button" data-type="file" role="tab"><svg class="ic"><use href="#i-file"/></svg><b>M3U file</b><small>From this computer</small></button>
+    </div>
+    <select name="type" hidden>
+      <option value="xtream">Xtream</option><option value="m3u">M3U</option><option value="file">File</option>
+    </select>
+
+    <label>Name
+      <input name="name" required placeholder="e.g. Home provider">
+    </label>
+
+    <div data-for="xtream">
+      <label>Server URL
+        <input name="server" placeholder="http://provider.example:8080" spellcheck="false">
+      </label>
+      <p class="hint">Tip: paste a full <code>get.php?username=…&amp;password=…</code> link here and the fields fill themselves in.</p>
+      <div class="grid2">
+        <label>Username <input name="username" spellcheck="false" autocapitalize="off"></label>
+        <label>Password <input name="password" type="text" spellcheck="false" autocapitalize="off"></label>
+      </div>
+      <label>Stream format
+        <select name="format">
+          <option value="m3u8">HLS (.m3u8) – best browser support</option>
+          <option value="ts">MPEG-TS (.ts)</option>
+        </select>
+      </label>
+    </div>
+
+    <div data-for="m3u" hidden>
+      <label>Playlist URL
+        <input name="url" placeholder="http://example.com/playlist.m3u" spellcheck="false">
+      </label>
+    </div>
+
+    <div data-for="file" hidden>
+      <label>M3U file
+        <input name="file" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl">
+      </label>
+      <p class="hint" id="fileHint"></p>
+    </div>
+
+    <label>TV guide (XMLTV) URL <span class="muted">– optional</span>
+      <input name="epgUrl" placeholder="Xtream: automatic · M3U: taken from the playlist header if present" spellcheck="false">
+    </label>
+
+    <details>
+      <summary>Advanced</summary>
+      <label>User-Agent <span class="muted">– some providers require a specific one</span>
+        <input name="ua" placeholder="VLC/3.0.20 LibVLC/3.0.20" spellcheck="false">
+      </label>
+    </details>
+
+    <div class="form-msg" id="formMsg" role="status"></div>
+    <div class="form-actions">
+      <button type="button" id="btnTest" class="btn ghost">Test connection</button>
+      <span class="grow"></span>
+      <button type="button" id="btnCancelEdit" class="btn ghost">Cancel</button>
+      <button type="submit" class="btn" id="btnSave">Add playlist</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ───────────── "My playlists" switcher ───────────── -->
+<dialog id="switchDlg" class="switch-dlg">
+  <div class="sw-head"><b>My playlists</b><span class="pill" id="swCount">0</span><span class="grow"></span>
+    <button class="icon-btn" id="swAdd" title="Add playlist" aria-label="Add playlist"><svg class="ic"><use href="#i-plus"/></svg></button>
+    <button class="icon-btn" id="swManage" title="All sources" aria-label="All sources"><svg class="ic"><use href="#i-external"/></svg></button></div>
+  <div class="sw-search"><svg class="ic"><use href="#i-search"/></svg><input id="swInput" placeholder="Find a playlist…" autocomplete="off" spellcheck="false"><span class="sw-keys"><svg class="ic"><use href="#i-updown"/></svg><svg class="ic"><use href="#i-enter"/></svg></span></div>
+  <div id="swList" class="sw-list" role="listbox"></div>
+  <div class="sw-foot"><span><kbd>↑↓</kbd> select</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span><span class="grow"></span><button class="link" id="swAll">All sources <svg class="ic"><use href="#i-arrow-right"/></svg></button></div>
+</dialog>
+
+<!-- ───────────── command palette ───────────── -->
+<dialog id="paletteDlg" class="palette">
+  <div class="pal-in"><svg class="ic"><use href="#i-search"/></svg><input id="palInput" placeholder="Type a command, playlist or channel…" autocomplete="off" spellcheck="false"></div>
+  <div id="palList" class="pal-list" role="listbox"></div>
+  <div class="pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span></div>
+</dialog>
+
+<!-- ───────────── keyboard shortcuts ───────────── -->
+<dialog id="helpDlg">
+  <div class="dlg-head"><h2>Keyboard shortcuts</h2><button id="helpClose" class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <div class="help-body" id="helpBody"></div>
+</dialog>
+
+<script src="js/core.js"></script>
+<script src="js/player.js"></script>
+<script src="js/workspace.js"></script>
+<script src="js/dialogs.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>

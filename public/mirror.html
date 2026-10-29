@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AG Horizon – second screen</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #cfd3dc; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; pointer-events: none; }
+  #msg[hidden] { display: none; }
+  #msg p { margin: 6px 0 0; color: #8b93a4; font-size: 13px; }
+  #title { position: absolute; left: 24px; bottom: 22px; padding: 7px 14px; border-radius: 10px; background: rgba(0, 0, 0, .62); color: #fff; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #title.show { opacity: 1; }
+  body.idle { cursor: none; }
+</style>
+</head>
+<body>
+<video id="v" autoplay muted playsinline></video>
+<div id="msg"><div><strong>Waiting for the video…</strong><p>Play something in AG Horizon and it will appear here.<br>Double-click or press F for full screen.</p></div></div>
+<div id="title"></div>
+<script src="mirror.js"></script>
+</body>
+</html>
