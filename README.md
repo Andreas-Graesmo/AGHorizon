@@ -74,7 +74,6 @@ The window shows the UI from a small server (`server.js`) that runs inside the a
 - **Guide matching:** channels are matched to the guide by `epg_channel_id` / `tvg-id`, then by name. The guide window is ~3 h back to 36 h ahead, cached for 30 minutes.
 - **M3U playlists:** entries with `/movie/` or `/series/` in the URL are sorted into Movies and Series automatically.
 - **Offline player libraries (optional):** hls.js and mpegts.js load from the jsDelivr CDN on first use. `npm run setup` saves local copies into `public/vendor/`.
-- Not included (compared with IPTVnator): Stalker/Ministra portals, catch-up/timeshift, external player launching (MPV/VLC).
 - Use this only with services you're entitled to watch.
 
 ## Files
@@ -98,3 +97,7 @@ scripts/get-vendor.js   optional: download player libraries locally
 ## Releases and updates
 
 See [RELEASING.md](RELEASING.md) for how to publish new versions on GitHub and update installed copies from inside the app (**Settings → About & updates**).
+
+## Credits
+
+Navigation icons (Live TV, Series, Movies) are from [Font Awesome Free](https://fontawesome.com) and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

@@ -319,7 +319,7 @@ function renderDashboard() {
   const el = $('#v-dashboard');
   clearInterval(hero.timer);
   if (!state.playlists.length) {
-    el.innerHTML = `<div class="page">${emptyState('i-live', 'Welcome to AG Horizon', 'Add an Xtream Codes login or an M3U playlist to start watching live TV, movies and series.', addBtn)}</div>`;
+    el.innerHTML = `<div class="page">${emptyState('i-nav-live', 'Welcome to AG Horizon', 'Add an Xtream Codes login or an M3U playlist to start watching live TV, movies and series.', addBtn)}</div>`;
     return;
   }
   hero.items = heroCandidates();
@@ -707,10 +707,10 @@ function paletteCommands() {
     ['Show / hide the categories', 'i-panel', () => { if (ui.route === 'ws') toggleWsSide(); }],
   ];
   for (const p of state.playlists) {
-    cmds.push([`Open ${p.name}`, 'i-live', () => openWorkspace(p.id, 'live')]);
-    cmds.push([`${p.name} › Movies`, 'i-clapper', () => openWorkspace(p.id, 'movie')]);
+    cmds.push([`Open ${p.name}`, 'i-nav-live', () => openWorkspace(p.id, 'live')]);
+    cmds.push([`${p.name} › Movies`, 'i-nav-movie', () => openWorkspace(p.id, 'movie')]);
     cmds.push([`${p.name} › TV guide`, 'i-guide', () => openWorkspace(p.id, 'guide')]);
-    cmds.push([`${p.name} › Series`, 'i-monitor', () => openWorkspace(p.id, 'series')]);
+    cmds.push([`${p.name} › Series`, 'i-nav-series', () => openWorkspace(p.id, 'series')]);
   }
   return cmds;
 }
@@ -720,7 +720,7 @@ function buildPalette() {
   let items = paletteCommands().filter(([l]) => toks.every((t) => l.toLowerCase().includes(t))).map(([label, icon, run]) => ({ label, icon, run }));
   if (q.length >= 2 && ws.pid && ws.items.length) {
     const hits = ws.items.filter((i) => toks.every((t) => i.name.toLowerCase().includes(t))).slice(0, 8);
-    items = items.concat(hits.map((i) => ({ label: i.name, sub: `${KIND_LABEL[kindOf(i)]} · ${i.group}`, icon: i.kind === 'movie' ? 'i-clapper' : i.kind === 'series' ? 'i-monitor' : 'i-live', run: () => openItem(i) })));
+    items = items.concat(hits.map((i) => ({ label: i.name, sub: `${KIND_LABEL[kindOf(i)]} · ${i.group}`, icon: i.kind === 'movie' ? 'i-nav-movie' : i.kind === 'series' ? 'i-nav-series' : 'i-nav-live', run: () => openItem(i) })));
   }
   pal.items = items.slice(0, 40);
   pal.sel = Math.min(pal.sel, Math.max(0, pal.items.length - 1));
