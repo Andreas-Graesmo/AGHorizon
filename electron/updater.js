@@ -73,7 +73,7 @@ function init() {
 
   ipcMain.handle('updater:check', async () => { try { await autoUpdater.checkForUpdates(); } catch (e) { send({ state: 'error', message: String(e.message || e).split('\n')[0] }); } return status; });
   ipcMain.handle('updater:download', async () => { try { await autoUpdater.downloadUpdate(); } catch (e) { send({ state: 'error', version: status.version, message: String(e.message || e).split('\n')[0] }); } return status; });
-  ipcMain.handle('updater:install', () => { setImmediate(() => autoUpdater.quitAndInstall(false, true)); return status; });
+  ipcMain.handle('updater:install', () => { setImmediate(() => autoUpdater.quitAndInstall(true, true)); return status; });
 }
 
 module.exports = { init };
