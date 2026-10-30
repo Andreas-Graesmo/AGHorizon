@@ -15,6 +15,9 @@
 <!-- icon sprite -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
+    <symbol id="i-nav-live" viewBox="0 0 576 512"><path fill="currentColor" stroke="none" d="M87.9 11.5c-11.3-6.9-26.1-3.2-33 8.1-24.8 41-39 89.1-39 140.4s14.2 99.4 39 140.4c6.9 11.3 21.6 15 33 8.1s15-21.6 8.1-33C75.7 241.9 64 202.3 64 160S75.7 78.1 96.1 44.4c6.9-11.3 3.2-26.1-8.1-33zm400.1 0c-11.3 6.9-15 21.6-8.1 33 20.4 33.7 32.1 73.3 32.1 115.6s-11.7 81.9-32.1 115.6c-6.9 11.3-3.2 26.1 8.1 33s26.1 3.2 33-8.1c24.8-41 39-89.1 39-140.4s-14.2-99.6-39-140.6c-6.9-11.3-21.6-15-33-8.1M320 215.4c19.1-11.1 32-31.7 32-55.4 0-35.3-28.7-64-64-64s-64 28.7-64 64c0 23.7 12.9 44.4 32 55.4V480c0 17.7 14.3 32 32 32s32-14.3 32-32zM180.2 91c7.2-11.2 3.9-26-7.2-33.2s-26-3.9-33.2 7.2c-17.6 27.4-27.8 60-27.8 95s10.2 67.6 27.8 95c7.2 11.2 22 14.4 33.2 7.2s14.4-22 7.2-33.2c-12.8-19.9-20.2-43.6-20.2-69s7.4-49.1 20.2-69m256-26c-7.2-11.2-22-14.4-33.2-7.2s-14.4 22-7.2 33.2c12.8 19.9 20.2 43.6 20.2 69s-7.4 49.1-20.2 69c-7.2 11.2-3.9 26 7.2 33.2s26 3.9 33.2-7.2c17.6-27.4 27.8-60 27.8-95s-10.2-67.6-27.8-95"/></symbol>
+    <symbol id="i-nav-series" viewBox="0 0 576 512"><path fill="currentColor" stroke="none" d="M64 96v240h448V96zM0 96c0-35.3 28.7-64 64-64h448c35.3 0 64 28.7 64 64v240c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64zm160 352h256c17.7 0 32 14.3 32 32s-14.3 32-32 32H160c-17.7 0-32-14.3-32-32s14.3-32 32-32"/></symbol>
+    <symbol id="i-nav-movie" viewBox="0 0 448 512"><path fill="none" stroke="currentColor" stroke-width="38" stroke-linejoin="round" d="M0 96c0-35.3 28.7-64 64-64h320c35.3 0 64 28.7 64 64v320c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64zm48 272v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16m304-16c-8.8 0-16 7.2-16 16v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16zM48 240v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16m304-16c-8.8 0-16 7.2-16 16v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16zM48 112v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16m304-16c-8.8 0-16 7.2-16 16v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16z"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21.1 7 14.2 2 9.3l6.9-1z"/></symbol>
@@ -107,9 +110,9 @@
     <button class="nav-item" data-route="favorites" title="Favorites"><svg class="ic"><use href="#i-heart"/></svg></button>
     <button class="nav-item" data-route="recent" title="Recently viewed (Ctrl+R)"><svg class="ic"><use href="#i-history"/></svg></button>
     <div class="nav-sep"></div>
-    <button class="nav-item" data-mode="movie" title="Movies"><svg class="ic"><use href="#i-clapper"/></svg></button>
-    <button class="nav-item" data-mode="live" title="Live TV"><svg class="ic"><use href="#i-live"/></svg></button>
-    <button class="nav-item" data-mode="series" title="Series"><svg class="ic"><use href="#i-monitor"/></svg></button>
+    <button class="nav-item" data-mode="live" title="Live TV"><svg class="ic"><use href="#i-nav-live"/></svg></button>
+    <button class="nav-item" data-mode="series" title="Series"><svg class="ic"><use href="#i-nav-series"/></svg></button>
+    <button class="nav-item" data-mode="movie" title="Movies"><svg class="ic"><use href="#i-nav-movie"/></svg></button>
     <button class="nav-item" data-mode="guide" title="TV guide"><svg class="ic"><use href="#i-guide"/></svg></button>
     <div class="spacer"></div>
     <button class="nav-item" data-route="settings" title="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
@@ -156,7 +159,7 @@
             </aside>
 
             <div class="live-main" id="liveMain">
-              <div id="liveSlot" class="player-slot"><div class="slot-hint"><svg class="ic"><use href="#i-live"/></svg><span>Select a channel to start watching</span></div></div>
+              <div id="liveSlot" class="player-slot"><div class="slot-hint"><svg class="ic"><use href="#i-nav-live"/></svg><span>Select a channel to start watching</span></div></div>
               <section class="timeline" id="tl">
                 <div class="tl-head">
                   <button class="icon-btn sm" id="tlCollapse" title="Show / hide the guide" aria-label="Show / hide the guide"><svg class="ic"><use href="#i-chev-down"/></svg></button>
