@@ -48,7 +48,13 @@ document.addEventListener('mousedown', (e) => { if (!$('#menu').hidden && !e.tar
 /* ───────────────────────────────── theme ───────────────────────────────── */
 const ACCENTS = {
   blue: ['#6ea1ff', '#06142b'], violet: ['#a78bfa', '#150a33'], green: ['#3ecf8e', '#04170f'],
-  pink: ['#ff6b9d', '#2a0615'], amber: ['#ffb347', '#1a1204'],
+  pink: ['#ff6b9d', '#2a0615'], amber: ['#ffb347', '#1a1204'], teal: ['#2dd4bf', '#03201c'],
+  coral: ['#ff7a59', '#2a0c04'], slate: ['#94a3b8', '#0f1520'],
+};
+/* palettes per mode: [label, background, panel] – the two colours are only for the preview dot in Settings */
+const PALETTES = {
+  dark: { midnight: ['Midnight', '#131826', '#283049'], graphite: ['Graphite', '#18191c', '#303137'], oled: ['OLED black', '#000', '#222227'] },
+  light: { soft: ['Soft', '#e6e9ef', '#d3d8e1'], paper: ['Paper', '#ebe6de', '#d8d0c3'], bright: ['Bright', '#ffffff', '#e0e5ef'] },
 };
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
@@ -56,6 +62,7 @@ function applyTheme() {
   const dark = pref === 'system' ? prefersDark.matches : pref === 'dark';
   const root = document.documentElement;
   root.dataset.theme = dark ? 'dark' : 'light';
+  root.dataset.palette = dark ? LS.get('tuner.darkPalette', 'midnight') : LS.get('tuner.lightPalette', 'soft');
   const [a, ink] = ACCENTS[LS.get('tuner.accent', 'blue')] || ACCENTS.blue;
   root.style.setProperty('--accent', a);
   root.style.setProperty('--accent-ink', ink);
@@ -663,10 +670,14 @@ function renderSettings() {
   const compat = LS.get('tuner.compat', 'auto');
   const autonext = LS.get('tuner.autonext', true);
   const seg = (key, cur, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-set="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const palSeg = (mode) => seg(mode + 'Palette', LS.get(`tuner.${mode}Palette`, mode === 'dark' ? 'midnight' : 'soft'),
+    Object.entries(PALETTES[mode]).map(([k, [l, a, b]]) => [k, `<i class="pal-dot" style="--a:${a};--b:${b}"></i>${l}`]));
   const open = mirrorOpen();
   $('#v-settings').innerHTML = `<div class="page narrow">${pageHead('Settings')}
     <section class="set-card"><h3>Appearance</h3>
       <div class="set-row"><div><b>Theme</b><p class="muted">Dark, light, or follow your system.</p></div>${seg('theme', theme, [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']])}</div>
+      <div class="set-row"><div><b>Dark palette</b><p class="muted">Used when the app is dark. OLED black suits OLED screens and dark rooms.</p></div>${palSeg('dark')}</div>
+      <div class="set-row"><div><b>Light palette</b><p class="muted">Used when the app is light. Channel logos get a dark backdrop so white logos stay visible.</p></div>${palSeg('light')}</div>
       <div class="set-row"><div><b>Accent colour</b></div><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch${accent === k ? ' on' : ''}" data-set="accent" data-val="${k}" style="--c:${c}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
     </section>
     <section class="set-card"><h3>Playback</h3>

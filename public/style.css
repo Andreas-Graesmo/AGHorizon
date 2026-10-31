@@ -4,15 +4,35 @@
   --tile: #2a2b30; --head: #182036;
   --text: #e7eaf3; --muted: #8791a8; --accent: #6ea1ff; --accent-ink: #06142b; --red: #ff5a63; --green: #4fd1a1;
   --sel: color-mix(in srgb, var(--accent) 16%, transparent);
+  --logo-bg: color-mix(in srgb, var(--panel-3) 60%, transparent); --logo-tile: var(--tile); --logo-ink: var(--muted);
   --shadow: 0 10px 34px rgba(0, 0, 0, .5); --radius: 12px; --row-h: 58px; --topbar: 42px; --rail: 46px;
   font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   color-scheme: dark;
 }
+/* dark palettes (Midnight is the default above) */
+:root[data-theme=dark][data-palette=graphite] {
+  --bg: #18191c; --nav: #0f1012; --side: #131416; --panel: #1e1f23; --panel-2: #25262b; --panel-3: #303137; --line: #2a2b30;
+  --tile: #2a2b30; --head: #1c1d21; --text: #e8e8ea; --muted: #8e9099;
+}
+:root[data-theme=dark][data-palette=oled] {
+  --bg: #000; --nav: #000; --side: #050506; --panel: #0d0d0f; --panel-2: #141417; --panel-3: #222227; --line: #1a1a1e;
+  --tile: #151518; --head: #0a0a0c; --text: #ececf0; --muted: #84868f;
+}
+/* light palettes: Soft is the default; channel logos sit on a dark chip because most are drawn for dark backgrounds */
 :root[data-theme=light] {
-  --bg: #f1f3f8; --nav: #ffffff; --side: #fafbfd; --panel: #ffffff; --panel-2: #eef1f7; --panel-3: #e0e5ef; --line: #dde2ec;
-  --tile: #e4e7ee; --head: #e8edf8;
-  --text: #1a1f2b; --muted: #637089; --red: #d93a41; --green: #14935f; --shadow: 0 10px 30px rgba(20, 30, 60, .16);
+  --bg: #e6e9ef; --nav: #dde1e8; --side: #e1e5eb; --panel: #eef0f4; --panel-2: #e2e6ec; --panel-3: #d3d8e1; --line: #cfd5de;
+  --tile: #d6dbe3; --head: #dde2e9;
+  --text: #1f2430; --muted: #5b6578; --red: #d93a41; --green: #14935f; --shadow: 0 10px 28px rgba(20, 30, 60, .14);
+  --logo-bg: #2b3140; --logo-tile: #2b3140; --logo-ink: #aab3c5;
   color-scheme: light;
+}
+:root[data-theme=light][data-palette=paper] {
+  --bg: #ebe6de; --nav: #e2dcd2; --side: #e6e1d8; --panel: #f3efe8; --panel-2: #e6e0d6; --panel-3: #d8d0c3; --line: #d5cdbf;
+  --tile: #dcd5c9; --head: #e2dbd0; --text: #2a251e; --muted: #6e6558; --logo-bg: #322d27; --logo-tile: #322d27;
+}
+:root[data-theme=light][data-palette=bright] {
+  --bg: #f1f3f8; --nav: #ffffff; --side: #fafbfd; --panel: #ffffff; --panel-2: #eef1f7; --panel-3: #e0e5ef; --line: #dde2ec;
+  --tile: #e4e7ee; --head: #e8edf8; --text: #1a1f2b; --muted: #637089; --shadow: 0 10px 30px rgba(20, 30, 60, .16);
 }
 
 * { box-sizing: border-box; }
@@ -134,11 +154,12 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .card { cursor: pointer; min-width: 0; border-radius: 12px; outline-offset: 3px; }
 .c-img { position: relative; overflow: hidden; border-radius: 10px; background: var(--tile); display: grid; place-items: center; transition: transform .15s, box-shadow .15s; }
 .poster-card .c-img { aspect-ratio: 2 / 3; }
-.live-card .c-img { aspect-ratio: 5 / 4; padding: 14px; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.live-card .c-img { aspect-ratio: 5 / 4; padding: 14px; background: var(--logo-tile); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 .card:hover .c-img { transform: translateY(-2px); box-shadow: var(--shadow); }
 .c-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .live-card .c-img img { object-fit: contain; }
 .c-img .ph, .logo .ph { font-weight: 800; color: var(--muted); font-size: 22px; }
+.live-card .c-img .ph { color: var(--logo-ink); }
 .c-img .ph-film { width: 46%; height: auto; color: #fff; opacity: .85; }
 .badge { position: absolute; right: 6px; top: 6px; background: rgba(8, 10, 16, .78); color: #fff; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; display: inline-flex; align-items: center; gap: 3px; }
 .badge .ic { width: 10px; height: 10px; fill: #56d38a; stroke: none; }
@@ -165,7 +186,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .rail-row .chan-card { width: 238px; }
 .chan-card { flex: none; width: 238px; display: grid; grid-template-columns: 36px 1fr; gap: 3px 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); cursor: pointer; scroll-snap-align: start; text-align: left; }
 .chan-card:hover { border-color: var(--panel-3); background: var(--panel-2); }
-.chan-card .logo { grid-row: 1 / span 2; width: 36px; height: 36px; background: transparent; }
+.chan-card .logo { grid-row: 1 / span 2; width: 36px; height: 36px; }
 .chan-card b { font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: end; }
 .chan-card small { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chan-card .cc-live { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -253,9 +274,9 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .row .fav { background: none; color: var(--muted); font-size: 16px; padding: 4px; align-self: flex-start; margin-top: 6px; }
 .row .fav:hover { background: none; color: var(--text); }
 .row .fav.on { color: var(--accent); }
-.logo { width: 38px; height: 38px; border-radius: 8px; background: color-mix(in srgb, var(--panel-3) 60%, transparent); display: grid; place-items: center; overflow: hidden; flex: none; }
-.logo img { width: 100%; height: 100%; object-fit: contain; }
-.logo .ph, .logo > span { font-size: 11px; font-weight: 800; color: var(--muted); }
+.logo { width: 38px; height: 38px; border-radius: 8px; background: var(--logo-bg); display: grid; place-items: center; overflow: hidden; flex: none; }
+.logo img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.logo .ph, .logo > span { font-size: 11px; font-weight: 800; color: var(--logo-ink); }
 .logo.lg { width: 56px; height: 42px; }
 
 .live-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
@@ -453,9 +474,10 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .set-row > div:first-child { flex: 1; min-width: 0; }
 .set-row p { margin-top: 2px; font-size: 13px; }
 .set-row select { width: auto; min-width: 210px; }
-.swatches { display: flex; gap: 8px; }
+.swatches { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; background: var(--c); cursor: pointer; }
 .swatch.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--panel); }
+.pal-dot { width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, var(--a) 50%, var(--b) 50%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 25%, transparent); flex: none; }
 .switch { position: relative; width: 44px; height: 26px; flex: none; }
 .switch input { opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
 .switch span { position: absolute; inset: 0; background: var(--panel-3); border-radius: 99px; transition: background .15s; }
