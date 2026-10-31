@@ -1,7 +1,7 @@
 {
   "name": "ag-horizon",
   "productName": "AG Horizon",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "A desktop IPTV player: Xtream Codes and M3U playlists, live TV with EPG, movies and series, second-screen mirroring, ffmpeg compatibility mode.",
   "author": "AG Horizon",
   "main": "electron/main.js",
