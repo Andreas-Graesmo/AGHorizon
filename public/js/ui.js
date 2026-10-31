@@ -24,6 +24,10 @@ function toast(msg, kind = '') {
 
 function showMenu(anchor, items) {
   const m = $('#menu');
+  // A modal <dialog> sits in the top layer and makes the rest of the page inert, so a menu opened
+  // from inside one has to live in that dialog to be visible and clickable.
+  const host = anchor.closest('dialog[open]') || document.body;
+  if (m.parentNode !== host) host.appendChild(m);
   m.innerHTML = items.map((it, i) => it.heading ? `<div class="menu-h">${esc(it.label)}</div>` : `<button class="menu-i" data-i="${i}">${esc(it.label)}</button>`).join('');
   m.hidden = false;
   const r = anchor.getBoundingClientRect();
@@ -144,6 +148,7 @@ $('#plSwitch').addEventListener('click', openSwitcher);
 function uiPlaylistsChanged() {
   updateSwitcher(); syncNavState();
   if (['playlists', 'dashboard'].includes(ui.route)) renderRoute(ui.route);
+  if ($('#switchDlg').open) swRender();
 }
 
 /* ───────────────────────────── docked / mini player ───────────────────────────── */
@@ -486,13 +491,25 @@ $('#swList').addEventListener('click', (e) => {
   const r = e.target.closest('.sw-row');
   if (!r) return;
   const p = sw.items[+r.dataset.i];
-  if (e.target.closest('[data-more]')) { $('#switchDlg').close(); setTimeout(() => playlistMenu(p, $('#plSwitch')), 0); return; }
+  if (e.target.closest('[data-more]')) {
+    // Keep the switcher open; only "Open" leaves it. Edit/Delete dialogs stack on top of it.
+    showMenu(e.target.closest('[data-more]'), [
+      { label: 'Open', run: () => { $('#switchDlg').close(); openWorkspace(p.id, 'live'); } },
+      { label: 'Reload', run: () => refreshPlaylist(p.id) },
+      { label: 'Edit…', run: () => openPlaylistDialog(p) },
+      { label: 'Delete…', run: () => deletePlaylist(p.id) },
+    ]);
+    return;
+  }
   swPick(+r.dataset.i);
 });
 $('#swAdd').addEventListener('click', () => { $('#switchDlg').close(); openPlaylistDialog(); });
 $('#swManage').addEventListener('click', () => { $('#switchDlg').close(); go('playlists'); });
 $('#swAll').addEventListener('click', () => { $('#switchDlg').close(); go('playlists'); });
 $('#switchDlg').addEventListener('mousedown', (e) => { if (e.target === $('#switchDlg')) $('#switchDlg').close(); });
+// Esc closes an open row menu first, then the switcher on the next press.
+$('#switchDlg').addEventListener('cancel', (e) => { if (!$('#menu').hidden) { e.preventDefault(); $('#menu').hidden = true; } });
+$('#switchDlg').addEventListener('close', () => { $('#menu').hidden = true; });
 
 function uiStatusChanged() {
   updateSwitcher();
