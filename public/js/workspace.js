@@ -112,6 +112,10 @@ function syncTopSearch() {
     inp.placeholder = 'Search in this section…';
     const v = ws.mode === 'live' ? ws.q : ws.vq;
     if (document.activeElement !== inp) inp.value = v;
+  } else if (ui.route === 'multiview') {
+    chip.textContent = 'Multi view';
+    inp.placeholder = 'Search all playlists…';
+    if (document.activeElement !== inp) inp.value = '';
   } else if (ui.route === 'playlists') {
     chip.textContent = 'Sources';
     inp.placeholder = 'Search sources (all playlists)…';
@@ -255,6 +259,7 @@ function liveRowHtml(r) {
       <div class="name" title="${esc(ch.name)}">${esc(ch.name)}</div>
       <div class="now">${esc(nowText)}</div>${now ? `<div class="tm"><span>${fmtTime(now[0])}</span><div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div><span>${fmtTime(now[1])}</span></div>` : ''}
     </div>
+    <button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>
     <button class="fav${fav ? ' on' : ''}" data-fav title="${fav ? 'Remove from favorites' : 'Add to favorites'}" aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>
   </div>`;
 }
@@ -282,6 +287,7 @@ elLiveRows.addEventListener('click', (e) => {
   const ch = ws.items.find((c) => c.uid === row.dataset.uid);
   if (!ch) return;
   if (e.target.closest('[data-fav]')) { toggleFavItem(ch); return; }
+  if (e.target.closest('[data-multi]')) { mvAdd(ch); return; }
   playChannel(ch);
 });
 $('#wsLive').addEventListener('click', (e) => { if (e.target.closest('[data-act="edit-pl"]')) openPlaylistDialog(wsPlaylist()); });
@@ -547,7 +553,7 @@ function cardHtml(it, o = {}) {
   const rating = vod && it.rating ? `<span class="badge"><svg class="ic"><use href="#i-star"/></svg>${esc(it.rating)}</span>` : '';
   const tag = o.tag ? `<span class="badge kind">${esc(o.tag)}</span>` : '';
   return `<div class="card ${vod ? 'poster-card' : 'live-card'}" data-uid="${esc(it.uid)}" tabindex="0" role="button" title="${esc(title)}">
-    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
     <div class="c-title">${esc(title)}</div>${sub ? `<div class="c-sub">${esc(sub)}</div>` : ''}</div>`;
 }
 
@@ -803,6 +809,7 @@ let epgTimer = 0;
 function uiEpgUpdated() {
   clearTimeout(epgTimer);
   epgTimer = setTimeout(() => {
+    mvRefreshNames();
     if (ui.route !== 'ws' || ws.mode !== 'live') return;
     renderLiveStatus();
     if (ws.lv === 'channels') { renderLiveList(); renderLiveInfo(); } else { guideState.dirty = true; renderGuide(); }

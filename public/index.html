@@ -15,7 +15,10 @@
 <!-- icon sprite -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <symbol id="i-nav-live" viewBox="0 0 576 512"><path fill="currentColor" stroke="none" d="M87.9 11.5c-11.3-6.9-26.1-3.2-33 8.1-24.8 41-39 89.1-39 140.4s14.2 99.4 39 140.4c6.9 11.3 21.6 15 33 8.1s15-21.6 8.1-33C75.7 241.9 64 202.3 64 160S75.7 78.1 96.1 44.4c6.9-11.3 3.2-26.1-8.1-33zm400.1 0c-11.3 6.9-15 21.6-8.1 33 20.4 33.7 32.1 73.3 32.1 115.6s-11.7 81.9-32.1 115.6c-6.9 11.3-3.2 26.1 8.1 33s26.1 3.2 33-8.1c24.8-41 39-89.1 39-140.4s-14.2-99.6-39-140.6c-6.9-11.3-21.6-15-33-8.1M320 215.4c19.1-11.1 32-31.7 32-55.4 0-35.3-28.7-64-64-64s-64 28.7-64 64c0 23.7 12.9 44.4 32 55.4V480c0 17.7 14.3 32 32 32s32-14.3 32-32zM180.2 91c7.2-11.2 3.9-26-7.2-33.2s-26-3.9-33.2 7.2c-17.6 27.4-27.8 60-27.8 95s10.2 67.6 27.8 95c7.2 11.2 22 14.4 33.2 7.2s14.4-22 7.2-33.2c-12.8-19.9-20.2-43.6-20.2-69s7.4-49.1 20.2-69m256-26c-7.2-11.2-22-14.4-33.2-7.2s-14.4 22-7.2 33.2c12.8 19.9 20.2 43.6 20.2 69s-7.4 49.1-20.2 69c-7.2 11.2-3.9 26 7.2 33.2s26 3.9 33.2-7.2c17.6-27.4 27.8-60 27.8-95s-10.2-67.6-27.8-95"/></symbol>
+    <!-- Navigation icons: Font Awesome Free 7 (https://fontawesome.com, icons licensed CC BY 4.0). Live TV = tower-broadcast, Series = tv, Movies = film drawn as an outline.
+         To use your own (e.g. Font Awesome Pro) icons, replace the path data below with the "d" value of the SVG and keep the viewBox in sync. -->
+    <symbol id="i-multi" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></symbol>
+  <symbol id="i-nav-live" viewBox="0 0 576 512"><path fill="currentColor" stroke="none" d="M87.9 11.5c-11.3-6.9-26.1-3.2-33 8.1-24.8 41-39 89.1-39 140.4s14.2 99.4 39 140.4c6.9 11.3 21.6 15 33 8.1s15-21.6 8.1-33C75.7 241.9 64 202.3 64 160S75.7 78.1 96.1 44.4c6.9-11.3 3.2-26.1-8.1-33zm400.1 0c-11.3 6.9-15 21.6-8.1 33 20.4 33.7 32.1 73.3 32.1 115.6s-11.7 81.9-32.1 115.6c-6.9 11.3-3.2 26.1 8.1 33s26.1 3.2 33-8.1c24.8-41 39-89.1 39-140.4s-14.2-99.6-39-140.6c-6.9-11.3-21.6-15-33-8.1M320 215.4c19.1-11.1 32-31.7 32-55.4 0-35.3-28.7-64-64-64s-64 28.7-64 64c0 23.7 12.9 44.4 32 55.4V480c0 17.7 14.3 32 32 32s32-14.3 32-32zM180.2 91c7.2-11.2 3.9-26-7.2-33.2s-26-3.9-33.2 7.2c-17.6 27.4-27.8 60-27.8 95s10.2 67.6 27.8 95c7.2 11.2 22 14.4 33.2 7.2s14.4-22 7.2-33.2c-12.8-19.9-20.2-43.6-20.2-69s7.4-49.1 20.2-69m256-26c-7.2-11.2-22-14.4-33.2-7.2s-14.4 22-7.2 33.2c12.8 19.9 20.2 43.6 20.2 69s-7.4 49.1-20.2 69c-7.2 11.2-3.9 26 7.2 33.2s26 3.9 33.2-7.2c17.6-27.4 27.8-60 27.8-95s-10.2-67.6-27.8-95"/></symbol>
     <symbol id="i-nav-series" viewBox="0 0 576 512"><path fill="currentColor" stroke="none" d="M64 96v240h448V96zM0 96c0-35.3 28.7-64 64-64h448c35.3 0 64 28.7 64 64v240c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64zm160 352h256c17.7 0 32 14.3 32 32s-14.3 32-32 32H160c-17.7 0-32-14.3-32-32s14.3-32 32-32"/></symbol>
     <symbol id="i-nav-movie" viewBox="0 0 448 512"><path fill="none" stroke="currentColor" stroke-width="38" stroke-linejoin="round" d="M0 96c0-35.3 28.7-64 64-64h320c35.3 0 64 28.7 64 64v320c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64zm48 272v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16m304-16c-8.8 0-16 7.2-16 16v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16zM48 240v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16m304-16c-8.8 0-16 7.2-16 16v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16zM48 112v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16m304-16c-8.8 0-16 7.2-16 16v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16v-32c0-8.8-7.2-16-16-16z"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
@@ -114,6 +117,7 @@
     <button class="nav-item" data-mode="series" title="Series"><svg class="ic"><use href="#i-nav-series"/></svg></button>
     <button class="nav-item" data-mode="movie" title="Movies"><svg class="ic"><use href="#i-nav-movie"/></svg></button>
     <button class="nav-item" data-mode="guide" title="TV guide"><svg class="ic"><use href="#i-guide"/></svg></button>
+    <button class="nav-item" data-route="multiview" data-count="0" title="Multi view (watch up to 4 channels)"><svg class="ic"><use href="#i-multi"/></svg></button>
     <div class="spacer"></div>
     <button class="nav-item" data-route="settings" title="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
   </nav>
@@ -127,6 +131,20 @@
       <section class="view" id="v-recent" hidden></section>
       <section class="view" id="v-search" hidden></section>
       <section class="view" id="v-settings" hidden></section>
+      <section class="view mv" id="v-multiview" hidden>
+        <div id="mvEmpty" hidden></div>
+        <div id="mvMain" class="mv-main">
+          <div class="mv-bar">
+            <div id="mvLayouts" class="mv-layouts" role="group" aria-label="Layout"></div>
+            <span class="grow"></span>
+            <span id="mvCount" class="muted"></span>
+            <button class="pill-btn" id="mvMute" title="Mute all (M)"><svg class="ic"><use href="#i-volume"/></svg><span>Mute</span></button>
+            <button class="pill-btn" id="mvClear" title="Remove all channels"><svg class="ic"><use href="#i-trash"/></svg><span>Clear</span></button>
+          </div>
+          <div id="mvNote" class="mv-note" hidden></div>
+          <div id="mvGrid" class="mv-grid" data-layout="2c"></div>
+        </div>
+      </section>
 
       <!-- playlist workspace -->
       <section class="view ws" id="v-ws" hidden>
@@ -263,6 +281,7 @@
         <span id="pcLive" class="live-badge"><i></i>LIVE</span>
         <button class="p-btn pc-speed" id="pcSpeed" title="Playback speed" aria-label="Playback speed">1×</button>
         <button class="p-btn" id="pMirror" title="Show on a second screen" aria-label="Second screen"><svg class="ic"><use href="#i-cast"/></svg></button>
+        <button class="p-btn" id="pMulti" title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>
         <button class="p-btn" id="pPip" title="Picture in picture" aria-label="Picture in picture"><svg class="ic"><use href="#i-pip"/></svg></button>
         <button class="p-btn" id="pFull" title="Full screen (F)" aria-label="Full screen"><svg class="ic"><use href="#i-full"/></svg></button>
       </div>
@@ -356,6 +375,13 @@
   <div class="sw-foot"><span><kbd>↑↓</kbd> select</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span><span class="grow"></span><button class="link" id="swAll">All sources <svg class="ic"><use href="#i-arrow-right"/></svg></button></div>
 </dialog>
 
+<!-- ───────────── Multi view channel picker ───────────── -->
+<dialog id="mvPickDlg" class="palette">
+  <div class="pal-in"><svg class="ic"><use href="#i-search"/></svg><input id="mvPickInput" placeholder="Search channels…" autocomplete="off" aria-label="Search channels"><kbd id="mvPickClose">Esc</kbd></div>
+  <div id="mvPickTitle" class="muted" style="padding:6px 14px"></div>
+  <div id="mvPickList" class="pal-list" role="listbox"></div>
+</dialog>
+
 <!-- ───────────── command palette ───────────── -->
 <dialog id="paletteDlg" class="palette">
   <div class="pal-in"><svg class="ic"><use href="#i-search"/></svg><input id="palInput" placeholder="Type a command, playlist or channel…" autocomplete="off" spellcheck="false"></div>
@@ -374,6 +400,7 @@
 <script src="js/workspace.js"></script>
 <script src="js/dialogs.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/multiview.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>

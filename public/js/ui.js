@@ -2,7 +2,7 @@
 /* AG Horizon – application shell: navigation, themes, player docking, pages, command palette, shortcuts. */
 
 const ui = { route: null, hist: [] };
-const ROUTE_TITLES = { dashboard: 'Dashboard', playlists: 'Playlists', favorites: 'Favorites', recent: 'Recently viewed', search: 'Search', settings: 'Settings' };
+const ROUTE_TITLES = { dashboard: 'Dashboard', playlists: 'Playlists', favorites: 'Favorites', recent: 'Recently viewed', search: 'Search', settings: 'Settings', multiview: 'Multi view' };
 const cardIndex = new Map(); // uid -> item or snapshot, filled by cardHtml()
 const ago = (ts) => {
   const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -73,6 +73,7 @@ function go(route, params = {}, { push = true } = {}) {
     ui.hist.push({ route: ui.route, ws: ui.route === 'ws' ? { pid: ws.pid, mode: ws.mode, detail: ws.detail ? ws.detail.uid : null } : null });
     if (ui.hist.length > 40) ui.hist.shift();
   }
+  if (ui.route === 'multiview' && route !== 'multiview') mvLeave();
   ui.route = route;
   $$('#views > .view').forEach((v) => { v.hidden = v.id !== 'v-' + route; });
   $$('#nav [data-route]').forEach((b) => b.classList.toggle('on', b.dataset.route === route));
@@ -95,7 +96,7 @@ async function goBack() {
 $('#btnBack').addEventListener('click', goBack);
 
 function renderRoute(route) {
-  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings }[route];
+  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings, multiview: renderMultiview }[route];
   if (fn) fn();
 }
 
@@ -193,6 +194,7 @@ function updatePlayerChrome() {
   $('#btnMirror').classList.toggle('on', open);
   $('#pMirror').classList.toggle('on', open);
   if (!c) { document.title = 'AG Horizon'; return; }
+  $('#pMulti').hidden = isVod(c);
   $('#pTitle').textContent = playerTitle(c);
   const fav = state.favs.has(c.uid) || (c.kind === 'episode' && state.favs.has(c.seriesUid));
   $('#pFav').classList.toggle('on', fav);
@@ -206,6 +208,7 @@ $('#pFav').addEventListener('click', () => { const c = state.current; if (c) tog
 $('#pMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 $('#pPip').addEventListener('click', togglePip);
 $('#pFull').addEventListener('click', toggleFullscreen);
+$('#pMulti').addEventListener('click', () => { const c = state.current; if (!c || isVod(c)) return; stopPlayback(); mvAdd(c, { open: true }); });
 $('#pExpand').addEventListener('click', () => { if (state.current) openItem(state.current); });
 $('#pClose').addEventListener('click', stopPlayback);
 
@@ -250,6 +253,7 @@ document.addEventListener('click', (e) => {
   const it = cardIndex.get(card.dataset.uid);
   if (!it) return;
   if (e.target.closest('[data-fav]')) { toggleFavItem(it); return; }
+  if (e.target.closest('[data-multi]')) { mvAdd(it); return; }
   openItem(it);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('card')) e.target.click(); });
@@ -699,6 +703,7 @@ function paletteCommands() {
     ['Go to Favorites', 'i-heart', () => go('favorites')],
     ['Go to Recently viewed', 'i-history', () => go('recent')],
     ['Search all playlists', 'i-search', () => { go('search'); setTimeout(() => $('#topInput').focus(), 30); }],
+    ['Multi view', 'i-multi', () => go('multiview')],
     ['Open Settings', 'i-gear', () => go('settings')],
     ['Add a playlist', 'i-plus', () => openPlaylistDialog()],
     ['Switch light / dark theme', 'i-sun', () => $('#btnTheme').click()],
@@ -745,6 +750,7 @@ $('#paletteDlg').addEventListener('mousedown', (e) => { if (e.target === $('#pal
 const SHORTCUTS = [
   ['Everywhere', [['Ctrl K', 'Command palette'], ['Ctrl F', 'Search all playlists'], ['Ctrl R', 'Recently viewed'], ['Ctrl B', 'Show / hide the side list (or menu)'], ['Alt ←', 'Back'], ['/', 'Focus the search box'], ['?', 'This list']]],
   ['Player', [['Space / K', 'Play / pause'], ['F', 'Full screen'], ['M', 'Mute'], ['D', 'Add / remove favorite'], ['← →', 'Seek 5 seconds (movies, episodes)'], ['↑ ↓', 'Volume'], ['Esc', 'Leave full screen / close details']]],
+  ['Multi view', [['1 – 4', 'Choose which picture has sound'], ['F', 'Full screen the picture with sound'], ['M', 'Mute all'], ['Double-click', 'Full screen one picture']]],
   ['Live TV', [['0 – 9', 'Type a channel number'], ['Page ↑ / ↓', 'Previous / next channel'], ['[ / ]', 'Previous / next channel']]],
 ];
 function openHelp() {
@@ -786,6 +792,7 @@ document.addEventListener('keydown', (e) => {
   const onVideo = tag === 'VIDEO';
   if (key === '?') { e.preventDefault(); openHelp(); return; }
   if (key === '/') { e.preventDefault(); focusContextSearch(); return; }
+  if (ui.route === 'multiview') return;     // Multi view has its own keys (multiview.js)
   if (key === 'Escape') { if (!document.fullscreenElement && ui.route === 'ws' && ws.detail) closeDetail(); return; }
   if (/^[0-9]$/.test(key) && ui.route === 'ws' && ws.mode === 'live' && ws.items.length) {
     numBuf += key; flash('Channel ' + numBuf);
