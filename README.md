@@ -54,6 +54,17 @@ Click the **cast** button on the player (or the cast icon in the top bar).
 - It does **not** open a second connection to your provider: the main player hands the second window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
 - **Sound** (Settings › Second screen): play it on this window, on the second screen only (useful when the TV has the speakers), or on both.
 
+## Multi view (up to 4 channels at once)
+
+Click the grid icon in the side bar (below the TV guide). Pick a layout at the top:
+**Side by side**, **Stacked** (two pictures), **3 · big left**, **3 · big top**, or **2 × 2**.
+
+- Add channels with **Add a channel** in a picture, with the grid button on a channel row or tile, or with the Multi view button in the player bar (it moves the channel you are watching into Multi view).
+- One picture has sound at a time. Click a picture, or press **1–4**. **F** or double-click gives full screen, **M** mutes all.
+- Your layout and channels are remembered.
+- Every picture uses one connection from your provider. If the provider allows fewer connections than pictures, AG Horizon warns you. Pictures that need ffmpeg conversion are scaled down to keep the CPU load reasonable.
+- The second-screen mirror shows the normal player only, not Multi view.
+
 ## Compatibility mode (codecs)
 
 The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
@@ -94,9 +105,6 @@ public/mirror.html/js   the second-screen window
 scripts/get-vendor.js   optional: download player libraries locally
 ```
 
-## Releases and updates
-
-See [RELEASING.md](RELEASING.md) for how to publish new versions on GitHub and update installed copies from inside the app (**Settings → About & updates**).
 
 ## Credits
 
