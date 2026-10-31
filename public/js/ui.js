@@ -613,10 +613,36 @@ function updatesCard() {
     <div class="set-row"><div><b>Check for updates when the app starts</b></div><label class="switch"><input type="checkbox" data-set="autoUpdate"${auto ? ' checked' : ''}><span></span></label></div>
   </section>`;
 }
+/* banner above the views: shown for a newer version until dismissed (remembered per version and step, so a dismissed "available" doesn't return on every start) */
+function renderUpdBanner() {
+  const el = $('#updBanner');
+  const st = upd.st || { state: 'idle' };
+  const v = esc(st.version || '');
+  let line = '', btn = '';
+  if (st.state === 'available' && st.manual) { line = `AG Horizon <b>${v}</b> is available.`; btn = '<button class="btn" data-act="upd-open"><svg class="ic"><use href="#i-download"/></svg>Download from GitHub</button>'; }
+  else if (st.state === 'available') { line = `AG Horizon <b>${v}</b> is available.`; btn = '<button class="btn" data-act="upd-download"><svg class="ic"><use href="#i-download"/></svg>Download update</button>'; }
+  else if (st.state === 'downloading') { line = `Downloading AG Horizon ${v}… ${st.percent || 0}%<div class="bar upd-bar"><i style="width:${st.percent || 0}%"></i></div>`; }
+  else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready. It also installs when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
+  else if (st.state === 'error' && st.version) { line = `Couldn’t download ${v}: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-download">Try again</button>' + (upd.info && upd.info.releasesUrl ? '<button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
+  if (!line || LS.get('tuner.updDismissed', '') === st.state + ':' + st.version) { el.hidden = true; return; }
+  el.innerHTML = `<svg class="ic"><use href="#i-download"/></svg><div class="ub-text">${line}</div>${btn}<button class="icon-btn" data-act="upd-dismiss" title="Dismiss" aria-label="Dismiss"><svg class="ic"><use href="#i-x"/></svg></button>`;
+  el.hidden = false;
+}
+$('#updBanner').addEventListener('click', (e) => {
+  const a = e.target.closest('[data-act]');
+  if (!a) return;
+  const u = window.tunerDesktop.updater;
+  switch (a.dataset.act) {
+    case 'upd-download': u.download(); break;
+    case 'upd-install': u.install(); break;
+    case 'upd-open': u.openReleases(); break;
+    case 'upd-dismiss': LS.set('tuner.updDismissed', upd.st.state + ':' + upd.st.version); renderUpdBanner(); break;
+    default: break;
+  }
+});
 function updStatus(s) {
-  const was = upd.st.state;
   upd.st = s || { state: 'idle' };
-  if (upd.st.state === 'available' && was !== 'available' && ui.route !== 'settings') toast(`AG Horizon ${upd.st.version} is available – open Settings to update.`);
+  renderUpdBanner();
   if (ui.route === 'settings') renderSettings();
 }
 function initUpdates() {
@@ -625,6 +651,7 @@ function initUpdates() {
   d.updater.onStatus(updStatus);
   Promise.all([d.appInfo(), d.updater.status()]).then(([info, st]) => {
     upd.info = info; upd.st = st || upd.st;
+    renderUpdBanner();
     if (ui.route === 'settings') renderSettings();
     if (info.updater && LS.get('tuner.autoUpdate', true)) setTimeout(() => d.updater.check(), 6000);
   }).catch(() => {});

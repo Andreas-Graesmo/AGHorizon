@@ -618,6 +618,12 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 /* updates */
 .upd-btns { display: flex; gap: 8px; flex: none; }
 .upd-bar { height: 5px; margin-top: 8px; max-width: 320px; }
+.upd-banner { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; background: var(--sel); border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.upd-banner[hidden] { display: none; }
+.upd-banner > .ic { color: var(--accent); flex: none; }
+.upd-banner .ub-text { flex: 1; min-width: 0; }
+.upd-banner .btn { padding: 6px 12px; }
+@media (max-width: 760px) { .upd-banner { flex-wrap: wrap; } }
 
 /* ── Multi view ───────────────────────────────────── */
 .nav-item[data-count]:not([data-count="0"])::after { content: attr(data-count); position: absolute; top: 4px; right: 4px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; }
