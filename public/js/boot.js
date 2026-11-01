@@ -62,4 +62,5 @@ async function startupReload() {
 }
 startupReload();
 initUpdates();
+initDownloads();
 

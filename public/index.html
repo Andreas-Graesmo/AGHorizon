@@ -112,6 +112,7 @@
     <button class="nav-item" data-route="search" title="Global search (Ctrl+F)"><svg class="ic"><use href="#i-search"/></svg></button>
     <button class="nav-item" data-route="favorites" title="Favorites"><svg class="ic"><use href="#i-heart"/></svg></button>
     <button class="nav-item" data-route="recent" title="Recently viewed (Ctrl+R)"><svg class="ic"><use href="#i-history"/></svg></button>
+    <button class="nav-item" data-route="downloads" data-count="0" title="Downloads" hidden><svg class="ic"><use href="#i-download"/></svg></button>
     <div class="nav-sep"></div>
     <button class="nav-item" data-mode="live" title="Live TV"><svg class="ic"><use href="#i-nav-live"/></svg></button>
     <button class="nav-item" data-mode="series" title="Series"><svg class="ic"><use href="#i-nav-series"/></svg></button>
@@ -132,6 +133,7 @@
       <section class="view" id="v-recent" hidden></section>
       <section class="view" id="v-search" hidden></section>
       <section class="view" id="v-settings" hidden></section>
+      <section class="view" id="v-downloads" hidden></section>
       <section class="view mv" id="v-multiview" hidden>
         <div id="mvEmpty" hidden></div>
         <div id="mvMain" class="mv-main">
@@ -402,6 +404,7 @@
 <script src="js/dialogs.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/multiview.js"></script>
+<script src="js/downloads.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>

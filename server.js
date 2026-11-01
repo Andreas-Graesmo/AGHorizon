@@ -7,6 +7,7 @@
  *  - /api/fetch   fetches playlists / Xtream API responses (avoids browser CORS limits)
  *  - /api/epg     downloads + parses an XMLTV guide (plain or .gz) into compact JSON
  *  - /api/stream  proxies live streams; HLS manifests are rewritten so segments also pass through
+ *  - /api/local   plays finished downloads (desktop app only)
  */
 const http = require('http');
 const fs = require('fs');
@@ -379,6 +380,42 @@ function handleTranscode(req, res, q) {
   res.on('close', () => proc.kill('SIGKILL')); // browser navigated away / switched channel
 }
 
+/* --------------------------------------------------------- local downloads */
+/*
+ * The desktop app plays finished downloads from here, so the normal player (and compatibility mode,
+ * which hands ffmpeg this http address) works offline. Only files the download manager hands out by id.
+ */
+let localFiles = null; // (id, 'video' | 'poster') -> absolute path or null; set by the desktop app
+const setLocalFiles = (fn) => { localFiles = fn; };
+const LOCAL_MIME = {
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+  '.ts': 'video/mp2t', '.avi': 'video/x-msvideo', '.jpg': 'image/jpeg',
+};
+
+function handleLocal(req, res, pathname) {
+  const m = /^\/api\/local\/([a-f0-9]{8,32})(\/poster)?$/.exec(pathname);
+  const file = m && localFiles ? localFiles(m[1], m[2] ? 'poster' : 'video') : null;
+  if (!file) throw httpError(404, 'Not downloaded');
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) return send(res, 404, 'Not found');
+    const type = LOCAL_MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    const r = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    let start = 0, end = st.size - 1;
+    if (r && (r[1] || r[2])) {
+      if (r[1]) { start = Number(r[1]); if (r[2]) end = Math.min(end, Number(r[2])); } else start = Math.max(0, st.size - Number(r[2]));
+      if (start > end) return send(res, 416, '', { 'Content-Range': `bytes */${st.size}` });
+      res.writeHead(206, { 'Content-Type': type, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${st.size}`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+    } else {
+      res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+    }
+    if (req.method === 'HEAD') return res.end();
+    const stream = fs.createReadStream(file, { start, end });
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+  });
+}
+
 /* ----------------------------------------------------------------- static */
 
 function serveStatic(req, res, pathname) {
@@ -425,6 +462,7 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);
+    else if (url.pathname.startsWith('/api/local/') && (req.method === 'GET' || req.method === 'HEAD')) handleLocal(req, res, url.pathname);
     else send(res, 404, 'Not found');
   } catch (e) {
     if (res.headersSent) return res.destroy();
@@ -445,7 +483,7 @@ function start(port = PORT) {
   });
 }
 
-module.exports = { start, server };
+module.exports = { start, server, setLocalFiles };
 
 // `node server.js` runs it as a plain web server; the desktop app (electron/main.js) calls start() instead.
 if (require.main === module) {

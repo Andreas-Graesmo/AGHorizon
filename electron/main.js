@@ -6,8 +6,9 @@
 const { app, BrowserWindow, dialog, shell, session, screen, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { start, server } = require('../server');
+const { start, server, setLocalFiles } = require('../server');
 const updater = require('./updater');
+const downloads = require('./downloads');
 
 // The UI stores playlists in localStorage, which is tied to the page's origin (including the port).
 // So the port must be the same on every launch, otherwise your playlists would "disappear".
@@ -108,6 +109,7 @@ app.on('second-instance', () => {
 });
 
 updater.init();
+setLocalFiles(downloads.localFile);
 
 ipcMain.handle('tuner:displays', () => {
   const primary = screen.getPrimaryDisplay().id;
@@ -139,6 +141,7 @@ app.whenReady().then(async () => {
     return;
   }
   origin = `http://127.0.0.1:${port}`;
+  downloads.init();
   createWindow();
 
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });

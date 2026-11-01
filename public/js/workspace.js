@@ -713,14 +713,15 @@ function renderDetail() {
       primarySub = `S${String(next.season).padStart(2, '0')}E${String(next.num).padStart(2, '0')}`;
       primaryAct = `ep" data-uid="${esc(next.uid)}`;
     }
-    seriesBlock = `<h3>Episodes<small>${eps.length}</small></h3><div class="seasons">${nums.map((n) => `<button class="chip-btn${n === cur ? ' on' : ''}" data-act="season" data-s="${n}">Season ${n}</button>`).join('')}</div>
+    seriesBlock = `<h3>Episodes<small>${eps.length}</small></h3><div class="seasons">${nums.map((n) => `<button class="chip-btn${n === cur ? ' on' : ''}" data-act="season" data-s="${n}">Season ${n}</button>`).join('')}<div class="grow"></div>${dlSeasonHtml(d.seasons[cur], cur)}</div>
       <div class="ep-list">${(d.seasons[cur] || []).map((e) => {
         const p = progressOf(e.uid);
         const pct = p && p.d && !p.w ? Math.round((p.t / p.d) * 100) : 0;
-        return `<div class="ep${e.uid === playingUid ? ' playing' : ''}" data-act="ep" data-uid="${esc(e.uid)}">
+        const dlb = dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '';
+        return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${dlb ? ' has-dl' : ''}" data-act="ep" data-uid="${esc(e.uid)}">
           <span class="ep-n">${e.num || ''}</span>
           <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
-          <span class="ep-d">${p && p.w ? '✓' : esc(e.duration || '')}</span></div>`;
+          <span class="ep-d">${p && p.w ? '✓' : esc(e.duration || '')}</span>${dlb}</div>`;
       }).join('')}</div>`;
   } else if (d.loading) seriesBlock = '<p class="muted">Loading episodes…</p>';
   else if (d.error) seriesBlock = `<p class="err-text">Couldn’t load episodes: ${esc(d.error)}</p>`;
@@ -748,7 +749,7 @@ function renderDetail() {
             ${trailer ? `<button class="btn ghost" data-act="trailer" data-href="${esc(trailer)}"><svg class="ic fill"><use href="#i-youtube"/></svg>Trailer</button>` : ''}
             <button class="btn sq${isFav ? ' on' : ''}" data-act="fav" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}" aria-label="Favorite"><svg class="ic"><use href="#${isFav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>
             ${it.kind === 'movie' ? `<button class="btn sq${watched ? ' on' : ''}" data-act="watched" title="${watched ? 'Mark as not watched' : 'Mark as watched'}" aria-label="Watched"><svg class="ic"><use href="#i-check"/></svg></button>
-            <button class="btn sq" data-act="copy" title="Copy stream link" aria-label="Copy stream link"><svg class="ic"><use href="#i-download"/></svg></button>` : ''}
+            ${dlCanDownload(it) ? dlBtnHtml(it, 'btn sq') : '<button class="btn sq" data-act="copy" title="Copy stream link" aria-label="Copy stream link"><svg class="ic"><use href="#i-link"/></svg></button>'}` : ''}
             ${it.kind === 'movie' ? `<button class="btn sq" data-act="more-menu" title="More" aria-label="More"><svg class="ic"><use href="#i-more"/></svg></button>` : ''}
           </div>
           ${(castNames.length || directors.length) ? `<dl class="dt-facts">${castNames.length ? `<dt>Starring</dt><dd>${esc(castNames.slice(0, 3).join(', '))}${castNames.length > 3 ? ' <span class="muted">and more</span>' : ''}</dd>` : ''}${directors.length ? `<dt>Director</dt><dd>${esc(directors.slice(0, 5).join(', '))}</dd>` : ''}</dl>` : ''}
@@ -777,6 +778,12 @@ $('#wsDetail').addEventListener('click', (e) => {
   else if (act === 'ep') {
     const ep = allEpisodes((state.detail[it.uid] || it).seasons).find((x) => x.uid === b.dataset.uid);
     if (ep) { toPlayer(); playChannel(ep); }
+  } else if (act === 'dl') {
+    const target = b.dataset.dl === it.uid ? it : allEpisodes((state.detail[it.uid] || it).seasons).find((x) => x.uid === b.dataset.dl);
+    if (target) dlClick(target, b);
+  } else if (act === 'dl-season') {
+    const eps = ((state.detail[it.uid] || it).seasons || {})[b.dataset.s] || [];
+    dlStart(eps.filter((x) => !dlOf(x.uid) || dlOf(x.uid).state === 'failed'));
   } else if (act === 'copy') copyLink(withBestUrl(it), b);
   else if (act === 'fav') toggleFavItem(it);
   else if (act === 'more') { const p = $('#dtPlot'); p.classList.toggle('open'); b.textContent = p.classList.contains('open') ? 'Less ⌃' : 'More ⌄'; }

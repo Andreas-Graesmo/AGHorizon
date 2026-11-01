@@ -717,3 +717,44 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .mv-tile:fullscreen { border: 0; border-radius: 0; }
 .mv-tile:fullscreen .mv-top { opacity: 1; }
 @media (max-width: 760px) { .mv-lay-t { display: none; } }
+/* ── downloads ────────────────────────────────────── */
+.dl-btn.on { color: var(--accent); }
+.dl-btn.err { color: var(--red); }
+.dl-ring { width: 18px; height: 18px; transform: rotate(-90deg); flex: none; }
+.dl-ring circle { fill: none; stroke: color-mix(in srgb, currentColor 25%, transparent); stroke-width: 2.6; }
+.dl-ring circle.v { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }
+.dl-ring.paused circle.v { stroke: var(--muted); }
+.ep.has-dl { grid-template-columns: 34px 1fr auto auto; }
+.ep-dl { color: var(--muted); }
+.ep-dl .ic, .ep-dl .dl-ring { width: 17px; height: 17px; }
+.seasons { align-items: center; }
+.dl-season-note { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.dl-season-note .ic { width: 15px; height: 15px; color: var(--accent); }
+
+.dl-page .page-head { flex-wrap: wrap; }
+.dl-folder { max-width: 320px; }
+.dl-folder span { overflow: hidden; text-overflow: ellipsis; font: 500 12px/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.dl-path { font: 500 12px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; word-break: break-all; }
+.dl-note { margin: -4px 0 10px; font-size: 13px; }
+.dl-list { display: grid; gap: 8px; }
+.dl-row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.dl-row.failed { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }
+.dl-row.compact { padding: 8px 12px; background: none; border-color: transparent; }
+.dl-row.compact:hover { background: var(--panel); border-color: var(--line); }
+.dl-thumb { position: relative; width: 46px; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: var(--tile); display: grid; place-items: center; flex: none; }
+.dl-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dl-thumb span { font-size: 12px; font-weight: 800; color: var(--muted); }
+.dl-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.dl-main b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-main small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-status { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.dl-bar { height: 4px; margin-top: 6px; max-width: 420px; }
+.dl-row.paused .dl-bar i, .dl-row.queued .dl-bar i { background: var(--muted); }
+.dl-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+.dl-show { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+.dl-show .dl-row.compact:hover { background: var(--panel-2); }
+.dl-show-head { display: flex; align-items: center; gap: 14px; padding: 2px 2px 8px; }
+.dl-show-head > div:last-child { display: grid; }
+.dl-show-head b { font-size: 15px; }
+.dl-show-head small { color: var(--muted); font-size: 12px; }
+@media (max-width: 760px) { .dl-folder { display: none; } }

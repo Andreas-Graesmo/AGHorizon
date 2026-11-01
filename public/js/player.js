@@ -84,7 +84,7 @@ async function startPlayback(ch, kinds, token, lastError) {
   if (token !== playToken) return;
   const [kind, ...rest] = kinds;
   const p = playlistById(ch.pid);
-  const src = proxied(ch.url, p);
+  const src = ch.local ? ch.url : proxied(ch.url, p);
   const fail = (msg) => {
     if (token !== playToken) return;
     if (rest.length) startPlayback(ch, rest, token, msg);
@@ -198,6 +198,8 @@ video.addEventListener('ended', () => {
     const eps = allEpisodes((state.detail[c.seriesUid] || {}).seasons || {});
     const i = eps.findIndex((e) => e.uid === c.uid);
     if (i >= 0 && eps[i + 1]) { playChannel(eps[i + 1]); return; }
+    const next = dlNextEpisode(c);   // offline: the series details aren't loaded, but the next episode may be downloaded
+    if (next && i < 0) { playChannel(next); return; }
   }
   uiPlayback();
 });
@@ -269,6 +271,7 @@ playerEl.addEventListener('mouseleave', () => { clearTimeout(ctlTimer); playerEl
 playerEl.addEventListener('focusin', showCtl);
 /* ─────────────────────────── play / stop / controls ─────────────────────────── */
 function playChannel(ch) {
+  ch = dlLocal(ch);   // a downloaded copy plays from disk
   state.current = ch;
   const token = ++playToken;
   pushRecent(ch);
@@ -276,6 +279,7 @@ function playChannel(ch) {
   startPlayback(ch, playPlan(ch), token);
   mirrorTitle(ch.name);
   uiPlayback(true);
+  dlSyncWatching();
 }
 
 function stopPlayback() {
@@ -285,6 +289,7 @@ function stopPlayback() {
   state.current = null;
   mirrorTitle('');
   uiPlayback(true);
+  dlSyncWatching();
 }
 
 function toggleFullscreen() {
