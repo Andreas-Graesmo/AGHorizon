@@ -92,6 +92,7 @@ function go(route, params = {}, { push = true } = {}) {
   if (route === 'ws') renderWsChrome(); else { renderRoute(route); syncTopSearch(); syncNavState(); }
   updateBack();
   layoutPlayer();
+  dlSyncWatching();   // multi view streams count as watching too
 }
 
 async function goBack() {
@@ -107,7 +108,7 @@ async function goBack() {
 $('#btnBack').addEventListener('click', goBack);
 
 function renderRoute(route) {
-  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings, multiview: renderMultiview }[route];
+  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings, multiview: renderMultiview, downloads: openDownloads }[route];
   if (fn) fn();
 }
 
@@ -690,6 +691,7 @@ function renderSettings() {
         <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close second screen' : 'Open second screen'}</button></div>
       <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Second screen” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Second screen'], ['both', 'Both']])}</div>
     </section>
+    ${dlSettingsCard()}
     <section class="set-card"><h3>Library</h3>
       <div class="set-row"><div><b>Recently viewed</b><p class="muted">${state.recent.length} items</p></div><button class="btn ghost" data-act="hist-clear">Clear</button></div>
       <div class="set-row"><div><b>Favorites</b><p class="muted">${state.favs.size} items</p></div><button class="btn ghost" data-act="favs-clear">Clear</button></div>
