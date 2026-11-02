@@ -267,6 +267,7 @@ document.addEventListener('click', (e) => {
   if (!it) return;
   if (e.target.closest('[data-fav]')) { toggleFavItem(it); return; }
   if (e.target.closest('[data-multi]')) { mvAdd(it); return; }
+  if (e.target.closest('[data-remove]')) { removeRecent(it.uid); return; }
   openItem(it);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('card')) e.target.click(); });
@@ -542,7 +543,12 @@ function renderRecent() {
   const list = state.recent.filter((r) => playlistById(r.pid));
   if (!list.length) { el.innerHTML = `<div class="page">${pageHead('Recently viewed')}${emptyState('i-clock', 'Nothing here yet', 'What you watch shows up here, newest first.')}</div>`; return; }
   el.innerHTML = `<div class="page">${pageHead('Recently viewed', `${list.length} items`, '<button class="btn ghost" data-act="hist-clear">Clear history</button>')}
-    <div class="grid">${list.map((s) => cardHtml(s, { tag: KIND_TAG[s.kind], sub: ago(s.ts) })).join('')}</div></div>`;
+    <div class="grid">${list.map((s) => cardHtml(s, { tag: KIND_TAG[s.kind], sub: ago(s.ts), remove: 'Remove from history' })).join('')}</div></div>`;
+}
+function removeRecent(uid) {
+  state.recent = state.recent.filter((r) => r.uid !== uid);
+  LS.set('tuner.recent', state.recent);
+  renderRoute(ui.route);
 }
 
 /* ─────────────────────────────── global search ─────────────────────────────── */

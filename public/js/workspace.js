@@ -552,8 +552,9 @@ function cardHtml(it, o = {}) {
   if (kind === 'episode') { title = it.seriesName || it.name; sub = sub || `S${String(it.season || 1).padStart(2, '0')}E${String(it.num || 0).padStart(2, '0')}`; }
   const rating = vod && it.rating ? `<span class="badge"><svg class="ic"><use href="#i-star"/></svg>${esc(it.rating)}</span>` : '';
   const tag = o.tag ? `<span class="badge kind">${esc(o.tag)}</span>` : '';
-  return `<div class="card ${vod ? 'poster-card' : 'live-card'}" data-uid="${esc(it.uid)}" tabindex="0" role="button" title="${esc(title)}">
-    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+  const remove = o.remove ? `<button class="c-remove" data-remove title="${esc(o.remove)}" aria-label="${esc(o.remove)}"><svg class="ic"><use href="#i-x"/></svg></button>` : '';
+  return `<div class="card ${vod ? 'poster-card' : 'live-card'}${remove ? ' removable' : ''}" data-uid="${esc(it.uid)}" tabindex="0" role="button" title="${esc(title)}">
+    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
     <div class="c-title">${esc(title)}</div>${sub ? `<div class="c-sub">${esc(sub)}</div>` : ''}</div>`;
 }
 
@@ -836,6 +837,7 @@ function uiPlayback() {
       else if (ws.detail) renderDetail();
       else refreshProgressBars();
     } else if (['dashboard', 'recent'].includes(ui.route)) renderRoute(ui.route);
+    else if (ui.route === 'downloads') renderDownloads();   // watch progress on the saved copies
   });
 }
 

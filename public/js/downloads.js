@@ -174,12 +174,17 @@ function dlRowHtml(d, { compact = false } = {}) {
   else if (d.state === 'failed') main = '<button class="btn ghost small" data-act="dl-resume">Try again</button>';
   else if (d.state === 'paused') main = '<button class="icon-btn" data-act="dl-resume" title="Resume" aria-label="Resume"><svg class="ic fill"><use href="#i-play"/></svg></button>';
   else main = '<button class="icon-btn" data-act="dl-pause" title="Pause" aria-label="Pause"><svg class="ic"><use href="#i-pause"/></svg></button>';
-  return `<div class="dl-row${compact ? ' compact' : ''} ${d.state}" data-id="${esc(d.id)}">
+  // how far you've watched the saved copy (same progress as the stream, they share the uid)
+  const p = d.state === 'done' ? progressOf(d.uid) : null;
+  const watched = !!(p && p.w);
+  const seen = p && p.d && !p.w ? Math.round((p.t / p.d) * 100) : 0;
+  return `<div class="dl-row${compact ? ' compact' : ''} ${d.state}${watched ? ' watched' : ''}" data-id="${esc(d.id)}">
     ${compact ? '' : dlThumb(d)}
     <div class="dl-main"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}
       <div class="dl-status">${dlStatusHtml(d)}</div>
-      ${busy ? `<div class="bar dl-bar"><i style="width:${dlPct(d)}%"></i></div>` : ''}</div>
-    <div class="dl-acts">${main}<button class="icon-btn" data-act="dl-more" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>
+      ${busy ? `<div class="bar dl-bar"><i style="width:${dlPct(d)}%"></i></div>` : ''}
+      ${seen ? `<div class="bar dl-bar dl-seen" title="${seen}% watched"><i style="width:${seen}%"></i></div>` : ''}</div>
+    <div class="dl-acts">${watched ? '<span class="dl-watched" title="Watched" aria-label="Watched"><svg class="ic"><use href="#i-check"/></svg></span>' : ''}${main}<button class="icon-btn" data-act="dl-more" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>
   </div>`;
 }
 
