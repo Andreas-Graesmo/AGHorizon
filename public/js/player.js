@@ -15,6 +15,9 @@ const compatMode = () => LS.get('tuner.compat', 'auto'); // 'auto' | 'always' | 
 const tcUrl = (ch, p, start) => `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${Math.floor(start)}` : ''}`;
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
+// HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
+const hevcOk = (() => { try { return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
+const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk ? 'hevc' : 'h264');
 
 function playPlan(ch) {
   const base = kindsFor(ch);
@@ -136,9 +139,16 @@ async function startPlayback(ch, kinds, token, lastError) {
     const resume = progressOf(ch.uid);
     const dur = vod ? info.duration || 0 : 0;
     const start = vod && resume && !resume.w && resume.t > 10 && (!dur || dur - resume.t > 20) ? resume.t : 0;
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: info.video === 'h264' ? 'copy' : 'h264' });
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video) });
     $('#tcBadge').hidden = false;
-    video.onerror = () => fail('The converted stream could not be played');
+    video.onerror = () => {
+      if (token !== playToken) return;
+      if (tcState.video !== 'hevc') return fail('The converted stream could not be played');
+      tcState.video = 'h264';   // the HEVC decoder refused it after all: convert the picture too
+      tcState.offset = tcState.vod ? curTime() : 0;
+      video.src = tcUrl(ch, p, tcState.offset);
+      video.play().catch(() => {});
+    };
     video.src = tcUrl(ch, p, start);
     video.play().catch(() => {});
     syncCtl();
@@ -297,7 +307,7 @@ function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   else el.requestFullscreen().catch(() => {});
 }
-document.addEventListener('fullscreenchange', () => $('#player').classList.toggle('fs', document.fullscreenElement === $('#player')));
+document.addEventListener('fullscreenchange', () => { $('#player').classList.toggle('fs', document.fullscreenElement === $('#player')); layoutPlayer(); });
 
 let osdTimer = 0;
 function osd(text) {
