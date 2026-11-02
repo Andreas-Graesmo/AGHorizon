@@ -17,7 +17,7 @@ const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.curren
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
 // HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
 const hevcOk = (() => { try { return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
-const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk ? 'hevc' : 'h264');
+const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
 
 function playPlan(ch) {
   const base = kindsFor(ch);

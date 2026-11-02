@@ -670,6 +670,7 @@ function renderSettings() {
   const accent = LS.get('tuner.accent', 'blue');
   const compat = LS.get('tuner.compat', 'auto');
   const autonext = LS.get('tuner.autonext', true);
+  const keepHevc = LS.get('tuner.keepHevc', true);
   const seg = (key, cur, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-set="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const palSeg = (mode) => seg(mode + 'Palette', LS.get(`tuner.${mode}Palette`, mode === 'dark' ? 'midnight' : 'soft'),
     Object.entries(PALETTES[mode]).map(([k, [l, a, b]]) => [k, `<i class="pal-dot" style="--a:${a};--b:${b}"></i>${l}`]));
@@ -684,6 +685,7 @@ function renderSettings() {
     <section class="set-card"><h3>Playback</h3>
       <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. HEVC video and DTS / AC-3 audio are converted to H.264 + AAC on the fly.' : 'ffmpeg was not found, so unsupported streams can’t be converted. The desktop app includes it; for the web version install ffmpeg or set FFMPEG_PATH.'}</p></div>
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
     </section>
     <section class="set-card"><h3>Second screen</h3>
@@ -714,6 +716,7 @@ $('#v-settings').addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.set === 'compat') LS.set('tuner.compat', t.value);
   else if (t.dataset.set === 'autonext') LS.set('tuner.autonext', t.checked);
+  else if (t.dataset.set === 'keepHevc') LS.set('tuner.keepHevc', t.checked);
   else if (t.dataset.set === 'autoUpdate') LS.set('tuner.autoUpdate', t.checked);
 });
 
