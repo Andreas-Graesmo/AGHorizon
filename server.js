@@ -338,13 +338,13 @@ function handleTranscode(req, res, q) {
   if (activeConversions >= MAX_CONVERSIONS) throw httpError(429, 'Too many conversions are running – wait a moment and try again');
   const url = checkUrl(q.get('url'));
   const start = Math.max(0, Number(q.get('start')) || 0);
-  const copyVideo = q.get('video') === 'copy';
+  const copyVideo = q.get('video') === 'copy' || q.get('video') === 'hevc';   // 'hevc': the player decodes HEVC itself
 
   const args = [
     ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000', ...(start ? ['-ss', String(Math.floor(start))] : [])]),
     '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
     ...(copyVideo
-      ? ['-c:v', 'copy']
+      ? ['-c:v', 'copy', ...(q.get('video') === 'hevc' ? ['-tag:v', 'hvc1'] : [])]   // browsers only take HEVC in MP4 tagged hvc1
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
          '-vf', "scale=-2:'min(1080,ih)'", '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
     '-c:a', 'aac', '-b:a', '192k', '-ac', '2', // stereo AAC plays everywhere (and downmixes DTS / AC-3 5.1)

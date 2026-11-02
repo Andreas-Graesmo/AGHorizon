@@ -172,7 +172,7 @@ function layoutPlayer() {
   const el = $('#player');
   if (!state.current) { el.hidden = true; return; }
   el.hidden = false;
-  if (document.fullscreenElement === el) return;
+  if (document.fullscreenElement === el) { el.classList.remove('mini'); return; }   // full controls, even when it went fullscreen from the mini player
   const slot = currentSlot();
   let docked = false;
   if (slot) {
