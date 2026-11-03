@@ -338,18 +338,20 @@ function handleTranscode(req, res, q) {
   if (activeConversions >= MAX_CONVERSIONS) throw httpError(429, 'Too many conversions are running – wait a moment and try again');
   const url = checkUrl(q.get('url'));
   const start = Math.max(0, Number(q.get('start')) || 0);
-  const copyVideo = q.get('video') === 'copy' || q.get('video') === 'hevc';   // 'hevc': the player decodes HEVC itself
+  const keepHevc = q.get('video') === 'hevc';   // the player decodes HEVC itself
+  const copyVideo = q.get('video') === 'copy' || keepHevc;
 
   const args = [
     ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000', ...(start ? ['-ss', String(Math.floor(start))] : [])]),
     '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
     ...(copyVideo
-      ? ['-c:v', 'copy', ...(q.get('video') === 'hevc' ? ['-tag:v', 'hvc1'] : [])]   // browsers only take HEVC in MP4 tagged hvc1
+      ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
          '-vf', "scale=-2:'min(1080,ih)'", '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
     '-c:a', 'aac', '-b:a', '192k', '-ac', '2', // stereo AAC plays everywhere (and downmixes DTS / AC-3 5.1)
-    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-    '-f', 'mp4', 'pipe:1',
+    // Chromium shows copied HEVC about a GOP late in fragmented MP4 (sound runs ~2 s ahead), but in sync in Matroska
+    ...(keepHevc ? ['-f', 'matroska', '-live', '1'] : ['-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4']),
+    'pipe:1',
   ];
 
   const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -363,7 +365,7 @@ function handleTranscode(req, res, q) {
   proc.stdout.on('data', (chunk) => {
     if (!started) {
       started = true;
-      res.writeHead(200, { 'Content-Type': 'video/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'none' });
+      res.writeHead(200, { 'Content-Type': keepHevc ? 'video/x-matroska' : 'video/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'none' });
     }
     if (!res.write(chunk)) { proc.stdout.pause(); res.once('drain', () => proc.stdout.resume()); }
   });

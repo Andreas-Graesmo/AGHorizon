@@ -468,7 +468,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
 .player.mini .pc-big { width: 34px; height: 34px; }
 .player.mini .p-ctl { padding: 20px 10px 6px; }
-.tc-badge { position: absolute; bottom: 70px; right: 12px; z-index: 3; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; background: rgba(0, 0, 0, .6); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); pointer-events: none; }
+.tc-badge { position: absolute; bottom: 84px; right: 12px; z-index: 3; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; background: rgba(0, 0, 0, .6); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); pointer-events: none; opacity: 0; transition: opacity .15s; }
+.player.ctl-on .tc-badge, .player.paused .tc-badge { opacity: 1; }   /* shows and hides with the controls */
 .player.mini .tc-badge { display: none; }
 
 /* ── settings ─────────────────────────────────────── */
