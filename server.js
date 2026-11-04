@@ -329,6 +329,34 @@ function handleProbe(req, res, q) {
   res.on('close', () => proc.kill('SIGKILL'));
 }
 
+// Time of the keyframe at or before ?t. Copied video can only start on a keyframe, so the player starts the
+// conversion there: otherwise the picture starts up to a few seconds early and the sound only at ?t.
+function handleKeyframe(req, res, q) {
+  const bin = ffmpeg();
+  if (!bin) throw httpError(501, 'ffmpeg is not installed');
+  const url = checkUrl(q.get('url'));
+  const t = Math.max(0, Number(q.get('t')) || 0);
+  const args = [
+    ...ffmpegInput(url, q.get('ua'), ['-noaccurate_seek', '-ss', String(t)]),
+    '-copyts', '-start_at_zero', '-map', '0:v:0', '-c', 'copy', '-frames:v', '1', '-f', 'framecrc', 'pipe:1',
+  ];
+  const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+  let out = '';
+  let finished = false;
+  const finish = (body) => { if (finished) return; finished = true; clearTimeout(timer); sendJson(res, 200, body); };
+  const timer = setTimeout(() => proc.kill('SIGKILL'), 15000);
+  proc.stdout.on('data', (d) => { out += d; });
+  proc.on('error', () => finish({ t }));
+  proc.on('close', () => {
+    // framecrc: "#tb 0: 1/1000" then "0, dts, pts, duration, size, crc"
+    const tb = /^#tb 0: (\d+)\/(\d+)/m.exec(out);
+    const pkt = /^0,\s*-?\d+,\s*(-?\d+),/m.exec(out);
+    const kf = tb && pkt ? (Number(pkt[1]) * Number(tb[1])) / Number(tb[2]) : NaN;
+    finish({ t: isFinite(kf) && kf >= 0 && kf <= t + 0.5 ? kf : t });   // anything odd: start where asked, as before
+  });
+  res.on('close', () => proc.kill('SIGKILL'));
+}
+
 let activeConversions = 0;
 const MAX_CONVERSIONS = 3;
 
@@ -342,7 +370,9 @@ function handleTranscode(req, res, q) {
   const copyVideo = q.get('video') === 'copy' || keepHevc;
 
   const args = [
-    ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000', ...(start ? ['-ss', String(Math.floor(start))] : [])]),
+    ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000',
+      // copied video starts on the keyframe before ?start: start the sound there too (the player asks /api/keyframe where that is)
+      ...(start ? [...(copyVideo ? ['-noaccurate_seek'] : []), '-ss', start.toFixed(3)] : [])]),
     '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
     ...(copyVideo
       ? ['-c:v', 'copy']
@@ -358,8 +388,11 @@ function handleTranscode(req, res, q) {
   activeConversions++;
   let started = false;
   let finished = false;
+  let counted = true;
   let err = '';
-  const finish = () => { if (finished) return false; finished = true; activeConversions--; return true; };
+  const release = () => { if (counted) { counted = false; activeConversions--; } };
+  const finish = () => { if (finished) return false; finished = true; release(); return true; };
+  proc.on('exit', release); // 'close' never comes while stdout is paused for a browser that already hung up
 
   proc.stderr.on('data', (d) => { err = (err + d).slice(-4000); });
   proc.stdout.on('data', (chunk) => {
@@ -379,7 +412,7 @@ function handleTranscode(req, res, q) {
     const last = err.trim().split('\n').filter(Boolean).pop() || 'unknown error';
     sendJson(res, 502, { error: 'Conversion failed: ' + last });
   });
-  res.on('close', () => proc.kill('SIGKILL')); // browser navigated away / switched channel
+  res.on('close', () => { proc.kill('SIGKILL'); proc.stdout.destroy(); }); // browser navigated away / switched channel / seeked
 }
 
 /* --------------------------------------------------------- local downloads */
@@ -463,6 +496,7 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
+    else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);
     else if (url.pathname.startsWith('/api/local/') && (req.method === 'GET' || req.method === 'HEAD')) handleLocal(req, res, url.pathname);
     else send(res, 404, 'Not found');
