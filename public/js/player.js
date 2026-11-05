@@ -44,6 +44,19 @@ const playsNatively = (info) => (NATIVE_VIDEO.includes(info.video) || (info.vide
 // don't first play a few seconds without sound. Other links play straight away and are checked while playing.
 const checkFirst = (ch) => isVod(ch) && (ch.local || /\.(mkv|avi)$/i.test(ch.url.split('?')[0]));
 
+// Live streams can't be checked before playing without a second connection, but mpegts.js / hls.js know the
+// codecs as soon as the first data arrives (codec strings like "ec-3", "hvc1.2.4.L150"). Convert right then
+// instead of playing a few seconds without sound, and remember the codecs so the conversion needn't probe.
+const BAD_AUDIO = /^(ac-3|ec-3|dts|dt[cehs]|mp4a\.a[56])/i;
+const isHevcCodec = (c) => /^(hvc1|hev1)/i.test(c || '');
+function earlyCodecCheck(ch, token, videoCodec, audioCodec, soundDropped = false) {
+  if (token !== playToken || tcState.on || !state.ffmpeg || compatMode() === 'off') return;
+  if (!soundDropped && !BAD_AUDIO.test(audioCodec || '') && !(isHevcCodec(videoCodec) && !hevcOk)) return;
+  const vcodec = /^avc/i.test(videoCodec || '') ? 'h264' : isHevcCodec(videoCodec) ? 'hevc' : '';
+  if (vcodec) probeCache.set(ch.url, { video: vcodec, audio: audioCodec, duration: 0 });
+  setTimeout(() => { if (token === playToken && !tcState.on) startPlayback(ch, ['tc'], token); });   // not from inside the player's own event
+}
+
 function playPlan(ch) {
   const base = kindsFor(ch);
   if (!state.ffmpeg || compatMode() === 'off') return base;
@@ -140,7 +153,17 @@ async function startPlayback(ch, kinds, token, lastError) {
     const h = hlsPlayer;
     h.loadSource(src);
     h.attachMedia(video);
-    h.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+    h.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
+      const lv = (d.levels || [])[0];
+      if (lv && lv.audioCodec) earlyCodecCheck(ch, token, lv.videoCodec, lv.audioCodec);   // from the playlist's CODECS, when it lists them
+      if (token === playToken && !tcState.on) video.play().catch(() => {});
+    });
+    h.on(Hls.Events.BUFFER_CODECS, (_e, d) => {
+      // hls.js leaves out sound it can't play (AC-3 / E-AC-3 in MPEG-TS) instead of reporting it: picture but no
+      // sound, with no separate audio playlist, means it was dropped. (A truly silent channel just gets its sound converted.)
+      const dropped = !!d.video && !d.audio && !h.audioTracks.length;
+      earlyCodecCheck(ch, token, d.video && d.video.codec, d.audio && d.audio.codec, dropped);
+    });
     h.on(Hls.Events.ERROR, (_e, d) => {
       if (!d.fatal || token !== playToken) return;
       if (d.type === Hls.ErrorTypes.NETWORK_ERROR && d.details !== 'manifestParsingError' && ++netRetries <= 2) h.startLoad();
@@ -150,9 +173,11 @@ async function startPlayback(ch, kinds, token, lastError) {
   } else if (kind === 'ts') {
     if (!(await loadMpegts()) || !mpegts.isSupported()) return fail('The MPEG-TS player is not available in this browser');
     if (token !== playToken) return;
-    tsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: src }, { enableWorker: true, liveBufferLatencyChasing: true, lazyLoadMaxDuration: 60 });
+    // full address: mpegts.js fetches from a worker, which can't resolve "/api/stream…"
+    tsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: new URL(src, location.href).href }, { enableWorker: true, liveBufferLatencyChasing: true, lazyLoadMaxDuration: 60 });
     tsPlayer.attachMediaElement(video);
     tsPlayer.on(mpegts.Events.ERROR, (_t, detail) => fail(`Stream error: ${detail}`));
+    tsPlayer.on(mpegts.Events.MEDIA_INFO, (mi) => earlyCodecCheck(ch, token, mi.videoCodec, mi.audioCodec));
     tsPlayer.load();
     tsPlayer.play().catch(() => {});
   } else if (kind === 'tc') {
