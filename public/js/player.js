@@ -12,9 +12,50 @@ const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264' }
 let checkTimer = 0;
 let tcSeeking = false;
 const compatMode = () => LS.get('tuner.compat', 'auto'); // 'auto' | 'always' | 'off'
-const tcUrl = (ch, p, start) => `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${Math.floor(start)}` : ''}`;
+const tcUrl = (ch, p, start) => `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}`;
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
+// HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
+const hevcOk = (() => { try { return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
+const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
+
+// Copied video (and its sound) starts on the keyframe before t, up to a few seconds earlier.
+// Ask where that is, so the clock shows where the picture really is.
+async function tcStartAt(ch, p, t) {
+  if (!(t > 0) || (tcState.video !== 'copy' && tcState.video !== 'hevc')) return t;
+  try { const r = await fetch(`/api/keyframe?url=${enc(ch.url)}${uaParam(p)}&t=${t.toFixed(3)}`); if (r.ok) return (await r.json()).t; } catch { /* start at t */ }
+  return t;
+}
+
+// Codecs per URL, so a video that is checked before playing isn't probed again when it's converted.
+const probeCache = new Map();
+async function probeOf(ch, p) {
+  if (probeCache.has(ch.url)) return probeCache.get(ch.url);
+  let info = {};
+  try { const r = await fetch(`/api/probe?url=${enc(ch.url)}${uaParam(p)}`); if (r.ok) info = await r.json(); } catch { /* unknown */ }
+  if (info.video) probeCache.set(ch.url, info);
+  return info;
+}
+const NATIVE_VIDEO = ['h264', 'vp8', 'vp9', 'av1'];
+const NATIVE_AUDIO = ['aac', 'mp3', 'opus', 'vorbis', 'flac'];
+const playsNatively = (info) => (NATIVE_VIDEO.includes(info.video) || (info.video === 'hevc' && hevcOk))
+  && (!info.audio || NATIVE_AUDIO.includes(info.audio) || info.audio.startsWith('pcm_'));
+// Downloads and .mkv / .avi links usually carry AC-3 / E-AC-3 / DTS sound: check before playing them, so they
+// don't first play a few seconds without sound. Other links play straight away and are checked while playing.
+const checkFirst = (ch) => isVod(ch) && (ch.local || /\.(mkv|avi)$/i.test(ch.url.split('?')[0]));
+
+// Live streams can't be checked before playing without a second connection, but mpegts.js / hls.js know the
+// codecs as soon as the first data arrives (codec strings like "ec-3", "hvc1.2.4.L150"). Convert right then
+// instead of playing a few seconds without sound, and remember the codecs so the conversion needn't probe.
+const BAD_AUDIO = /^(ac-3|ec-3|dts|dt[cehs]|mp4a\.a[56])/i;
+const isHevcCodec = (c) => /^(hvc1|hev1)/i.test(c || '');
+function earlyCodecCheck(ch, token, videoCodec, audioCodec, soundDropped = false) {
+  if (token !== playToken || tcState.on || !state.ffmpeg || compatMode() === 'off') return;
+  if (!soundDropped && !BAD_AUDIO.test(audioCodec || '') && !(isHevcCodec(videoCodec) && !hevcOk)) return;
+  const vcodec = /^avc/i.test(videoCodec || '') ? 'h264' : isHevcCodec(videoCodec) ? 'hevc' : '';
+  if (vcodec) probeCache.set(ch.url, { video: vcodec, audio: audioCodec, duration: 0 });
+  setTimeout(() => { if (token === playToken && !tcState.on) startPlayback(ch, ['tc'], token); });   // not from inside the player's own event
+}
 
 function playPlan(ch) {
   const base = kindsFor(ch);
@@ -84,7 +125,7 @@ async function startPlayback(ch, kinds, token, lastError) {
   if (token !== playToken) return;
   const [kind, ...rest] = kinds;
   const p = playlistById(ch.pid);
-  const src = proxied(ch.url, p);
+  const src = ch.local ? ch.url : proxied(ch.url, p);
   const fail = (msg) => {
     if (token !== playToken) return;
     if (rest.length) startPlayback(ch, rest, token, msg);
@@ -112,7 +153,17 @@ async function startPlayback(ch, kinds, token, lastError) {
     const h = hlsPlayer;
     h.loadSource(src);
     h.attachMedia(video);
-    h.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+    h.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
+      const lv = (d.levels || [])[0];
+      if (lv && lv.audioCodec) earlyCodecCheck(ch, token, lv.videoCodec, lv.audioCodec);   // from the playlist's CODECS, when it lists them
+      if (token === playToken && !tcState.on) video.play().catch(() => {});
+    });
+    h.on(Hls.Events.BUFFER_CODECS, (_e, d) => {
+      // hls.js leaves out sound it can't play (AC-3 / E-AC-3 in MPEG-TS) instead of reporting it: picture but no
+      // sound, with no separate audio playlist, means it was dropped. (A truly silent channel just gets its sound converted.)
+      const dropped = !!d.video && !d.audio && !h.audioTracks.length;
+      earlyCodecCheck(ch, token, d.video && d.video.codec, d.audio && d.audio.codec, dropped);
+    });
     h.on(Hls.Events.ERROR, (_e, d) => {
       if (!d.fatal || token !== playToken) return;
       if (d.type === Hls.ErrorTypes.NETWORK_ERROR && d.details !== 'manifestParsingError' && ++netRetries <= 2) h.startLoad();
@@ -122,27 +173,43 @@ async function startPlayback(ch, kinds, token, lastError) {
   } else if (kind === 'ts') {
     if (!(await loadMpegts()) || !mpegts.isSupported()) return fail('The MPEG-TS player is not available in this browser');
     if (token !== playToken) return;
-    tsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: src }, { enableWorker: true, liveBufferLatencyChasing: true, lazyLoadMaxDuration: 60 });
+    // full address: mpegts.js fetches from a worker, which can't resolve "/api/stream…"
+    tsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: new URL(src, location.href).href }, { enableWorker: true, liveBufferLatencyChasing: true, lazyLoadMaxDuration: 60 });
     tsPlayer.attachMediaElement(video);
     tsPlayer.on(mpegts.Events.ERROR, (_t, detail) => fail(`Stream error: ${detail}`));
+    tsPlayer.on(mpegts.Events.MEDIA_INFO, (mi) => earlyCodecCheck(ch, token, mi.videoCodec, mi.audioCodec));
     tsPlayer.load();
     tsPlayer.play().catch(() => {});
   } else if (kind === 'tc') {
     showOverlay('loading', 'Converting for playback…');
-    let info = {};
-    try { const r = await fetch(`/api/probe?url=${enc(ch.url)}${uaParam(p)}`); if (r.ok) info = await r.json(); } catch { /* fall back to a full conversion */ }
+    const info = await probeOf(ch, p);   // nothing known: a full conversion
     if (token !== playToken) return;
     const vod = isVod(ch);
     const resume = progressOf(ch.uid);
     const dur = vod ? info.duration || 0 : 0;
     const start = vod && resume && !resume.w && resume.t > 10 && (!dur || dur - resume.t > 20) ? resume.t : 0;
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: info.video === 'h264' ? 'copy' : 'h264' });
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video) });
+    const at = await tcStartAt(ch, p, start);
+    if (token !== playToken) return;
+    tcState.offset = at;
     $('#tcBadge').hidden = false;
-    video.onerror = () => fail('The converted stream could not be played');
+    video.onerror = () => {
+      if (token !== playToken) return;
+      if (tcState.video !== 'hevc') return fail('The converted stream could not be played');
+      tcState.video = 'h264';   // the HEVC decoder refused it after all: convert the picture too
+      tcState.offset = tcState.vod ? curTime() : 0;
+      video.src = tcUrl(ch, p, tcState.offset);
+      video.play().catch(() => {});
+    };
     video.src = tcUrl(ch, p, start);
     video.play().catch(() => {});
     syncCtl();
   } else {
+    if (checkFirst(ch) && rest.includes('tc')) {
+      const info = await probeOf(ch, p);
+      if (token !== playToken) return;
+      if (info.video && !playsNatively(info)) return startPlayback(ch, ['tc'], token);
+    }
     video.src = src;
     video.onerror = () => fail(video.error && video.error.message ? video.error.message : 'The browser could not play this stream');
     const resume = progressOf(ch.uid);
@@ -198,6 +265,8 @@ video.addEventListener('ended', () => {
     const eps = allEpisodes((state.detail[c.seriesUid] || {}).seasons || {});
     const i = eps.findIndex((e) => e.uid === c.uid);
     if (i >= 0 && eps[i + 1]) { playChannel(eps[i + 1]); return; }
+    const next = dlNextEpisode(c);   // offline: the series details aren't loaded, but the next episode may be downloaded
+    if (next && i < 0) { playChannel(next); return; }
   }
   uiPlayback();
 });
@@ -233,12 +302,22 @@ function syncCtl() {
   setFill(vol, muted ? 0 : video.volume);
   $('#pcSpeed').textContent = (video.playbackRate || 1) + '×';
 }
-function seekTc(t) {
+let tcSeekId = 0;
+async function seekTc(t) {
   const ch = state.current;
   if (!ch || !tcState.on || !tcState.vod) return;
+  const id = ++tcSeekId;
+  const token = playToken;
+  const p = playlistById(ch.pid);
   tcState.offset = Math.max(0, Math.min(t, (tcState.duration || Infinity) - 2));
   showOverlay('loading', 'Seeking…');
-  video.src = tcUrl(ch, playlistById(ch.pid), tcState.offset);
+  video.removeAttribute('src');   // hang up first: many providers allow only one connection
+  video.load();
+  const target = tcState.offset;
+  const at = await tcStartAt(ch, p, target);
+  if (id !== tcSeekId || token !== playToken) return;
+  tcState.offset = at;
+  video.src = tcUrl(ch, p, target);
   video.play().catch(() => {});
 }
 function seekTo(t) {
@@ -269,6 +348,7 @@ playerEl.addEventListener('mouseleave', () => { clearTimeout(ctlTimer); playerEl
 playerEl.addEventListener('focusin', showCtl);
 /* ─────────────────────────── play / stop / controls ─────────────────────────── */
 function playChannel(ch) {
+  ch = dlLocal(ch);   // a downloaded copy plays from disk
   state.current = ch;
   const token = ++playToken;
   pushRecent(ch);
@@ -276,6 +356,7 @@ function playChannel(ch) {
   startPlayback(ch, playPlan(ch), token);
   mirrorTitle(ch.name);
   uiPlayback(true);
+  dlSyncWatching();
 }
 
 function stopPlayback() {
@@ -285,6 +366,7 @@ function stopPlayback() {
   state.current = null;
   mirrorTitle('');
   uiPlayback(true);
+  dlSyncWatching();
 }
 
 function toggleFullscreen() {
@@ -292,7 +374,7 @@ function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   else el.requestFullscreen().catch(() => {});
 }
-document.addEventListener('fullscreenchange', () => $('#player').classList.toggle('fs', document.fullscreenElement === $('#player')));
+document.addEventListener('fullscreenchange', () => { $('#player').classList.toggle('fs', document.fullscreenElement === $('#player')); layoutPlayer(); });
 
 let osdTimer = 0;
 function osd(text) {
