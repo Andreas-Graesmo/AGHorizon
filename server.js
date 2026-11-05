@@ -7,6 +7,7 @@
  *  - /api/fetch   fetches playlists / Xtream API responses (avoids browser CORS limits)
  *  - /api/epg     downloads + parses an XMLTV guide (plain or .gz) into compact JSON
  *  - /api/stream  proxies live streams; HLS manifests are rewritten so segments also pass through
+ *  - /api/local   plays finished downloads (desktop app only)
  */
 const http = require('http');
 const fs = require('fs');
@@ -328,6 +329,34 @@ function handleProbe(req, res, q) {
   res.on('close', () => proc.kill('SIGKILL'));
 }
 
+// Time of the keyframe at or before ?t. Copied video can only start on a keyframe, so the player starts the
+// conversion there: otherwise the picture starts up to a few seconds early and the sound only at ?t.
+function handleKeyframe(req, res, q) {
+  const bin = ffmpeg();
+  if (!bin) throw httpError(501, 'ffmpeg is not installed');
+  const url = checkUrl(q.get('url'));
+  const t = Math.max(0, Number(q.get('t')) || 0);
+  const args = [
+    ...ffmpegInput(url, q.get('ua'), ['-noaccurate_seek', '-ss', String(t)]),
+    '-copyts', '-start_at_zero', '-map', '0:v:0', '-c', 'copy', '-frames:v', '1', '-f', 'framecrc', 'pipe:1',
+  ];
+  const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+  let out = '';
+  let finished = false;
+  const finish = (body) => { if (finished) return; finished = true; clearTimeout(timer); sendJson(res, 200, body); };
+  const timer = setTimeout(() => proc.kill('SIGKILL'), 15000);
+  proc.stdout.on('data', (d) => { out += d; });
+  proc.on('error', () => finish({ t }));
+  proc.on('close', () => {
+    // framecrc: "#tb 0: 1/1000" then "0, dts, pts, duration, size, crc"
+    const tb = /^#tb 0: (\d+)\/(\d+)/m.exec(out);
+    const pkt = /^0,\s*-?\d+,\s*(-?\d+),/m.exec(out);
+    const kf = tb && pkt ? (Number(pkt[1]) * Number(tb[1])) / Number(tb[2]) : NaN;
+    finish({ t: isFinite(kf) && kf >= 0 && kf <= t + 0.5 ? kf : t });   // anything odd: start where asked, as before
+  });
+  res.on('close', () => proc.kill('SIGKILL'));
+}
+
 let activeConversions = 0;
 const MAX_CONVERSIONS = 3;
 
@@ -337,32 +366,39 @@ function handleTranscode(req, res, q) {
   if (activeConversions >= MAX_CONVERSIONS) throw httpError(429, 'Too many conversions are running – wait a moment and try again');
   const url = checkUrl(q.get('url'));
   const start = Math.max(0, Number(q.get('start')) || 0);
-  const copyVideo = q.get('video') === 'copy';
+  const keepHevc = q.get('video') === 'hevc';   // the player decodes HEVC itself
+  const copyVideo = q.get('video') === 'copy' || keepHevc;
 
   const args = [
-    ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000', ...(start ? ['-ss', String(Math.floor(start))] : [])]),
+    ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000',
+      // copied video starts on the keyframe before ?start: start the sound there too (the player asks /api/keyframe where that is)
+      ...(start ? [...(copyVideo ? ['-noaccurate_seek'] : []), '-ss', start.toFixed(3)] : [])]),
     '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
     ...(copyVideo
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
          '-vf', "scale=-2:'min(1080,ih)'", '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
     '-c:a', 'aac', '-b:a', '192k', '-ac', '2', // stereo AAC plays everywhere (and downmixes DTS / AC-3 5.1)
-    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-    '-f', 'mp4', 'pipe:1',
+    // Chromium shows copied HEVC about a GOP late in fragmented MP4 (sound runs ~2 s ahead), but in sync in Matroska
+    ...(keepHevc ? ['-f', 'matroska', '-live', '1'] : ['-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4']),
+    'pipe:1',
   ];
 
   const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   activeConversions++;
   let started = false;
   let finished = false;
+  let counted = true;
   let err = '';
-  const finish = () => { if (finished) return false; finished = true; activeConversions--; return true; };
+  const release = () => { if (counted) { counted = false; activeConversions--; } };
+  const finish = () => { if (finished) return false; finished = true; release(); return true; };
+  proc.on('exit', release); // 'close' never comes while stdout is paused for a browser that already hung up
 
   proc.stderr.on('data', (d) => { err = (err + d).slice(-4000); });
   proc.stdout.on('data', (chunk) => {
     if (!started) {
       started = true;
-      res.writeHead(200, { 'Content-Type': 'video/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'none' });
+      res.writeHead(200, { 'Content-Type': keepHevc ? 'video/x-matroska' : 'video/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'none' });
     }
     if (!res.write(chunk)) { proc.stdout.pause(); res.once('drain', () => proc.stdout.resume()); }
   });
@@ -376,7 +412,43 @@ function handleTranscode(req, res, q) {
     const last = err.trim().split('\n').filter(Boolean).pop() || 'unknown error';
     sendJson(res, 502, { error: 'Conversion failed: ' + last });
   });
-  res.on('close', () => proc.kill('SIGKILL')); // browser navigated away / switched channel
+  res.on('close', () => { proc.kill('SIGKILL'); proc.stdout.destroy(); }); // browser navigated away / switched channel / seeked
+}
+
+/* --------------------------------------------------------- local downloads */
+/*
+ * The desktop app plays finished downloads from here, so the normal player (and compatibility mode,
+ * which hands ffmpeg this http address) works offline. Only files the download manager hands out by id.
+ */
+let localFiles = null; // (id, 'video' | 'poster') -> absolute path or null; set by the desktop app
+const setLocalFiles = (fn) => { localFiles = fn; };
+const LOCAL_MIME = {
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+  '.ts': 'video/mp2t', '.avi': 'video/x-msvideo', '.jpg': 'image/jpeg',
+};
+
+function handleLocal(req, res, pathname) {
+  const m = /^\/api\/local\/([a-f0-9]{8,32})(\/poster)?$/.exec(pathname);
+  const file = m && localFiles ? localFiles(m[1], m[2] ? 'poster' : 'video') : null;
+  if (!file) throw httpError(404, 'Not downloaded');
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) return send(res, 404, 'Not found');
+    const type = LOCAL_MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    const r = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    let start = 0, end = st.size - 1;
+    if (r && (r[1] || r[2])) {
+      if (r[1]) { start = Number(r[1]); if (r[2]) end = Math.min(end, Number(r[2])); } else start = Math.max(0, st.size - Number(r[2]));
+      if (start > end) return send(res, 416, '', { 'Content-Range': `bytes */${st.size}` });
+      res.writeHead(206, { 'Content-Type': type, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${st.size}`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+    } else {
+      res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+    }
+    if (req.method === 'HEAD') return res.end();
+    const stream = fs.createReadStream(file, { start, end });
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+  });
 }
 
 /* ----------------------------------------------------------------- static */
@@ -424,7 +496,9 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
+    else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);
+    else if (url.pathname.startsWith('/api/local/') && (req.method === 'GET' || req.method === 'HEAD')) handleLocal(req, res, url.pathname);
     else send(res, 404, 'Not found');
   } catch (e) {
     if (res.headersSent) return res.destroy();
@@ -445,7 +519,7 @@ function start(port = PORT) {
   });
 }
 
-module.exports = { start, server };
+module.exports = { start, server, setLocalFiles };
 
 // `node server.js` runs it as a plain web server; the desktop app (electron/main.js) calls start() instead.
 if (require.main === module) {

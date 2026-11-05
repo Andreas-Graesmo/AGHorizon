@@ -92,6 +92,7 @@ function go(route, params = {}, { push = true } = {}) {
   if (route === 'ws') renderWsChrome(); else { renderRoute(route); syncTopSearch(); syncNavState(); }
   updateBack();
   layoutPlayer();
+  dlSyncWatching();   // multi view streams count as watching too
 }
 
 async function goBack() {
@@ -107,7 +108,7 @@ async function goBack() {
 $('#btnBack').addEventListener('click', goBack);
 
 function renderRoute(route) {
-  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings, multiview: renderMultiview }[route];
+  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings, multiview: renderMultiview, downloads: openDownloads }[route];
   if (fn) fn();
 }
 
@@ -171,7 +172,7 @@ function layoutPlayer() {
   const el = $('#player');
   if (!state.current) { el.hidden = true; return; }
   el.hidden = false;
-  if (document.fullscreenElement === el) return;
+  if (document.fullscreenElement === el) { el.classList.remove('mini'); return; }   // full controls, even when it went fullscreen from the mini player
   const slot = currentSlot();
   let docked = false;
   if (slot) {
@@ -266,6 +267,7 @@ document.addEventListener('click', (e) => {
   if (!it) return;
   if (e.target.closest('[data-fav]')) { toggleFavItem(it); return; }
   if (e.target.closest('[data-multi]')) { mvAdd(it); return; }
+  if (e.target.closest('[data-remove]')) { removeRecent(it.uid); return; }
   openItem(it);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('card')) e.target.click(); });
@@ -541,7 +543,12 @@ function renderRecent() {
   const list = state.recent.filter((r) => playlistById(r.pid));
   if (!list.length) { el.innerHTML = `<div class="page">${pageHead('Recently viewed')}${emptyState('i-clock', 'Nothing here yet', 'What you watch shows up here, newest first.')}</div>`; return; }
   el.innerHTML = `<div class="page">${pageHead('Recently viewed', `${list.length} items`, '<button class="btn ghost" data-act="hist-clear">Clear history</button>')}
-    <div class="grid">${list.map((s) => cardHtml(s, { tag: KIND_TAG[s.kind], sub: ago(s.ts) })).join('')}</div></div>`;
+    <div class="grid">${list.map((s) => cardHtml(s, { tag: KIND_TAG[s.kind], sub: ago(s.ts), remove: 'Remove from history' })).join('')}</div></div>`;
+}
+function removeRecent(uid) {
+  state.recent = state.recent.filter((r) => r.uid !== uid);
+  LS.set('tuner.recent', state.recent);
+  renderRoute(ui.route);
 }
 
 /* ─────────────────────────────── global search ─────────────────────────────── */
@@ -669,6 +676,7 @@ function renderSettings() {
   const accent = LS.get('tuner.accent', 'blue');
   const compat = LS.get('tuner.compat', 'auto');
   const autonext = LS.get('tuner.autonext', true);
+  const keepHevc = LS.get('tuner.keepHevc', true);
   const seg = (key, cur, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-set="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const palSeg = (mode) => seg(mode + 'Palette', LS.get(`tuner.${mode}Palette`, mode === 'dark' ? 'midnight' : 'soft'),
     Object.entries(PALETTES[mode]).map(([k, [l, a, b]]) => [k, `<i class="pal-dot" style="--a:${a};--b:${b}"></i>${l}`]));
@@ -681,8 +689,9 @@ function renderSettings() {
       <div class="set-row"><div><b>Accent colour</b></div><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch${accent === k ? ' on' : ''}" data-set="accent" data-val="${k}" style="--c:${c}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
     </section>
     <section class="set-card"><h3>Playback</h3>
-      <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. HEVC video and DTS / AC-3 audio are converted to H.264 + AAC on the fly.' : 'ffmpeg was not found, so unsupported streams can’t be converted. The desktop app includes it; for the web version install ffmpeg or set FFMPEG_PATH.'}</p></div>
+      <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted. The desktop app includes it; for the web version install ffmpeg or set FFMPEG_PATH.'}</p></div>
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
     </section>
     <section class="set-card"><h3>Second screen</h3>
@@ -690,6 +699,7 @@ function renderSettings() {
         <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close second screen' : 'Open second screen'}</button></div>
       <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Second screen” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Second screen'], ['both', 'Both']])}</div>
     </section>
+    ${dlSettingsCard()}
     <section class="set-card"><h3>Library</h3>
       <div class="set-row"><div><b>Recently viewed</b><p class="muted">${state.recent.length} items</p></div><button class="btn ghost" data-act="hist-clear">Clear</button></div>
       <div class="set-row"><div><b>Favorites</b><p class="muted">${state.favs.size} items</p></div><button class="btn ghost" data-act="favs-clear">Clear</button></div>
@@ -712,6 +722,7 @@ $('#v-settings').addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.set === 'compat') LS.set('tuner.compat', t.value);
   else if (t.dataset.set === 'autonext') LS.set('tuner.autonext', t.checked);
+  else if (t.dataset.set === 'keepHevc') LS.set('tuner.keepHevc', t.checked);
   else if (t.dataset.set === 'autoUpdate') LS.set('tuner.autoUpdate', t.checked);
 });
 
