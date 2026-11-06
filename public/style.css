@@ -731,6 +731,8 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-ring circle.v { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }
 .dl-ring.paused circle.v { stroke: var(--muted); }
 .ep.has-dl { grid-template-columns: 34px 1fr auto auto; }
+.ep.off { opacity: .4; cursor: default; }   /* offline and not downloaded */
+.ep.off:hover { background: none; border-color: transparent; }
 .ep-dl { color: var(--muted); }
 .ep-dl .ic, .ep-dl .dl-ring { width: 17px; height: 17px; }
 .seasons { align-items: center; }
@@ -745,8 +747,6 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-list { display: grid; gap: 8px; }
 .dl-row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 .dl-row.failed { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }
-.dl-row.compact { padding: 8px 12px; background: none; border-color: transparent; }
-.dl-row.compact:hover { background: var(--panel); border-color: var(--line); }
 .dl-thumb { position: relative; width: 46px; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: var(--tile); display: grid; place-items: center; flex: none; }
 .dl-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .dl-thumb span { font-size: 12px; font-weight: 800; color: var(--muted); }
@@ -757,13 +757,4 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-bar { height: 4px; margin-top: 6px; max-width: 420px; }
 .dl-row.paused .dl-bar i, .dl-row.queued .dl-bar i { background: var(--muted); }
 .dl-acts { display: flex; align-items: center; gap: 4px; flex: none; }
-.dl-watched { display: inline-grid; place-items: center; width: 34px; height: 34px; color: var(--accent); }
-.dl-watched .ic { width: 19px; height: 19px; }
-.dl-row.watched .dl-main b { color: var(--muted); }
-.dl-show { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
-.dl-show .dl-row.compact:hover { background: var(--panel-2); }
-.dl-show-head { display: flex; align-items: center; gap: 14px; padding: 2px 2px 8px; }
-.dl-show-head > div:last-child { display: grid; }
-.dl-show-head b { font-size: 15px; }
-.dl-show-head small { color: var(--muted); font-size: 12px; }
 @media (max-width: 760px) { .dl-folder { display: none; } }

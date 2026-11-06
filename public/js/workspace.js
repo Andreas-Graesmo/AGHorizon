@@ -24,6 +24,7 @@ async function openWorkspace(pid, mode, opts = {}) {
   const p = playlistById(pid);
   if (!p) { toast('That playlist no longer exists.', 'err'); return; }
   LS.set('tuner.lastPid', pid);
+  ws.offline = false;   // set by dlOpen when only the saved copy of a download can be shown
   if (ws.pid !== pid) { Object.assign(ws, { pid, items: [], errors: [], mode: 'live', lv: 'channels' }); resetWsView(); }
   if (mode) {
     const m = mode === 'guide' ? 'live' : mode;
@@ -554,7 +555,7 @@ function cardHtml(it, o = {}) {
   const tag = o.tag ? `<span class="badge kind">${esc(o.tag)}</span>` : '';
   const remove = o.remove ? `<button class="c-remove" data-remove title="${esc(o.remove)}" aria-label="${esc(o.remove)}"><svg class="ic"><use href="#i-x"/></svg></button>` : '';
   return `<div class="card ${vod ? 'poster-card' : 'live-card'}${remove ? ' removable' : ''}" data-uid="${esc(it.uid)}" tabindex="0" role="button" title="${esc(title)}">
-    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}${o.fav === false ? '' : `<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>`}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
     <div class="c-title">${esc(title)}</div>${sub ? `<div class="c-sub">${esc(sub)}</div>` : ''}</div>`;
 }
 
@@ -638,8 +639,8 @@ $('#vodRefine').addEventListener('click', (e) => {
 });
 $('#vodEmpty').addEventListener('click', (e) => { if (e.target.closest('[data-act="edit-pl"]')) openPlaylistDialog(wsPlaylist()); });
 
-function refreshProgressBars() {
-  $$('#vodGrid .card').forEach((c) => {
+function refreshProgressBars(scope = '#vodGrid') {
+  $$(`${scope} .card`).forEach((c) => {
     const pr = progressOf(c.dataset.uid);
     const pct = pr && pr.d && !pr.w && pr.t > 10 ? Math.round((pr.t / pr.d) * 100) : 0;
     let bar = c.querySelector('.bar');
@@ -657,6 +658,7 @@ function dockedInDetail() {
 function openDetail(it) {
   ws.detail = it;
   loadDetail(it);
+  dlDetailShown(it);
   renderWsChrome();
   renderDetail();
   $('#wsDetail').scrollTop = 0;
@@ -694,18 +696,22 @@ function renderDetail() {
   const playingUid = state.current && state.current.uid;
   const docked = dockedInDetail();
   const watched = (() => { const p = progressOf(it.uid); return !!(p && p.w); })();
+  const offline = isOffline();   // only downloaded episodes / movies can be played
 
   let primary = '', primarySub = '', primaryAct = '', seriesBlock = '';
   if (it.kind === 'movie') {
-    const pr = progressOf(it.uid);
-    const resume = pr && !pr.w && pr.t > 10;
-    primary = resume ? 'Resume' : 'Play';
-    primarySub = resume ? fmtDur(pr.t) : runtime;
-    primaryAct = 'play';
+    if (!offline || dlDone(it.uid)) {
+      const pr = progressOf(it.uid);
+      const resume = pr && !pr.w && pr.t > 10;
+      primary = resume ? 'Resume' : 'Play';
+      primarySub = resume ? fmtDur(pr.t) : runtime;
+      primaryAct = 'play';
+    }
   } else if (d.seasons) {
     const eps = allEpisodes(d.seasons);
     const isDone = (e) => { const p = progressOf(e.uid); return p && p.w; };
-    const next = eps.find((e) => !isDone(e)) || eps[0];
+    const playable = offline ? eps.filter((e) => dlDone(e.uid)) : eps;
+    const next = playable.find((e) => !isDone(e)) || playable[0];
     const nums = Object.keys(d.seasons).map(Number).sort((a, b) => a - b);
     const cur = state.season[it.uid] ?? (next ? next.season : nums[0]);
     if (next) {
@@ -714,12 +720,13 @@ function renderDetail() {
       primarySub = `S${String(next.season).padStart(2, '0')}E${String(next.num).padStart(2, '0')}`;
       primaryAct = `ep" data-uid="${esc(next.uid)}`;
     }
-    seriesBlock = `<h3>Episodes<small>${eps.length}</small></h3><div class="seasons">${nums.map((n) => `<button class="chip-btn${n === cur ? ' on' : ''}" data-act="season" data-s="${n}">Season ${n}</button>`).join('')}<div class="grow"></div>${dlSeasonHtml(d.seasons[cur], cur)}</div>
+    seriesBlock = `<h3>Episodes<small>${eps.length}</small></h3><div class="seasons">${nums.map((n) => `<button class="chip-btn${n === cur ? ' on' : ''}" data-act="season" data-s="${n}">Season ${n}</button>`).join('')}<div class="grow"></div>${offline ? '' : dlSeasonHtml(d.seasons[cur], cur)}</div>
       <div class="ep-list">${(d.seasons[cur] || []).map((e) => {
         const p = progressOf(e.uid);
         const pct = p && p.d && !p.w ? Math.round((p.t / p.d) * 100) : 0;
-        const dlb = dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '';
-        return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${dlb ? ' has-dl' : ''}" data-act="ep" data-uid="${esc(e.uid)}">
+        const off = offline && !dlDone(e.uid);
+        const dlb = !off && dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '';
+        return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${dlb ? ' has-dl' : ''}${off ? ' off' : ''}" data-act="ep" data-uid="${esc(e.uid)}"${off ? ' title="Not downloaded"' : ''}>
           <span class="ep-n">${e.num || ''}</span>
           <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
           <span class="ep-d">${p && p.w ? '✓' : esc(e.duration || '')}</span>${dlb}</div>`;
@@ -727,10 +734,10 @@ function renderDetail() {
   } else if (d.loading) seriesBlock = '<p class="muted">Loading episodes…</p>';
   else if (d.error) seriesBlock = `<p class="err-text">Couldn’t load episodes: ${esc(d.error)}</p>`;
 
-  const art = poster && /^https?:\/\//i.test(poster) ? poster : '';
-  const back = bd && /^https?:\/\//i.test(bd) ? bd : '';
+  const art = (offline && dlPosterUrl(it.uid)) || (poster && /^https?:\/\//i.test(poster) ? poster : '');   // offline: the poster saved with the download
+  const back = !offline && bd && /^https?:\/\//i.test(bd) ? bd : '';
   const chips = [year, runtime, ...genres.slice(0, 3), info.country, rating && '★ ' + rating].filter(Boolean);
-  const trailer = info.youtube_trailer ? (/^https?:/.test(info.youtube_trailer) ? info.youtube_trailer : 'https://www.youtube.com/watch?v=' + info.youtube_trailer) : '';
+  const trailer = offline ? '' : info.youtube_trailer ? (/^https?:/.test(info.youtube_trailer) ? info.youtube_trailer : 'https://www.youtube.com/watch?v=' + info.youtube_trailer) : '';
   const crew = [...directors.slice(0, 4).map((n) => [n, 'Director']), ...castNames.slice(0, 12).map((n) => [n, 'Actor'])];
   const pl = wsPlaylist();
 
@@ -741,7 +748,7 @@ function renderDetail() {
       <div class="dt-in"><div class="dt-top">
         <div class="dt-poster">${art ? `<img referrerpolicy="no-referrer" src="${esc(art)}" alt="">` : `<span>${esc(initials(it.name))}</span>`}</div>
         <div class="dt-info">
-          <div class="dt-eyebrow">${it.kind === 'movie' ? 'Movie' : 'Series'} · ${esc(pl ? pl.name : '')}</div>
+          <div class="dt-eyebrow">${it.kind === 'movie' ? 'Movie' : 'Series'} · ${esc(pl ? pl.name : '')}${offline ? ' · Offline' : ''}</div>
           <h2>${esc(it.name)}</h2>
           ${chips.length ? `<div class="dt-chips">${chips.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : ''}
           ${plot ? `<p class="dt-plot" id="dtPlot">${esc(plot)}</p>${plot.length > 260 ? '<button class="dt-more" data-act="more">More ⌄</button>' : ''}` : d.loading ? '<p class="muted">Loading details…</p>' : ''}
@@ -750,7 +757,7 @@ function renderDetail() {
             ${trailer ? `<button class="btn ghost" data-act="trailer" data-href="${esc(trailer)}"><svg class="ic fill"><use href="#i-youtube"/></svg>Trailer</button>` : ''}
             <button class="btn sq${isFav ? ' on' : ''}" data-act="fav" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}" aria-label="Favorite"><svg class="ic"><use href="#${isFav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>
             ${it.kind === 'movie' ? `<button class="btn sq${watched ? ' on' : ''}" data-act="watched" title="${watched ? 'Mark as not watched' : 'Mark as watched'}" aria-label="Watched"><svg class="ic"><use href="#i-check"/></svg></button>
-            ${dlCanDownload(it) ? dlBtnHtml(it, 'btn sq') : '<button class="btn sq" data-act="copy" title="Copy stream link" aria-label="Copy stream link"><svg class="ic"><use href="#i-link"/></svg></button>'}` : ''}
+            ${offline && !dlDone(it.uid) ? '' : dlCanDownload(it) ? dlBtnHtml(it, 'btn sq') : '<button class="btn sq" data-act="copy" title="Copy stream link" aria-label="Copy stream link"><svg class="ic"><use href="#i-link"/></svg></button>'}` : ''}
             ${it.kind === 'movie' ? `<button class="btn sq" data-act="more-menu" title="More" aria-label="More"><svg class="ic"><use href="#i-more"/></svg></button>` : ''}
           </div>
           ${(castNames.length || directors.length) ? `<dl class="dt-facts">${castNames.length ? `<dt>Starring</dt><dd>${esc(castNames.slice(0, 3).join(', '))}${castNames.length > 3 ? ' <span class="muted">and more</span>' : ''}</dd>` : ''}${directors.length ? `<dt>Director</dt><dd>${esc(directors.slice(0, 5).join(', '))}</dd>` : ''}</dl>` : ''}
@@ -777,6 +784,7 @@ $('#wsDetail').addEventListener('click', (e) => {
   else if (act === 'restart') { delete state.progress[it.uid]; persistProgress(); toPlayer(); playChannel(withBestUrl(it)); }
   else if (act === 'season') { state.season[it.uid] = Number(b.dataset.s); renderDetail(); }
   else if (act === 'ep') {
+    if (b.classList.contains('off')) return;   // offline and not downloaded
     const ep = allEpisodes((state.detail[it.uid] || it).seasons).find((x) => x.uid === b.dataset.uid);
     if (ep) { toPlayer(); playChannel(ep); }
   } else if (act === 'dl') {
@@ -824,7 +832,7 @@ function uiEpgUpdated() {
   }, 60);
 }
 
-function uiDetailLoaded(it) { if (ws.detail && ws.detail.uid === it.uid && ui.route === 'ws') renderDetail(); }
+function uiDetailLoaded(it) { dlDetailShown(it); if (ws.detail && ws.detail.uid === it.uid && ui.route === 'ws') renderDetail(); }
 
 let playbackFrame = 0;
 function uiPlayback() {

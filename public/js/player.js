@@ -250,6 +250,7 @@ video.addEventListener('timeupdate', () => {
   const t = curTime(), d = dur;
   state.progress[c.uid] = { t, d, w: d - t < Math.min(90, d * 0.04) ? 1 : 0, ts: now };
   persistProgress();
+  if (ui.route === 'downloads') refreshProgressBars('#v-downloads');
 });
 video.addEventListener('pause', () => { if (state.current && isVod(state.current) && !video.ended) uiPlayback(); });
 video.addEventListener('ended', () => {
