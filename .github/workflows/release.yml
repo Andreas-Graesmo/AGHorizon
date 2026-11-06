@@ -23,6 +23,10 @@ jobs:
         run: npm install
       - name: Download the video libraries so the app also works offline
         run: npm run setup
+      - name: Add the OpenSubtitles API key (repository secret OPENSUBTITLES_API_KEY)
+        run: node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '' }))"
+        env:
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Build and upload installers
         run: npx electron-builder --publish always
         env:

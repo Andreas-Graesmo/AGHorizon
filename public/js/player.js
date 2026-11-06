@@ -350,6 +350,7 @@ playerEl.addEventListener('focusin', showCtl);
 /* ─────────────────────────── play / stop / controls ─────────────────────────── */
 function playChannel(ch) {
   ch = dlLocal(ch);   // a downloaded copy plays from disk
+  subOff();   // subtitles are picked per video
   state.current = ch;
   const token = ++playToken;
   pushRecent(ch);
@@ -364,6 +365,7 @@ function stopPlayback() {
   playToken++;
   teardown();
   hideOverlay();
+  subOff();
   state.current = null;
   mirrorTitle('');
   uiPlayback(true);
@@ -473,4 +475,4 @@ async function mirrorButton(anchor) {
 }
 
 /* ─────────────────────────────── capabilities ─────────────────────────────── */
-fetch('/api/capabilities').then((r) => r.json()).then((j) => { state.ffmpeg = !!j.ffmpeg; uiCaps(); }).catch(() => uiCaps());
+fetch('/api/capabilities').then((r) => r.json()).then((j) => { state.ffmpeg = !!j.ffmpeg; state.opensubtitles = !!j.opensubtitles; uiCaps(); }).catch(() => uiCaps());
