@@ -465,7 +465,13 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .p-ctl .live-badge i { background: #fff; }
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
-.player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
+.player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
+#video::cue { font-family: system-ui, sans-serif; background: rgba(0, 0, 0, .6); line-height: 1.35; }
+/* subtitles move up while the controls are shown, so the controls don't cover them */
+#video::-webkit-media-text-track-container { transition: transform .15s; }
+.player.ctl-on #video::-webkit-media-text-track-container, .player.paused #video::-webkit-media-text-track-container { transform: translateY(-120px); }
+.player.mini.ctl-on #video::-webkit-media-text-track-container, .player.mini.paused #video::-webkit-media-text-track-container { transform: translateY(-64px); }
+.player.fs #video::cue { font-size: 2.4vh; }
 .player.mini .pc-big { width: 34px; height: 34px; }
 .player.mini .p-ctl { padding: 20px 10px 6px; }
 .tc-badge { position: absolute; bottom: 84px; right: 12px; z-index: 3; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; background: rgba(0, 0, 0, .6); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); pointer-events: none; opacity: 0; transition: opacity .15s; }
@@ -500,7 +506,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .toast.err { border-color: var(--red); }
 .toast.out { opacity: 0; transform: translateY(8px); }
 .flash { position: fixed; top: 76px; right: 24px; z-index: 200; background: rgba(0, 0, 0, .78); color: #fff; font-size: 22px; font-weight: 700; padding: 10px 20px; border-radius: 12px; font-variant-numeric: tabular-nums; }
-.menu { position: fixed; z-index: 300; min-width: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; }
+.menu { position: fixed; z-index: 300; min-width: 220px; max-width: min(560px, calc(100vw - 16px)); max-height: min(70vh, 560px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; }
 .menu-h { padding: 6px 10px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; }
 .menu-i { appearance: none; border: 0; background: none; display: block; width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
 .menu-i:hover { background: var(--panel-3); }
@@ -758,3 +764,10 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-row.paused .dl-bar i, .dl-row.queued .dl-bar i { background: var(--muted); }
 .dl-acts { display: flex; align-items: center; gap: 4px; flex: none; }
 @media (max-width: 760px) { .dl-folder { display: none; } }
+
+/* ── subtitles (Settings) ─────────────────────────── */
+.sub-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; padding: 0 0 14px; }
+.sub-field { display: grid; gap: 5px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.sub-test { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.set-row input.sub-langs { width: 160px; }
+.sub-na { margin: 0 0 14px; font-size: 13px; }

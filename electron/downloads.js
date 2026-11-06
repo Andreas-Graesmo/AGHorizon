@@ -235,7 +235,13 @@ async function remove(id, deleteFile) {
   await stopActive(it, 'removed');
   items = items.filter((x) => x !== it);
   await fsp.rm(it.file + '.part', { force: true }).catch(() => {});
-  if (deleteFile && it.state === 'done') await fsp.rm(it.file, { force: true }).catch(() => {});
+  if (deleteFile && it.state === 'done') {
+    await fsp.rm(it.file, { force: true }).catch(() => {});
+    // and its subtitles: "<name>.<lang>….srt" next to it (subtitles.js)
+    const base = path.basename(it.file, path.extname(it.file)) + '.';
+    const near = await fsp.readdir(path.dirname(it.file)).catch(() => []);
+    for (const f of near) if (f.startsWith(base) && f.toLowerCase().endsWith('.srt')) await fsp.rm(path.join(path.dirname(it.file), f), { force: true }).catch(() => {});
+  }
   if (deleteFile || it.state !== 'done') await removeEmptyDirs(path.dirname(it.file));
   save(); send(); pump();
 }

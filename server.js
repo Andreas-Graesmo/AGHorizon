@@ -7,7 +7,8 @@
  *  - /api/fetch   fetches playlists / Xtream API responses (avoids browser CORS limits)
  *  - /api/epg     downloads + parses an XMLTV guide (plain or .gz) into compact JSON
  *  - /api/stream  proxies live streams; HLS manifests are rewritten so segments also pass through
- *  - /api/local   plays finished downloads (desktop app only)
+ *  - /api/local   plays finished downloads (desktop app only), and their subtitles
+ *  - /api/subs    OpenSubtitles.com search / download (subtitles.js)
  */
 const http = require('http');
 const fs = require('fs');
@@ -301,7 +302,7 @@ function ffmpegInput(url, ua, extra = []) {
 }
 
 function handleCapabilities(req, res) {
-  sendJson(res, 200, { ffmpeg: !!ffmpeg() });
+  sendJson(res, 200, { ffmpeg: !!ffmpeg(), opensubtitles: subs.osAvailable });
 }
 
 // Reports duration and codecs so the UI can choose between "copy video" and "re-encode video".
@@ -451,6 +452,40 @@ function handleLocal(req, res, pathname) {
   });
 }
 
+/* -------------------------------------------------------------- subtitles */
+const subs = require('./subtitles');
+
+// GET /api/local/<id>/subs      -> [{ n, lang, forced, sdh }]  (the first time, built-in subtitles are saved as .srt)
+// GET /api/local/<id>/subs/<n>  -> WebVTT
+async function handleLocalSubs(req, res, pathname) {
+  const m = /^\/api\/local\/([a-f0-9]{8,32})\/subs(?:\/(\d+))?$/.exec(pathname);
+  const video = m && localFiles ? localFiles(m[1], 'video') : null;
+  if (!video) throw httpError(404, 'Not downloaded');
+  const list = await subs.localSubs(ffmpeg(), video);
+  if (m[2] === undefined) return sendJson(res, 200, list.map((s, n) => ({ n, lang: s.lang, forced: s.forced, sdh: s.sdh })));
+  const s = list[Number(m[2])];
+  if (!s) throw httpError(404, 'No such subtitle');
+  send(res, 200, subs.srtToVtt(await fs.promises.readFile(s.file)), { 'Content-Type': 'text/vtt; charset=utf-8' });
+}
+
+// OpenSubtitles, with the account from Settings (sent in the body, never in a URL):
+// POST /api/subs/login     { os }                                   -> { allowed, remaining }
+// POST /api/subs/search    { os, q }                                -> [{ fileId, lang, release, downloads, … }]
+// POST /api/subs/download  { os, fileId, lang, saveFor? }           -> { vtt, remaining, saved }
+//   saveFor: a download id – the subtitle is also saved next to that file, for offline viewing
+async function handleSubsApi(req, res, pathname) {
+  const body = JSON.parse((await readBody(req, 64 * 1024)) || '{}');
+  if (pathname === '/api/subs/login') return sendJson(res, 200, await subs.osLogin(body.os || {}));
+  if (pathname === '/api/subs/search') return sendJson(res, 200, await subs.osSearch(body.os, body.q || {}));
+  if (pathname === '/api/subs/download') {
+    const { srt, remaining } = await subs.osDownload(body.os, body.fileId);
+    const video = body.saveFor && localFiles ? localFiles(String(body.saveFor), 'video') : null;
+    if (video) await subs.saveSrt(video, String(body.lang || '').toLowerCase().replace(/[^a-z-]/g, '') || 'und', srt);
+    return sendJson(res, 200, { vtt: subs.srtToVtt(srt), remaining, saved: !!video });
+  }
+  send(res, 404, 'Not found');
+}
+
 /* ----------------------------------------------------------------- static */
 
 function serveStatic(req, res, pathname) {
@@ -498,7 +533,9 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);
+    else if (/^\/api\/local\/[a-f0-9]{8,32}\/subs/.test(url.pathname) && req.method === 'GET') await handleLocalSubs(req, res, url.pathname);
     else if (url.pathname.startsWith('/api/local/') && (req.method === 'GET' || req.method === 'HEAD')) handleLocal(req, res, url.pathname);
+    else if (url.pathname.startsWith('/api/subs/') && req.method === 'POST') await handleSubsApi(req, res, url.pathname);
     else send(res, 404, 'Not found');
   } catch (e) {
     if (res.headersSent) return res.destroy();

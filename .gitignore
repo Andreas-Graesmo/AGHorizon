@@ -4,3 +4,4 @@ public/vendor/*
 !public/vendor/.gitkeep
 .DS_Store
 package-lock.json
+secrets.json

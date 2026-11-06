@@ -26,7 +26,9 @@ function showMenu(anchor, items) {
   const m = $('#menu');
   // A modal <dialog> sits in the top layer and makes the rest of the page inert, so a menu opened
   // from inside one has to live in that dialog to be visible and clickable.
-  const host = anchor.closest('dialog[open]') || document.body;
+  // The same goes for a full-screen player: only it is shown, so the menu has to be inside it.
+  const fs = document.fullscreenElement;
+  const host = anchor.closest('dialog[open]') || (fs && fs.contains(anchor) ? fs : document.body);
   if (m.parentNode !== host) host.appendChild(m);
   m.innerHTML = items.map((it, i) => it.heading ? `<div class="menu-h">${esc(it.label)}</div>` : `<button class="menu-i" data-i="${i}">${esc(it.label)}</button>`).join('');
   m.hidden = false;
@@ -208,6 +210,7 @@ function updatePlayerChrome() {
   $('#pMirror').classList.toggle('on', open);
   if (!c) { document.title = 'AG Horizon'; return; }
   $('#pMulti').hidden = isVod(c);
+  $('#pSubs').hidden = !isVod(c);
   $('#pTitle').textContent = playerTitle(c);
   const fav = state.favs.has(c.uid) || (c.kind === 'episode' && state.favs.has(c.seriesUid));
   $('#pFav').classList.toggle('on', fav);
@@ -701,6 +704,7 @@ function renderSettings() {
       <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Second screen” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Second screen'], ['both', 'Both']])}</div>
     </section>
     ${dlSettingsCard()}
+    ${subSettingsCard()}
     <section class="set-card"><h3>Library</h3>
       <div class="set-row"><div><b>Recently viewed</b><p class="muted">${state.recent.length} items</p></div><button class="btn ghost" data-act="hist-clear">Clear</button></div>
       <div class="set-row"><div><b>Favorites</b><p class="muted">${state.favs.size} items</p></div><button class="btn ghost" data-act="favs-clear">Clear</button></div>
