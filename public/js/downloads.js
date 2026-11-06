@@ -71,9 +71,79 @@ function dlMeta(it) {
   };
 }
 
+/* ───────────────────────────── titles for offline viewing ───────────────────────────── */
+// A copy of each downloaded movie / series (its catalogue item and details: every episode, plot, cast), so its page
+// opens without internet. Kept in IndexedDB as one map uid -> { item, detail }; it holds stream links with the
+// login, like the playlists do, and never leaves the app's data folder.
+const dlInfo = { map: {}, loaded: false };
+const dlInfoReady = idb.get('dlinfo').then((m) => { dlInfo.map = m || {}; }).catch(() => {}).then(() => { dlInfo.loaded = true; });
+const dlInfoSave = () => idb.put('dlinfo', dlInfo.map).catch(() => {});
+const dlHasAny = (uid) => dl.items.some((d) => d.uid === uid || d.seriesUid === uid);
+
+// Remember a movie or series while it's at hand (its page is open, or something of it is being downloaded).
+function dlRemember(it) {
+  if (!dlApi || !it || (it.kind !== 'movie' && it.kind !== 'series')) return;
+  const d = state.detail[it.uid];
+  const old = dlInfo.map[it.uid];
+  const detail = d && !d.loading && !d.error ? d : old && old.detail;
+  dlInfo.map[it.uid] = { item: { ...it }, detail: detail || null };
+  dlInfoSave();
+}
+// called when a page opens or its details arrive: refreshes the copy of titles that have downloads
+function dlDetailShown(it) { if (dlInfo.loaded && it && dlHasAny(it.uid)) dlRemember(it); }
+
+// drop copies whose last download is gone
+function dlPruneInfo() {
+  if (!dlInfo.loaded || dl.key === '') return;
+  let changed = false;
+  for (const uid of Object.keys(dlInfo.map)) if (!dlHasAny(uid)) { delete dlInfo.map[uid]; changed = true; }
+  if (changed) dlInfoSave();
+}
+
+const isOffline = () => !navigator.onLine || !!ws.offline;
+const dlDone = (uid) => { const d = dlOf(uid); return !!(d && d.state === 'done'); };
+// the poster saved next to the files (absolute, so cards and the page accept it like a web image)
+function dlPosterUrl(uid) {
+  const d = dl.items.find((x) => x.hasPoster && (x.uid === uid || x.seriesUid === uid));
+  return d ? `${location.origin}/api/local/${d.id}/poster` : '';
+}
+
+// What the page shows when no copy was saved (downloaded before 1.9): only the downloaded episodes.
+function dlFallback(uid) {
+  const own = dl.items.filter((d) => d.state === 'done' && (d.uid === uid || d.seriesUid === uid));
+  const d = own[0];
+  if (!d) return null;
+  if (d.kind === 'movie') return { item: { uid: d.uid, pid: d.pid, id: '', kind: 'movie', name: d.title, year: d.year, plot: d.plot, logo: d.poster, url: dlLocalUrl(d) }, detail: { info: { plot: d.plot } } };
+  const seasons = {};
+  for (const e of own) (seasons[e.season] ||= []).push({ ...dlItem(e), title: e.epTitle || dlSE(e) });
+  for (const k in seasons) seasons[k].sort((a, b) => a.num - b.num);
+  return { item: { uid, pid: d.pid, id: '', kind: 'series', name: d.seriesName, year: d.year, logo: d.poster }, detail: { info: {}, seasons } };
+}
+
+// A card on the Downloads page opens its movie / series page: the live one when the playlist loads, else the saved copy.
+async function dlOpen(card) {
+  await dlInfoReady;
+  const snap = dlInfo.map[card.uid] || dlFallback(card.uid);
+  if (!snap) return;
+  const it = snap.item;
+  if (!playlistById(it.pid)) { toast('That playlist was removed.', 'err'); return; }
+  await openWorkspace(it.pid, modeOf(it));
+  const real = !isOffline() && ws.items.find((x) => x.uid === it.uid);
+  if (real) { openDetail(real); return; }
+  ws.offline = true;   // no catalogue: show the copy; episodes that aren't downloaded are greyed out
+  const d = state.detail[it.uid];
+  if (!d || d.loading || d.error || !snap.detail) state.detail[it.uid] = snap.detail || { info: {} };
+  openDetail(it);
+}
+
 async function dlStart(list) {
   const metas = list.filter(dlCanDownload).map(dlMeta);
   if (!metas.length) return;
+  // keep a copy of the movie / series for its offline page
+  for (const it of list) {
+    if (it.kind === 'movie') dlRemember(it);
+    else if (ws.detail && ws.detail.uid === it.seriesUid) dlRemember(ws.detail);
+  }
   const n = await dlApi.add(metas);
   if (!n) toast('Already in Downloads');
   else if (metas.length === 1) toast(`Downloading ${metas[0].kind === 'episode' ? `${metas[0].seriesName} · ${dlSE(metas[0])}` : metas[0].title}`);
@@ -165,26 +235,21 @@ function dlThumb(d) {
   return `<div class="dl-thumb">${src ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(src)}" alt="">` : ''}<span>${esc(initials(d.kind === 'episode' ? d.seriesName : d.title))}</span></div>`;
 }
 
-function dlRowHtml(d, { compact = false } = {}) {
+// a download that is still on its way, or failed (finished ones are cards)
+function dlRowHtml(d) {
   const busy = d.state === 'downloading' || d.state === 'queued' || d.state === 'paused';
-  const title = d.kind === 'episode' ? (compact ? `${dlSE(d)}${d.epTitle && !/S\d+\s*E\d+/i.test(d.epTitle) ? ' · ' + d.epTitle : ''}` : d.seriesName) : d.title;
-  const sub = compact ? '' : d.kind === 'episode' ? `${dlSE(d)}${d.epTitle && !/S\d+\s*E\d+/i.test(d.epTitle) ? ' · ' + d.epTitle : ''}` : d.year || 'Movie';
+  const title = d.kind === 'episode' ? d.seriesName : d.title;
+  const sub = d.kind === 'episode' ? `${dlSE(d)}${d.epTitle && !/S\d+\s*E\d+/i.test(d.epTitle) ? ' · ' + d.epTitle : ''}` : d.year || 'Movie';
   let main = '';
-  if (d.state === 'done') main = '<button class="btn small" data-act="dl-play"><svg class="ic fill"><use href="#i-play"/></svg>Play</button>';
-  else if (d.state === 'failed') main = '<button class="btn ghost small" data-act="dl-resume">Try again</button>';
+  if (d.state === 'failed') main = '<button class="btn ghost small" data-act="dl-resume">Try again</button>';
   else if (d.state === 'paused') main = '<button class="icon-btn" data-act="dl-resume" title="Resume" aria-label="Resume"><svg class="ic fill"><use href="#i-play"/></svg></button>';
   else main = '<button class="icon-btn" data-act="dl-pause" title="Pause" aria-label="Pause"><svg class="ic"><use href="#i-pause"/></svg></button>';
-  // how far you've watched the saved copy (same progress as the stream, they share the uid)
-  const p = d.state === 'done' ? progressOf(d.uid) : null;
-  const watched = !!(p && p.w);
-  const seen = p && p.d && !p.w ? Math.round((p.t / p.d) * 100) : 0;
-  return `<div class="dl-row${compact ? ' compact' : ''} ${d.state}${watched ? ' watched' : ''}" data-id="${esc(d.id)}">
-    ${compact ? '' : dlThumb(d)}
+  return `<div class="dl-row ${d.state}" data-id="${esc(d.id)}">
+    ${dlThumb(d)}
     <div class="dl-main"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}
       <div class="dl-status">${dlStatusHtml(d)}</div>
-      ${busy ? `<div class="bar dl-bar"><i style="width:${dlPct(d)}%"></i></div>` : ''}
-      ${seen ? `<div class="bar dl-bar dl-seen" title="${seen}% watched"><i style="width:${seen}%"></i></div>` : ''}</div>
-    <div class="dl-acts">${watched ? '<span class="dl-watched" title="Watched" aria-label="Watched"><svg class="ic"><use href="#i-check"/></svg></span>' : ''}${main}<button class="icon-btn" data-act="dl-more" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>
+      ${busy ? `<div class="bar dl-bar"><i style="width:${dlPct(d)}%"></i></div>` : ''}</div>
+    <div class="dl-acts">${main}<button class="icon-btn" data-act="dl-more" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>
   </div>`;
 }
 
@@ -213,11 +278,24 @@ function renderDownloads() {
     ${!all.length ? emptyState('i-download', 'No downloads yet', 'Use the download button on a movie or an episode – or “Download season” on a series – to watch it later without internet. Downloads are normal video files you can also open in VLC.') : ''}
     ${failed.length ? sec('Needs attention', failed.length, `<div class="dl-list">${failed.map((d) => dlRowHtml(d)).join('')}</div>`) : ''}
     ${moving.length ? sec('Downloading', moving.length, `${dl.held ? '<p class="muted dl-note">Paused while you watch, so playback gets the connection. Change this in Settings › Downloads.</p>' : ''}<div class="dl-list">${moving.map((d) => dlRowHtml(d)).join('')}</div>`) : ''}
-    ${movies.length ? sec('Movies', movies.length, `<div class="dl-list">${movies.map((d) => dlRowHtml(d)).join('')}</div>`) : ''}
-    ${showList.length ? sec('Series', showList.length, showList.map((eps) => `<div class="dl-show">
-        <div class="dl-show-head">${dlThumb(eps[0])}<div><b>${esc(eps[0].seriesName)}</b><small>${eps.length} episode${eps.length === 1 ? '' : 's'} · ${fmtBytes(eps.reduce((a, d) => a + d.size, 0))}</small></div></div>
-        <div class="dl-list">${eps.map((d) => dlRowHtml(d, { compact: true })).join('')}</div></div>`).join('')) : ''}
+    ${movies.length ? sec('Movies', movies.length, `<div class="grid">${movies.map((d) => cardHtml(dlCard(d.uid, d), { fav: false })).join('')}</div>`) : ''}
+    ${showList.length ? sec('Series', showList.length, `<div class="grid">${showList.map((eps) => cardHtml(dlCard(eps[0].seriesUid, eps[0]), { fav: false, sub: dlEpisodesLabel(eps) })).join('')}</div>`) : ''}
   </div>`;
+}
+
+// A poster card for a downloaded movie / series. Opening it goes through dlOpen (see openItem).
+function dlCard(uid, d) {
+  const snap = dlInfo.map[uid];
+  const base = snap ? snap.item : d.kind === 'movie'
+    ? { uid, pid: d.pid, kind: 'movie', name: d.title, year: d.year, logo: d.poster }
+    : { uid, pid: d.pid, kind: 'series', name: d.seriesName, year: d.year, logo: d.poster };
+  return { ...base, logo: dlPosterUrl(uid) || base.logo, dlCard: true };
+}
+// "3 of 8 episodes" – the total comes from the saved copy of the series, when there is one
+function dlEpisodesLabel(eps) {
+  const snap = dlInfo.map[eps[0].seriesUid];
+  const total = snap && snap.detail && snap.detail.seasons ? allEpisodes(snap.detail.seasons).length : 0;
+  return total > eps.length ? `${eps.length} of ${total} episodes` : `${eps.length} episode${eps.length === 1 ? '' : 's'}`;
 }
 // progress ticks only change numbers: update those in place instead of rebuilding the page
 function dlPaintRows() {
@@ -231,6 +309,7 @@ function dlPaintRows() {
 }
 function openDownloads() {
   renderDownloads();
+  dlInfoReady.then(() => { if (ui.route === 'downloads') renderDownloads(); });   // cards use the saved copies once loaded
   if (dlApi) dlApi.list().then(dlUpdate).catch(() => {});   // refreshes free space and drops files deleted by hand
 }
 
@@ -254,7 +333,6 @@ $('#views').addEventListener('click', (e) => {
   switch (a.dataset.act) {
     case 'dl-open': dlApi.openFolder(); break;
     case 'dl-folder': dlApi.chooseFolder().then((f) => { if (f) toast('New downloads will be saved in ' + f); }); break;
-    case 'dl-play': if (d) dlPlay(d); break;
     case 'dl-pause': if (d) dlApi.pause(d.id); break;
     case 'dl-resume': if (d) dlApi.resume(d.id); break;
     case 'dl-more': if (d) dlMenu(d, a); break;
@@ -279,9 +357,15 @@ function dlUpdate(s) {
   $$('[data-dl]').forEach(dlPaintBtn);
   if (ui.route === 'downloads') { if (changed) renderDownloads(); else dlPaintRows(); }
   if (!changed) return;
-  if (ui.route === 'ws' && ws.detail && ws.detail.kind === 'series') renderDetail();   // the "Download season" button
+  dlPruneInfo();
+  if (ui.route === 'ws' && ws.detail) { dlDetailShown(ws.detail); renderDetail(); }   // checkmarks, "Download season", greyed-out episodes
   if (ui.route === 'settings') renderSettings();
 }
+
+// going offline / online changes which episodes can be played
+const dlConnChanged = () => { if (ui.route === 'ws' && ws.detail) renderDetail(); };
+window.addEventListener('online', dlConnChanged);
+window.addEventListener('offline', dlConnChanged);
 
 function initDownloads() {
   if (!dlApi) return;

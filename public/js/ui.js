@@ -228,6 +228,7 @@ $('#pClose').addEventListener('click', stopPlayback);
 /* ─────────────────────────────── opening items ─────────────────────────────── */
 async function openItem(it) {
   if (!it) return;
+  if (it.dlCard) return dlOpen(it);   // Downloads page: also works offline
   const mode = modeOf(it);
   const inPlace = ui.route === 'ws' && ws.pid === it.pid && ws.mode === mode && !ws.loading;
   if (!inPlace) {
