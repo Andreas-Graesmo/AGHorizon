@@ -131,6 +131,15 @@ app.on('second-instance', () => {
 updater.init();
 setLocalFiles(downloads.localFile);
 
+// "Go to this video" in the picture-in-picture window: bring the app forward, also from minimised or behind other programs.
+ipcMain.handle('tuner:focus', () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.moveTop();
+});
+
 ipcMain.handle('tuner:displays', () => {
   const primary = screen.getPrimaryDisplay().id;
   return screen.getAllDisplays().map((d, i) => ({
