@@ -66,7 +66,20 @@ function createWindow() {
   win.loadURL(origin + '/');
 
   // Keep the window on our own page; send real links to the system browser.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    // The player's picture-in-picture window: a small frameless window that stays on top (the page moves the
+    // player into it, see togglePip in player.js).
+    if (frameName === 'ag-horizon-pip') {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          title: 'AG Horizon – picture-in-picture',
+          width: 480, height: 270, minWidth: 260, minHeight: 146,
+          frame: false, alwaysOnTop: true, backgroundColor: '#000000', show: true, fullscreenable: false,
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, autoplayPolicy: 'no-user-gesture-required' },
+        },
+      };
+    }
     // The second-screen window is the one pop-up we allow (it needs a link back to this window to receive the video).
     if (url.startsWith(origin + '/mirror.html')) {
       return {
@@ -86,6 +99,13 @@ function createWindow() {
   });
   // Put the second-screen window full screen on the monitor that was picked (?d=<display id>).
   win.webContents.on('did-create-window', (child, details) => {
+    if (details.frameName === 'ag-horizon-pip') {   // bottom right of the screen the app is on, kept 16:9 when resized
+      const area = screen.getDisplayMatching(win.getBounds()).workArea;
+      child.setBounds({ x: area.x + area.width - 480 - 24, y: area.y + area.height - 270 - 24, width: 480, height: 270 });
+      child.setAlwaysOnTop(true, 'floating');
+      child.setAspectRatio(16 / 9);
+      return;
+    }
     let id = null;
     try { id = new URL(details.url).searchParams.get('d'); } catch { /* no display chosen */ }
     const target = screen.getAllDisplays().find((d) => String(d.id) === id);

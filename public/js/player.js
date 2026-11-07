@@ -16,7 +16,7 @@ const compatMode = () => LS.get('tuner.compat', 'auto'); // 'auto' | 'always' | 
 function tcUrl(ch, p, start) {
   tcState.sid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const subs = tcState.subs && tcState.subs.length ? `&subs=${tcState.subs.join(',')}&sid=${tcState.sid}` : '';
-  return `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${subs}`;
+  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${subs}`;
 }
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
@@ -130,7 +130,8 @@ async function startPlayback(ch, kinds, token, lastError) {
   if (token !== playToken) return;
   const [kind, ...rest] = kinds;
   const p = playlistById(ch.pid);
-  const src = ch.local ? ch.url : proxied(ch.url, p);
+  // full address: the player may be in the picture-in-picture window, whose about:blank page can't resolve "/api/…"
+  const src = new URL(ch.local ? ch.url : proxied(ch.url, p), location.href).href;
   const fail = (msg) => {
     if (token !== playToken) return;
     if (rest.length) startPlayback(ch, rest, token, msg);
@@ -364,6 +365,7 @@ function playChannel(ch) {
   mirrorTitle(ch.name);
   uiPlayback(true);
   dlSyncWatching();
+  syncMediaSession();
 }
 
 function stopPlayback() {
@@ -372,9 +374,11 @@ function stopPlayback() {
   hideOverlay();
   subOff();
   state.current = null;
+  closePip();   // after state.current is gone, so the closing window doesn't start the video again
   mirrorTitle('');
   uiPlayback(true);
   dlSyncWatching();
+  syncMediaSession();
 }
 
 function toggleFullscreen() {
@@ -397,17 +401,122 @@ function toggleMute() { video.muted = !video.muted; osd(video.muted ? 'Muted' : 
 function changeVolume(d) { video.muted = false; video.volume = Math.max(0, Math.min(1, Math.round((video.volume + d) * 100) / 100)); osd('Volume ' + Math.round(video.volume * 100) + '%'); }
 function seekBy(sec) {
   if (!state.current || !isVod(state.current)) return;
-  if (tcState.on && tcState.vod) seekTc(curTime() + sec);
-  else if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration - 1, video.currentTime + sec));
+  if (tcState.on && tcState.vod) {
+    // skipping back usually lands in what the conversion has already delivered: jump there instead of restarting it.
+    // Chromium keeps only a few seconds ahead, so forward needs a restart (landing at the buffer's edge stalls).
+    const t = video.currentTime + sec;
+    const b = video.buffered;
+    let inside = false;
+    for (let i = 0; i < b.length; i++) if (t >= b.start(i) && t <= b.end(i) - 3) inside = true;
+    if (inside) video.currentTime = t; else seekTc(curTime() + sec);
+  } else if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration - 1, video.currentTime + sec));
   else return;
   osd((sec > 0 ? '+' : '−') + Math.abs(sec) + ' s');
 }
+$('#pcBack').addEventListener('click', () => seekBy(-15));
+$('#pcFwd').addEventListener('click', () => seekBy(15));
+
+// Media Session: what the picture-in-picture window and media keys can do. Chromium's picture-in-picture window
+// has no seek buttons, only previous / next track, so those skip 15 s there. Live TV just plays and pauses.
+function syncMediaSession() {
+  const ms = navigator.mediaSession;
+  if (!ms) return;
+  const vod = !!(state.current && isVod(state.current));
+  const set = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* not supported here */ } };
+  set('play', () => video.play().catch(() => {}));
+  set('pause', () => video.pause());
+  for (const [action, sec] of [['seekbackward', -15], ['seekforward', 15], ['previoustrack', -15], ['nexttrack', 15]]) set(action, vod ? () => seekBy(sec) : null);
+  ms.metadata = state.current && window.MediaMetadata ? new MediaMetadata({ title: state.current.name || '', artist: state.current.seriesName || '' }) : null;
+}
+/* ─────────────────────────── picture-in-picture ─────────────────────────── */
+/*
+ * Our own picture-in-picture window: the whole player (picture, controls, subtitles) moves into an always-on-top
+ * window (document picture-in-picture) and back when it closes. Small, it looks like the mini player. Where that
+ * API is missing (other browsers) the browser's own picture-in-picture is used.
+ */
+let pipWin = null;
+const pipHandlers = [];   // document-level handlers the window needs too: [type, fn, capture]
+const onPipDoc = (type, fn, capture = false) => { pipHandlers.push([type, fn, capture]); if (pipDoc) pipDoc.addEventListener(type, fn, capture); };
+
+// The desktop app opens a frameless always-on-top pop-up for it (electron/main.js); Electron doesn't create
+// document picture-in-picture windows. Browsers use document picture-in-picture where they have it.
+const ownPip = () => !!window.tunerDesktop || !!window.documentPictureInPicture;
 async function togglePip() {
+  if (pipWin) { pipWin.close(); return; }
+  if (ownPip()) { openPipWindow(); return; }
   try {
     if (document.pictureInPictureElement) await document.exitPictureInPicture();
     else if (document.pictureInPictureEnabled) await video.requestPictureInPicture();
   } catch { toast('Picture-in-picture is not available for this video.', 'err'); }
 }
+
+async function openPipWindow() {
+  if (!state.current) return;
+  let w = null;
+  try {
+    w = window.tunerDesktop ? window.open('about:blank', 'ag-horizon-pip') : await documentPictureInPicture.requestWindow({ width: 480, height: 270 });
+  } catch { /* below */ }
+  if (!w) { toast('Picture-in-picture is not available.', 'err'); return; }
+  const d = w.document;
+  // the app's look: stylesheets, icons (<use href="#i-…"> needs the sprite in the same document), theme and accent
+  for (const l of document.querySelectorAll('link[rel="stylesheet"]')) { const c = d.createElement('link'); c.rel = 'stylesheet'; c.href = l.href; d.head.appendChild(c); }
+  d.body.appendChild(document.querySelector('body > svg').cloneNode(true));
+  d.body.className = 'pip-body';
+  const syncRoot = () => { d.documentElement.style.cssText = document.documentElement.style.cssText; Object.assign(d.documentElement.dataset, document.documentElement.dataset); };
+  syncRoot();
+  const rootObserver = new MutationObserver(syncRoot);   // theme, accent and subtitle look changed in the app
+  rootObserver.observe(document.documentElement, { attributes: true });
+  d.title = state.current.name || 'AG Horizon';
+
+  const el = playerEl;
+  const home = { parent: el.parentNode, next: el.nextSibling };
+  pipWin = w;
+  pipDoc = d;
+  el.style.cssText = '';
+  el.classList.add('in-pip');
+  movePlayer(() => d.body.appendChild(el));
+  for (const [type, fn, capture] of pipHandlers) d.addEventListener(type, fn, capture);
+  w.addEventListener('resize', layoutPlayer);
+  layoutPlayer();
+
+  w.addEventListener('pagehide', () => {   // closed: by its own ×, "go to this video", stop, or the app
+    rootObserver.disconnect();
+    pipWin = null;
+    pipDoc = null;
+    el.classList.remove('in-pip');
+    movePlayer(() => home.parent.insertBefore(el, home.next), { later: true });
+    $('#menu').hidden = true;
+    uiPlayback(true);
+  });
+}
+
+// Moving the <video> into another window makes Chromium reload its source, which a running conversion or a live
+// stream doesn't survive. So let go of the source, move, and carry on where it was.
+// later: when the window is closing, it only starts playing again once that window is gone
+function movePlayer(move, { later = false } = {}) {
+  const ch = state.current;
+  if (!ch) { move(); return; }
+  const t = curTime();
+  const token = playToken;
+  let resume;
+  if (tcState.on && tcState.vod) {
+    video.removeAttribute('src'); video.load();
+    resume = () => seekTc(t);   // the conversion starts again where it was, like a seek
+  } else if (isVod(ch) && !hlsPlayer && !tsPlayer) {
+    const src = video.currentSrc;
+    video.removeAttribute('src'); video.load();
+    resume = () => {
+      video.src = src;
+      video.addEventListener('loadedmetadata', () => { video.currentTime = t; }, { once: true });
+      video.play().catch(() => {});
+    };
+  } else {
+    resume = () => startPlayback(ch, tcState.on ? ['tc'] : playPlan(ch), token);   // live TV: connect again
+  }
+  move();
+  if (later) setTimeout(() => { if (token === playToken) resume(); }, 50); else resume();
+}
+const closePip = () => { if (pipWin) pipWin.close(); };
 
 /* ───────────────────────── second screen (mirror window) ───────────────────────── */
 /*

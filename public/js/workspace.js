@@ -652,7 +652,7 @@ function refreshProgressBars(scope = '#vodGrid') {
 /* ───────────────────────────── movie / series detail ───────────────────────────── */
 function dockedInDetail() {
   const c = state.current;
-  return !!(ws.detail && c && (c.uid === ws.detail.uid || c.seriesUid === ws.detail.uid));
+  return !pipWin && !!(ws.detail && c && (c.uid === ws.detail.uid || c.seriesUid === ws.detail.uid));   // no empty slot while it's in picture-in-picture
 }
 
 function openDetail(it) {

@@ -397,9 +397,9 @@ subPanel.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (b) b.blur();   // so Space / arrows go back to the player instead of pressing the button again
 });
-document.addEventListener('mousedown', (e) => {
-  if (subPanelOpen() && !e.target.closest('.sub-panel, #menu, #pSubs')) subHidePanel();
-}, true);
+const subPanelOutside = (e) => { if (subPanelOpen() && !e.target.closest('.sub-panel, #menu, #pSubs')) subHidePanel(); };
+document.addEventListener('mousedown', subPanelOutside, true);
+onPipDoc('mousedown', subPanelOutside, true);   // and in the picture-in-picture window
 
 // A sample line while the panel is open and no subtitles are on, on a track of its own.
 let subSampleTrack = null;

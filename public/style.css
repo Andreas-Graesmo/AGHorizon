@@ -456,7 +456,13 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .p-ctl input[type=range] { appearance: none; -webkit-appearance: none; height: 4px; padding: 0; border: 0; border-radius: 2px; background: rgba(255, 255, 255, .3); cursor: pointer; width: auto; }
 .p-ctl input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 0; }
 #pcSeek { flex: 1; background: linear-gradient(to right, var(--accent) var(--fill, 0%), rgba(255, 255, 255, .3) var(--fill, 0%)); }
-.pc-vol { width: 64px; flex: none; background: linear-gradient(to right, #fff var(--fill, 100%), rgba(255, 255, 255, .3) var(--fill, 100%)); }
+/* by id, like #pcSeek: ".p-ctl input[type=range]" would otherwise win and hide the filled part */
+#pcVol { flex: none; background: linear-gradient(to right, var(--accent) var(--fill, 100%), rgba(255, 255, 255, .3) var(--fill, 100%)); }
+.pc-skip { margin: 0 6px; }
+.pc-skip .ic { width: 26px; height: 26px; stroke-width: 1.7; }
+.player.is-live .pc-skip { display: none; }   /* live TV can't seek */
+.player.mini .pc-skip { margin: 0 2px; }
+.player.mini .pc-skip .ic { width: 20px; height: 20px; }
 .pc-big { appearance: none; border: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); }
 .pc-big:hover { filter: brightness(1.1); }
 .pc-big .ic { width: 20px; height: 20px; }
@@ -804,3 +810,12 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .sp-stack { flex-direction: column; align-items: stretch; gap: 8px; }
 .sp-stack .seg { flex-wrap: nowrap; justify-content: stretch; }
 .sp-stack .seg button { flex: 1 1 auto; justify-content: center; white-space: nowrap; padding: 5px 6px; }
+
+/* ── the player in its picture-in-picture window (player.js) ── */
+.pip-body { margin: 0; background: #000; overflow: hidden; }
+.player.in-pip { position: fixed; inset: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; }
+.player.in-pip #pFull, .player.in-pip #pMirror, .player.in-pip #pMulti { display: none; }   /* no full screen / second screen from there */
+.player.in-pip #pPip { color: var(--accent); }   /* pressing it again brings the player back */
+/* the desktop app's picture-in-picture window has no frame: drag it by the title bar (shown on hover) */
+.player.in-pip .p-top { -webkit-app-region: drag; }
+.player.in-pip .p-top button { -webkit-app-region: no-drag; }

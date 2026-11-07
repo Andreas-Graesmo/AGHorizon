@@ -26,16 +26,19 @@ function showMenu(anchor, items) {
   const m = $('#menu');
   // A modal <dialog> sits in the top layer and makes the rest of the page inert, so a menu opened
   // from inside one has to live in that dialog to be visible and clickable.
-  // The same goes for a full-screen player: only it is shown, so the menu has to be inside it.
-  const fs = document.fullscreenElement;
-  const host = anchor.closest('dialog[open]') || (fs && fs.contains(anchor) ? fs : document.body);
+  // The same goes for a full-screen player: only it is shown, so the menu has to be inside it. And for the
+  // player's picture-in-picture window: a menu opened there lives in that window.
+  const doc = anchor.ownerDocument;
+  const view = doc.defaultView;
+  const fs = doc.fullscreenElement;
+  const host = anchor.closest('dialog[open]') || (fs && fs.contains(anchor) ? fs : doc.body);
   if (m.parentNode !== host) host.appendChild(m);
   m.innerHTML = items.map((it, i) => it.heading ? `<div class="menu-h">${esc(it.label)}</div>` : `<button class="menu-i" data-i="${i}">${esc(it.label)}</button>`).join('');
   m.hidden = false;
   const r = anchor.getBoundingClientRect();
   const w = m.offsetWidth, h = m.offsetHeight;
-  m.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
-  m.style.top = (r.bottom + 6 + h < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
+  m.style.left = Math.max(8, Math.min(view.innerWidth - w - 8, r.left)) + 'px';
+  m.style.top = (r.bottom + 6 + h < view.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
   m._items = items;
 }
 $('#menu').addEventListener('click', (e) => {
@@ -45,7 +48,9 @@ $('#menu').addEventListener('click', (e) => {
   $('#menu').hidden = true;
   if (it && it.run) it.run();
 });
-document.addEventListener('mousedown', (e) => { if (!$('#menu').hidden && !e.target.closest('#menu')) $('#menu').hidden = true; }, true);
+const closeMenuOutside = (e) => { if (!$('#menu').hidden && !e.target.closest('#menu')) $('#menu').hidden = true; };
+document.addEventListener('mousedown', closeMenuOutside, true);
+onPipDoc('mousedown', closeMenuOutside, true);
 
 /* ───────────────────────────────── theme ───────────────────────────────── */
 const ACCENTS = {
@@ -175,6 +180,7 @@ function layoutPlayer() {
   if (!state.current) { el.hidden = true; return; }
   el.hidden = false;
   if (document.fullscreenElement === el) { el.classList.remove('mini'); return; }   // full controls, even when it went fullscreen from the mini player
+  if (pipWin) { el.classList.toggle('mini', pipWin.innerWidth < 640); return; }   // in its picture-in-picture window: small looks like the mini player
   const slot = currentSlot();
   let docked = false;
   if (slot) {
@@ -225,7 +231,7 @@ $('#pMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 $('#pPip').addEventListener('click', togglePip);
 $('#pFull').addEventListener('click', toggleFullscreen);
 $('#pMulti').addEventListener('click', () => { const c = state.current; if (!c || isVod(c)) return; stopPlayback(); mvAdd(c, { open: true }); });
-$('#pExpand').addEventListener('click', () => { if (state.current) openItem(state.current); });
+$('#pExpand').addEventListener('click', () => { if (!state.current) return; closePip(); window.focus(); openItem(state.current); });
 $('#pClose').addEventListener('click', stopPlayback);
 
 /* ─────────────────────────────── opening items ─────────────────────────────── */
@@ -842,7 +848,7 @@ function flash(text) {
 }
 function focusContextSearch() { const i = $('#topInput'); i.focus(); i.select(); }
 
-document.addEventListener('keydown', (e) => {
+function onAppKeydown(e) {
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key;
   const tag = e.target.tagName;
@@ -886,4 +892,6 @@ document.addEventListener('keydown', (e) => {
   else if (!onVideo && key === 'ArrowRight') { e.preventDefault(); seekBy(5); }
   else if (!onVideo && key === 'ArrowUp') { e.preventDefault(); changeVolume(0.05); }
   else if (!onVideo && key === 'ArrowDown') { e.preventDefault(); changeVolume(-0.05); }
-});
+}
+document.addEventListener('keydown', onAppKeydown);
+onPipDoc('keydown', onAppKeydown);   // the same shortcuts in the picture-in-picture window

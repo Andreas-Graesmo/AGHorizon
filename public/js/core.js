@@ -2,8 +2,11 @@
 /* AG Horizon – core: helpers, storage, state, Xtream / M3U loading, EPG lookups. */
 
 /* ───────────────────────────── tiny helpers ───────────────────────────── */
-const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+// While the player is in its picture-in-picture window (player.js) it lives in that window's document, so lookups
+// without a root also search there.
+let pipDoc = null;
+const $ = (s, r) => (r || document).querySelector(s) || (!r && pipDoc ? pipDoc.querySelector(s) : null);
+const $$ = (s, r) => (r ? [...r.querySelectorAll(s)] : [...document.querySelectorAll(s), ...(pipDoc ? pipDoc.querySelectorAll(s) : [])]);
 const enc = encodeURIComponent;
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
