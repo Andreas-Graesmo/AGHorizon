@@ -466,12 +466,16 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
 .player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
-/* no font-size or line-height on ::cue: Chromium sizes the lines from the video, so a different text size leaves gaps between lines */
-#video::cue { font-family: system-ui, sans-serif; background: rgba(0, 0, 0, .6); }
-/* subtitles move up while the controls are shown, so the controls don't cover them */
-#video::-webkit-media-text-track-container { transition: transform .15s; }
-.player.ctl-on #video::-webkit-media-text-track-container, .player.paused #video::-webkit-media-text-track-container { transform: translateY(-120px); }
-.player.mini.ctl-on #video::-webkit-media-text-track-container, .player.mini.paused #video::-webkit-media-text-track-container { transform: translateY(-64px); }.player.mini .pc-big { width: 34px; height: 34px; }
+/* Subtitles (Settings › Subtitles › Appearance, set by subtitles.js). The size goes on the container, not on ::cue:
+   Chromium sizes the lines from the container, so a different text size on ::cue leaves gaps between lines. */
+:root { --sub-font: system-ui, sans-serif; --sub-color: #fff; --sub-bg: rgba(0, 0, 0, .6); --sub-shadow: none; --sub-scale: 1; }
+.player { --sub-px: 24px; --sub-raise: 0px; }
+#video::cue { font-family: var(--sub-font); color: var(--sub-color); background: var(--sub-bg); text-shadow: var(--sub-shadow); }
+#video::-webkit-media-text-track-container { font-size: var(--sub-px) !important; transform: translateY(calc(-1 * var(--sub-raise))); transition: transform .15s; }
+/* they move up while the controls are shown, so the controls don't cover them */
+.player.ctl-on #video::-webkit-media-text-track-container, .player.paused #video::-webkit-media-text-track-container { transform: translateY(calc(-1 * max(var(--sub-raise), 120px))); }
+.player.mini.ctl-on #video::-webkit-media-text-track-container, .player.mini.paused #video::-webkit-media-text-track-container { transform: translateY(calc(-1 * max(var(--sub-raise), 64px))); }
+.player.mini .pc-big { width: 34px; height: 34px; }
 .player.mini .p-ctl { padding: 20px 10px 6px; }
 .tc-badge { position: absolute; bottom: 84px; right: 12px; z-index: 3; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; background: rgba(0, 0, 0, .6); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); pointer-events: none; opacity: 0; transition: opacity .15s; }
 .player.ctl-on .tc-badge, .player.paused .tc-badge { opacity: 1; }   /* shows and hides with the controls */
@@ -770,3 +774,33 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .sub-test { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .set-row input.sub-langs { width: 160px; }
 .sub-na { margin: 0 0 14px; font-size: 13px; }
+.sub-preview-row { align-items: stretch; }
+.sub-preview { flex: none; width: min(360px, 45%); aspect-ratio: 16 / 9; border-radius: 10px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7%; overflow: hidden;
+  background: linear-gradient(160deg, #6d8fb3 0%, #c9a77c 45%, #3b2f2a 100%); }   /* a bright "picture", so colour and background can be judged */
+.sub-preview span { font-family: var(--sub-font); color: var(--sub-color); text-shadow: var(--sub-shadow); font-size: calc(15px * var(--sub-scale)); text-align: center; line-height: 1.25; }
+.sub-preview span { background: var(--sub-bg); box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0 .2em; }
+.sub-bg { display: flex; align-items: center; gap: 12px; }
+.sub-bg input[type=range] { width: 140px; padding: 0; }
+.sub-op { min-width: 42px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── the Appearance panel in the player (CC › Appearance…) ── */
+.sub-panel { position: absolute; right: 14px; bottom: 92px; z-index: 6; width: min(380px, calc(100% - 28px)); max-height: calc(100% - 120px); overflow-y: auto;
+  background: rgba(18, 20, 26, .94); color: #fff; border: 1px solid rgba(255, 255, 255, .12); border-radius: 14px; padding: 6px 14px 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); cursor: default; font-size: 13px; }
+.player.mini .sub-panel { display: none; }
+.sp-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 6px; }
+.sp-head b { font-size: 14px; }
+.sp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, .08); }
+.sp-row > span { color: rgba(255, 255, 255, .7); font-weight: 600; flex: none; }
+.sp-end { justify-content: flex-end; }
+.sub-panel .seg { flex-wrap: wrap; justify-content: flex-end; background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .1); }
+.sub-panel .seg button { padding: 5px 9px; font-size: 12.5px; color: rgba(255, 255, 255, .7); }
+.sub-panel .seg button.on { color: var(--accent-ink); }
+.sub-panel select { width: auto; min-width: 150px; padding: 6px 10px; background-color: rgba(255, 255, 255, .08); color: #fff; border-color: rgba(255, 255, 255, .14); }
+.sub-panel .swatch.on { border-color: #fff; box-shadow: 0 0 0 2px rgba(18, 20, 26, .94); }
+.sub-panel .sub-bg input[type=range] { width: 100px; }
+.sub-panel .sub-op { color: rgba(255, 255, 255, .7); }
+.sub-panel .btn.ghost { background: rgba(255, 255, 255, .1); color: #fff; padding: 6px 12px; }
+/* five positions don't fit beside the label: label above, buttons across the whole panel */
+.sp-stack { flex-direction: column; align-items: stretch; gap: 8px; }
+.sp-stack .seg { flex-wrap: nowrap; justify-content: stretch; }
+.sp-stack .seg button { flex: 1 1 auto; justify-content: center; white-space: nowrap; padding: 5px 6px; }
