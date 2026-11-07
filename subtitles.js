@@ -17,7 +17,10 @@ const TEXT_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text'
 
 const baseOf = (video) => video.slice(0, video.length - path.extname(video).length);
 
-// The .srt files that belong to a video: "<name>.<lang>[.forced][.sdh][.2].srt"
+// The .srt files that belong to a video: "<name>.<lang>[.forced][.sdh][.2].srt". The language code also tells
+// where a file came from: built-in subtitles keep ffmpeg's three-letter code ("eng"), OpenSubtitles downloads
+// get OpenSubtitles' two-letter one ("en", "pt-br"). Both are codes Plex / Kodi / VLC understand.
+const canon = (lang) => { try { return Intl.getCanonicalLocales(lang)[0].toLowerCase(); } catch { return lang; } };   // "eng" and "en" -> "en"
 async function listSrt(video) {
   const dir = path.dirname(video);
   const base = path.basename(baseOf(video));
@@ -27,27 +30,34 @@ async function listSrt(video) {
     .filter((n) => n.startsWith(base + '.') && n.toLowerCase().endsWith('.srt'))
     .map((n) => {
       const tags = n.slice(base.length + 1, -4).split('.');
+      const lang = tags[0] || '';
       const k = Number(tags.find((t) => /^\d+$/.test(t))) || 1;
-      return { file: path.join(dir, n), lang: tags[0] || '', forced: tags.includes('forced'), sdh: tags.includes('sdh'), k };
+      return { file: path.join(dir, n), lang, os: /^[a-z]{2}(-[a-z]+)?$/i.test(lang), forced: tags.includes('forced'), sdh: tags.includes('sdh'), k };
     })
-    .sort((a, b) => a.lang.localeCompare(b.lang) || a.forced - b.forced || a.sdh - b.sdh || a.k - b.k);
+    // one language together, the file's own subtitles before OpenSubtitles ones
+    .sort((a, b) => canon(a.lang).localeCompare(canon(b.lang)) || a.os - b.os || a.forced - b.forced || a.sdh - b.sdh || a.k - b.k);
 }
 
-// Subtitle streams of a file, from ffmpeg's stream listing. index = position among the subtitle streams (0:s:index).
+// Subtitle streams in ffmpeg's stream listing (its stderr). index = position among the subtitle streams (0:s:index);
+// text = whether it can become WebVTT / SRT.
+function parseSubStreams(stderr) {
+  const out = [];
+  for (const line of stderr.split(/\r?\n/)) {   // ffmpeg ends lines with \r\n on Windows
+    const m = /Stream #\d+:\d+(?:\[\w+\])?(?:\((\w+)\))?: Subtitle: (\w+)(.*)$/.exec(line);
+    if (m) {
+      const codec = m[2].toLowerCase();
+      out.push({ index: out.length, lang: (m[1] || 'und').toLowerCase(), codec, text: TEXT_CODECS.has(codec), forced: /\(forced\)/.test(m[3]), sdh: /\(hearing impaired\)/.test(m[3]) });
+    }
+  }
+  return out;
+}
 function probeSubs(bin, video) {
   return new Promise((resolve) => {
     const proc = spawn(bin, ['-hide_banner', '-nostdin', '-i', video], { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     proc.stderr.on('data', (d) => { err += d; });
     proc.on('error', () => resolve([]));
-    proc.on('close', () => {
-      const out = [];
-      for (const line of err.split(/\r?\n/)) {   // ffmpeg ends lines with \r\n on Windows
-        const m = /Stream #\d+:\d+(?:\[\w+\])?(?:\((\w+)\))?: Subtitle: (\w+)(.*)$/.exec(line);
-        if (m) out.push({ index: out.length, lang: (m[1] || 'und').toLowerCase(), codec: m[2].toLowerCase(), forced: /\(forced\)/.test(m[3]), sdh: /\(hearing impaired\)/.test(m[3]) });
-      }
-      resolve(out);
-    });
+    proc.on('close', () => resolve(parseSubStreams(err)));
   });
 }
 
@@ -56,40 +66,86 @@ const extracting = new Map(); // video -> promise, so two requests don't extract
 async function extractEmbedded(bin, video) {
   if (extracting.has(video)) return extracting.get(video);
   const job = (async () => {
-    const tracks = (await probeSubs(bin, video)).filter((t) => TEXT_CODECS.has(t.codec));
+    const tracks = (await probeSubs(bin, video)).filter((t) => t.text);
     if (!tracks.length) return 0;
     const used = new Set((await listSrt(video)).map((s) => path.basename(s.file)));
     const base = baseOf(video);
     const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-i', video];
+    const files = [];
     for (const t of tracks) {
       const tag = `${t.lang}${t.forced ? '.forced' : ''}${t.sdh ? '.sdh' : ''}`;
       let name = `${path.basename(base)}.${tag}.srt`;
       for (let k = 2; used.has(name); k++) name = `${path.basename(base)}.${tag}.${k}.srt`;
       used.add(name);
-      args.push('-map', `0:s:${t.index}`, '-c:s', 'srt', path.join(path.dirname(video), name));
+      const file = path.join(path.dirname(video), name);
+      files.push(file);
+      // written as .part and renamed when complete, so a half-written file is never listed
+      args.push('-map', `0:s:${t.index}`, '-c:s', 'srt', '-f', 'srt', file + '.part');
     }
-    await new Promise((resolve) => {
+    const ok = await new Promise((resolve) => {
       const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'ignore'] });
-      proc.on('error', resolve);
-      proc.on('close', resolve);
+      proc.on('error', () => resolve(false));
+      proc.on('close', (code) => resolve(code === 0));
     });
-    return tracks.length;
+    for (const f of files) {
+      if (ok) await fsp.rename(f + '.part', f).catch(() => {});
+      else await fsp.rm(f + '.part', { force: true }).catch(() => {});
+    }
+    return ok ? tracks.length : 0;
   })();
   extracting.set(video, job);
   try { return await job; } finally { extracting.delete(video); }
 }
 
-// The subtitles of a downloaded file; the first time, the built-in ones are saved as .srt.
+// The .srt files of a downloaded file. The first time, the built-in subtitles are saved as .srt: in the background
+// (the player meanwhile reads them from the running conversion), or before answering with wait (a finished download).
 const checked = new Set();
-async function localSubs(bin, video) {
+async function localSubs(bin, video, { wait = false } = {}) {
   let list = await listSrt(video);
-  if (!list.length && bin && !checked.has(video)) {
+  if (!list.length && bin && (!checked.has(video) || extracting.has(video))) {
     checked.add(video);   // a file without text subtitles isn't read again this session
-    await extractEmbedded(bin, video);
-    list = await listSrt(video);
+    const job = extractEmbedded(bin, video);
+    if (wait) { await job; list = await listSrt(video); }
   }
   return list;
 }
+
+/* ------------------------------------------------- from a running conversion */
+// Compatibility mode writes the stream's text subtitles as it goes (no second connection to the provider),
+// one growing WebVTT file per track in the temp folder: <sid>.<track>.vtt. With output_ts_offset the times are
+// those of the whole video, also after a seek (without it ffmpeg shifts a file whose first cue began before the seek).
+const os = require('os');
+const TC_DIR = path.join(os.tmpdir(), 'ag-horizon-subs');
+const tcSubFile = (sid, n) => path.join(TC_DIR, `${sid}.${n}.vtt`);
+const okSid = (sid) => /^[a-z0-9]{8,40}$/i.test(sid || '');
+
+function tcSubArgs(sid, tracks, start) {
+  if (!okSid(sid) || !tracks.length) return [];
+  fs.mkdirSync(TC_DIR, { recursive: true });
+  const args = [];
+  for (const n of tracks) args.push('-map', `0:s:${n}`, '-c:s', 'webvtt', '-flush_packets', '1', ...(start ? ['-output_ts_offset', start.toFixed(3)] : []), '-f', 'webvtt', tcSubFile(sid, n));
+  return args;
+}
+async function tcSubText(sid, n) {
+  if (!okSid(sid) || !/^\d+$/.test(String(n))) return '';
+  try { return vttClean(await fsp.readFile(tcSubFile(sid, n), 'utf8')); } catch { return ''; }
+}
+// files of finished conversions stay a while (the player may still be reading them), then go
+function tcSubCleanup(sid) {
+  if (!okSid(sid)) return;
+  setTimeout(async () => {
+    for (const f of await fsp.readdir(TC_DIR).catch(() => [])) if (f.startsWith(sid + '.')) fsp.rm(path.join(TC_DIR, f), { force: true }).catch(() => {});
+  }, 30 * 60 * 1000).unref();
+}
+// leftovers from a crash or a closed app
+(async () => {
+  const old = Date.now() - 24 * 3600e3;
+  for (const f of await fsp.readdir(TC_DIR).catch(() => [])) {
+    const p = path.join(TC_DIR, f);
+    const st = await fsp.stat(p).catch(() => null);
+    if (st && st.mtimeMs < old) fsp.rm(p, { force: true }).catch(() => {});
+  }
+})();
 
 // Save an OpenSubtitles download next to the video as "<name>.<lang>.srt" (or ".<lang>.2.srt" …).
 async function saveSrt(video, lang, srt) {
@@ -103,14 +159,13 @@ async function saveSrt(video, lang, srt) {
 // SRT text -> WebVTT. Also drops ASS override codes ("{\an8}") that survive conversion from .ass.
 function srtToVtt(buf) {
   let text = buf.toString('utf8');
-  if (text.includes('�')) text = buf.toString('latin1');   // older subtitles are often Windows-1252
-  text = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
-  if (/^WEBVTT/.test(text)) return text;
-  return 'WEBVTT\n\n' + text
-    .replace(/(\d{1,2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
-    .replace(/\{\\[^}]*\}/g, '')
-    .replace(/<\/?font[^>]*>/gi, '');   // WebVTT has no <font>; ffmpeg adds it when converting .ass
+  if (text.includes('\uFFFD')) text = buf.toString('latin1');   // older subtitles are often Windows-1252
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  if (/^WEBVTT/.test(text)) return vttClean(text);
+  return vttClean('WEBVTT\n\n' + text.replace(/(\d{1,2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2'));
 }
+// what WebVTT can't show: ASS override codes, and <font>, which ffmpeg adds when converting .ass
+const vttClean = (text) => text.replace(/\{\\[^}]*\}/g, '').replace(/<\/?font[^>]*>/gi, '');
 
 /* --------------------------------------------------------- OpenSubtitles.com */
 // REST API v1. The API key belongs to the app (OpenSubtitles allows one key per app, not one per user); people
@@ -182,4 +237,4 @@ async function osLogin(cfg) {
   return { allowed: u.allowed_downloads, remaining: u.remaining_downloads, level: u.level || '' };
 }
 
-module.exports = { localSubs, saveSrt, srtToVtt, osSearch, osDownload, osLogin, osAvailable: !!OS_KEY };
+module.exports = { localSubs, saveSrt, srtToVtt, parseSubStreams, tcSubArgs, tcSubText, tcSubCleanup, osSearch, osDownload, osLogin, osAvailable: !!OS_KEY };

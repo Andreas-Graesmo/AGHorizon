@@ -466,13 +466,12 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
 .player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
-#video::cue { font-family: system-ui, sans-serif; background: rgba(0, 0, 0, .6); line-height: 1.35; }
+/* no font-size or line-height on ::cue: Chromium sizes the lines from the video, so a different text size leaves gaps between lines */
+#video::cue { font-family: system-ui, sans-serif; background: rgba(0, 0, 0, .6); }
 /* subtitles move up while the controls are shown, so the controls don't cover them */
 #video::-webkit-media-text-track-container { transition: transform .15s; }
 .player.ctl-on #video::-webkit-media-text-track-container, .player.paused #video::-webkit-media-text-track-container { transform: translateY(-120px); }
-.player.mini.ctl-on #video::-webkit-media-text-track-container, .player.mini.paused #video::-webkit-media-text-track-container { transform: translateY(-64px); }
-.player.fs #video::cue { font-size: 2.4vh; }
-.player.mini .pc-big { width: 34px; height: 34px; }
+.player.mini.ctl-on #video::-webkit-media-text-track-container, .player.mini.paused #video::-webkit-media-text-track-container { transform: translateY(-64px); }.player.mini .pc-big { width: 34px; height: 34px; }
 .player.mini .p-ctl { padding: 20px 10px 6px; }
 .tc-badge { position: absolute; bottom: 84px; right: 12px; z-index: 3; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; background: rgba(0, 0, 0, .6); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); pointer-events: none; opacity: 0; transition: opacity .15s; }
 .player.ctl-on .tc-badge, .player.paused .tc-badge { opacity: 1; }   /* shows and hides with the controls */
