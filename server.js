@@ -325,6 +325,8 @@ function handleProbe(req, res, q) {
       duration: dur ? +dur[1] * 3600 + +dur[2] * 60 + +dur[3] : 0,
       video: v ? v[1].toLowerCase() : '',
       audio: a ? a[1].toLowerCase() : '',
+      // text subtitles in the stream: the CC menu lists them, the conversion writes them (subs + sid below)
+      subs: subs.parseSubStreams(err).filter((t) => t.text).map(({ index, lang, forced, sdh }) => ({ index, lang, forced, sdh })),
     });
   });
   res.on('close', () => proc.kill('SIGKILL'));
@@ -383,7 +385,10 @@ function handleTranscode(req, res, q) {
     // Chromium shows copied HEVC about a GOP late in fragmented MP4 (sound runs ~2 s ahead), but in sync in Matroska
     ...(keepHevc ? ['-f', 'matroska', '-live', '1'] : ['-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4']),
     'pipe:1',
+    // ?subs=0,3&sid=…: also write these text subtitle tracks, read through /api/tcsubs/<sid>/<track>
+    ...subs.tcSubArgs(q.get('sid'), (q.get('subs') || '').split(',').filter((n) => /^\d{1,3}$/.test(n)).slice(0, 64), start),
   ];
+  const sid = q.get('sid');
 
   const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   activeConversions++;
@@ -394,6 +399,7 @@ function handleTranscode(req, res, q) {
   const release = () => { if (counted) { counted = false; activeConversions--; } };
   const finish = () => { if (finished) return false; finished = true; release(); return true; };
   proc.on('exit', release); // 'close' never comes while stdout is paused for a browser that already hung up
+  proc.on('exit', () => subs.tcSubCleanup(sid));
 
   proc.stderr.on('data', (d) => { err = (err + d).slice(-4000); });
   proc.stdout.on('data', (chunk) => {
@@ -457,15 +463,22 @@ const subs = require('./subtitles');
 
 // GET /api/local/<id>/subs      -> [{ n, lang, forced, sdh }]  (the first time, built-in subtitles are saved as .srt)
 // GET /api/local/<id>/subs/<n>  -> WebVTT
-async function handleLocalSubs(req, res, pathname) {
+async function handleLocalSubs(req, res, pathname, q) {
   const m = /^\/api\/local\/([a-f0-9]{8,32})\/subs(?:\/(\d+))?$/.exec(pathname);
   const video = m && localFiles ? localFiles(m[1], 'video') : null;
   if (!video) throw httpError(404, 'Not downloaded');
-  const list = await subs.localSubs(ffmpeg(), video);
-  if (m[2] === undefined) return sendJson(res, 200, list.map((s, n) => ({ n, lang: s.lang, forced: s.forced, sdh: s.sdh })));
+  const list = await subs.localSubs(ffmpeg(), video, { wait: q.get('wait') === '1' });
+  if (m[2] === undefined) return sendJson(res, 200, list.map((s, n) => ({ n, lang: s.lang, forced: s.forced, sdh: s.sdh, os: s.os })));
   const s = list[Number(m[2])];
   if (!s) throw httpError(404, 'No such subtitle');
   send(res, 200, subs.srtToVtt(await fs.promises.readFile(s.file)), { 'Content-Type': 'text/vtt; charset=utf-8' });
+}
+
+// GET /api/tcsubs/<sid>/<track> -> what a running conversion has written of that subtitle track so far (WebVTT)
+async function handleTcSubs(req, res, pathname) {
+  const m = /^\/api\/tcsubs\/([a-z0-9]{8,40})\/(\d{1,3})$/i.exec(pathname);
+  if (!m) throw httpError(404, 'Not found');
+  send(res, 200, await subs.tcSubText(m[1], m[2]), { 'Content-Type': 'text/vtt; charset=utf-8' });
 }
 
 // OpenSubtitles, with the account from Settings (sent in the body, never in a URL):
@@ -533,7 +546,8 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);
-    else if (/^\/api\/local\/[a-f0-9]{8,32}\/subs/.test(url.pathname) && req.method === 'GET') await handleLocalSubs(req, res, url.pathname);
+    else if (/^\/api\/local\/[a-f0-9]{8,32}\/subs/.test(url.pathname) && req.method === 'GET') await handleLocalSubs(req, res, url.pathname, url.searchParams);
+    else if (url.pathname.startsWith('/api/tcsubs/') && req.method === 'GET') await handleTcSubs(req, res, url.pathname);
     else if (url.pathname.startsWith('/api/local/') && (req.method === 'GET' || req.method === 'HEAD')) handleLocal(req, res, url.pathname);
     else if (url.pathname.startsWith('/api/subs/') && req.method === 'POST') await handleSubsApi(req, res, url.pathname);
     else send(res, 404, 'Not found');

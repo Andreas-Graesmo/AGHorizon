@@ -26,7 +26,7 @@ function subLabel(code) {
 /* ─────────────────────────────── showing them ─────────────────────────────── */
 // One text track for everything. Cues are added by hand so they can be shifted: in compatibility mode the
 // video restarts at the seek point, so its clock starts at 0 there (tcState.offset).
-const sub = { track: null, cues: [], key: '', label: '' };
+const sub = { track: null, cues: [], key: '', label: '', stream: null, seen: new Set() };
 
 function subParse(vtt) {
   const t = (s) => { const p = s.trim().split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; };
@@ -61,19 +61,66 @@ function subShow(vtt, key, label) {
   subApply();
   osd(sub.cues.length ? `Subtitles: ${label}` : 'These subtitles are empty');
 }
-function subOff() { sub.cues = []; sub.key = ''; sub.label = ''; subApply(); }
+function subOff() { subStopStream(); sub.cues = []; sub.key = ''; sub.label = ''; subApply(); }
+
+// A track read from the running conversion arrives bit by bit: add the cues that are new since last time.
+function subAddCues(list) {
+  const t = sub.track;
+  const off = tcState.on && tcState.vod ? tcState.offset : 0;
+  let added = 0;
+  for (const c of list) {
+    const k = `${c.start.toFixed(3)}|${c.text}`;
+    if (sub.seen.has(k)) continue;
+    sub.seen.add(k);
+    sub.cues.push(c);
+    if (sub.offset === off && c.end > off) t.addCue(new VTTCue(Math.max(0, c.start - off), c.end - off, c.text));
+    added++;
+  }
+  if (added && t.mode !== 'showing') subApply();
+  return added;
+}
+let subPollTimer = 0;
+function subStopStream() { clearTimeout(subPollTimer); sub.stream = null; sub.seen = new Set(); }
+async function subPollStream() {
+  clearTimeout(subPollTimer);
+  const s = sub.stream;
+  if (!s) return;
+  if (tcState.on && tcState.sid) {
+    try {
+      const r = await fetch(`/api/tcsubs/${tcState.sid}/${s.n}`);
+      if (r.ok && sub.stream === s) subAddCues(subParse(await r.text()));
+    } catch { /* try again */ }
+  }
+  if (sub.stream === s) subPollTimer = setTimeout(subPollStream, sub.cues.length ? 3000 : 600);   // ffmpeg writes ahead of playback
+}
+// Show a subtitle track of the stream itself. It comes from compatibility mode, so a video that plays directly
+// switches to it (the picture is kept as it is, so that costs little) and goes on where it was.
+function subUseStream(c, n, key, label) {
+  subStopStream();
+  sub.cues = []; sub.key = key; sub.label = label; sub.stream = { n };
+  subApply();
+  osd(`Subtitles: ${label}`);
+  if (!tcState.on || !(tcState.subs || []).includes(n)) {
+    if (isFinite(curTime()) && curTime() > 0) state.progress[c.uid] = { t: curTime(), d: durTime() || 0, w: 0, ts: Date.now() };
+    startPlayback(c, ['tc'], playToken);
+  }
+  subPollStream();
+}
 // a new video, or compatibility mode restarted at another point: re-time the cues
 video.addEventListener('loadedmetadata', () => { if (sub.cues.length && sub.offset !== (tcState.on && tcState.vod ? tcState.offset : 0)) subApply(); });
 
 /* ─────────────────────────────── finding them ─────────────────────────────── */
-const subLocalCache = new Map();   // download id -> [{ n, lang, forced, sdh }]
-async function subLocalList(id, { fresh = false } = {}) {
+// The .srt files saved with a download. The first time, the server saves the built-in ones in the background
+// (wait: until that's done), so an empty list isn't kept.
+const subLocalCache = new Map();   // download id -> [{ n, lang, forced, sdh, os }]
+async function subLocalList(id, { fresh = false, wait = false } = {}) {
   if (!fresh && subLocalCache.has(id)) return subLocalCache.get(id);
-  const r = await fetch(`/api/local/${id}/subs`);
+  const r = await fetch(`/api/local/${id}/subs${wait ? '?wait=1' : ''}`);
   const list = r.ok ? await r.json() : [];
-  subLocalCache.set(id, list);
+  if (list.length) subLocalCache.set(id, list);
   return list;
 }
+const subName = (s) => `${subLabel(s.lang)}${s.forced ? ' (forced)' : ''}${s.sdh ? ' (SDH)' : ''}${s.os ? ' (OpenSubtitles)' : ''}`;
 const subPost = async (path, body) => {
   const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
@@ -129,6 +176,7 @@ async function subFetchOs(c, s) {
     const j = await subPost('/api/subs/download', { os: subOs(), fileId: s.fileId, lang: subNorm(s.lang) || s.lang, saveFor: d ? d.id : undefined });
     if (state.current !== c) return;
     if (d) subLocalCache.delete(d.id);   // it was saved next to the download
+    subStopStream();
     subShow(j.vtt, `os:${s.fileId}`, subLabel(s.lang));
     if (typeof j.remaining === 'number') toast(`Subtitles from OpenSubtitles · ${j.remaining} downloads left today`);
   } catch (e) { toast(e.message, 'err'); }
@@ -150,34 +198,55 @@ async function subSearchMenu(anchor, c) {
   ]);
 }
 
-// The CC button: Off, the download's own subtitles, OpenSubtitles.
+// The CC button: Off, the subtitles in the video (saved .srt files of a download, or the stream's own tracks,
+// which compatibility mode writes as it goes), OpenSubtitles. Opens at once: nothing is read from the video here.
 async function subMenu(anchor) {
   const c = state.current;
   if (!c || !isVod(c)) return;
   const mark = (on) => (on ? '✓  ' : '      ');
-  const items = [{ label: mark(!sub.cues.length) + 'Off', run: subOff }];
+  const items = [{ label: mark(!sub.cues.length && !sub.stream) + 'Off', run: subOff }];
+  const counts = {};
+  const numbered = (name) => { counts[name] = (counts[name] || 0) + 1; return name + (counts[name] > 1 ? ` ${counts[name]}` : ''); };
   const d = subLocalOf(c);
-  if (d) {
-    if (!subLocalCache.has(d.id)) osd('Reading subtitles…');   // the first time the built-in ones are saved (a few seconds)
-    const list = await subLocalList(d.id).catch(() => []);
-    if (state.current !== c) return;
-    if (list.length) items.push({ heading: true, label: 'In this download' });
-    const seen = {};
-    for (const s of list) {
-      const name = `${subLabel(s.lang)}${s.forced ? ' (forced)' : ''}${s.sdh ? ' (SDH)' : ''}`;
-      seen[name] = (seen[name] || 0) + 1;
-      const key = `local:${d.id}:${s.n}`;
-      items.push({
-        label: mark(sub.key === key) + name + (seen[name] > 1 ? ` ${seen[name]}` : ''),
-        run: async () => {
-          try { const r = await fetch(`/api/local/${d.id}/subs/${s.n}`); if (!r.ok) throw new Error('Could not read the subtitles'); subShow(await r.text(), key, name); } catch (e) { toast(e.message, 'err'); }
-        },
-      });
+  const saved = d ? await subLocalList(d.id).catch(() => []) : [];   // a folder listing, quick
+  // the stream's tracks: from the codec check made before playing (local files are checked now, which is quick)
+  const info = probeCache.get(c.url) || (c.local ? await probeOf(c, playlistById(c.pid)) : {});
+  if (state.current !== c) return;
+  const builtInSaved = saved.some((s) => !s.os);
+  if (builtInSaved) {
+    items.push({ heading: true, label: 'In the video' });
+    for (const s of saved.filter((x) => !x.os)) items.push(subSavedItem(d, s, mark, numbered));
+  } else if ((info.subs || []).length) {
+    items.push({ heading: true, label: 'In the video' });
+    for (const t of [...info.subs].sort((a, b) => subName(a).localeCompare(subName(b)))) {   // A–Z, like the saved ones
+      const key = `stream:${t.index}`;
+      const name = numbered(subName(t));
+      items.push({ label: mark(sub.key === key) + name, run: () => subUseStream(c, t.index, key, name) });
     }
+  }
+  const fromOs = saved.filter((s) => s.os);
+  if (fromOs.length) {
+    items.push({ heading: true, label: 'Saved from OpenSubtitles' });
+    for (const s of fromOs) items.push(subSavedItem(d, s, mark, numbered));
   }
   if (sub.key.startsWith('os:')) items.push({ label: mark(true) + `${sub.label} (OpenSubtitles)`, run: () => {} });
   items.push({ label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
   showMenu(anchor, items);
+}
+function subSavedItem(d, s, mark, numbered) {
+  const key = `local:${d.id}:${s.n}`;
+  const name = numbered(subName(s));
+  return {
+    label: mark(sub.key === key) + name,
+    run: async () => {
+      try {
+        const r = await fetch(`/api/local/${d.id}/subs/${s.n}`);
+        if (!r.ok) throw new Error('Could not read the subtitles');
+        subStopStream();
+        subShow(await r.text(), key, name);
+      } catch (e) { toast(e.message, 'err'); }
+    },
+  };
 }
 $('#pSubs').addEventListener('click', (e) => subMenu(e.currentTarget));
 
@@ -187,7 +256,7 @@ $('#pSubs').addEventListener('click', (e) => subMenu(e.currentTarget));
 let subQueue = Promise.resolve();
 function subOnDownloaded(d) {
   subQueue = subQueue.then(async () => {
-    const have = new Set((await subLocalList(d.id, { fresh: true }).catch(() => [])).map((s) => subNorm(s.lang)));
+    const have = new Set((await subLocalList(d.id, { fresh: true, wait: true }).catch(() => [])).map((s) => subNorm(s.lang)));
     const missing = subLangs().filter((l) => !have.has(l));
     if (!missing.length || !subHasAccount()) return;
     const it = dlItem(d);

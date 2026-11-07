@@ -8,11 +8,16 @@ let tsPlayer = null;
 let playToken = 0;
 
 /* Compatibility mode: the server converts the stream with ffmpeg (H.264 + AAC, fragmented MP4). */
-const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264' };
+const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '' };
 let checkTimer = 0;
 let tcSeeking = false;
 const compatMode = () => LS.get('tuner.compat', 'auto'); // 'auto' | 'always' | 'off'
-const tcUrl = (ch, p, start) => `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}`;
+// Each conversion also writes the stream's text subtitles (tcState.subs) under a new id, read by subtitles.js.
+function tcUrl(ch, p, start) {
+  tcState.sid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const subs = tcState.subs && tcState.subs.length ? `&subs=${tcState.subs.join(',')}&sid=${tcState.sid}` : '';
+  return `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${subs}`;
+}
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
 // HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
@@ -188,7 +193,7 @@ async function startPlayback(ch, kinds, token, lastError) {
     const resume = progressOf(ch.uid);
     const dur = vod ? info.duration || 0 : 0;
     const start = vod && resume && !resume.w && resume.t > 10 && (!dur || dur - resume.t > 20) ? resume.t : 0;
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video) });
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [] });
     const at = await tcStartAt(ch, p, start);
     if (token !== playToken) return;
     tcState.offset = at;
