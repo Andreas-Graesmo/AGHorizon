@@ -347,7 +347,7 @@ function dlUpdate(s) {
   const hadList = dl.key !== '';
   Object.assign(dl, s);
   dl.byUid = new Map(dl.items.map((d) => [d.uid, d]));
-  if (hadList) for (const d of dl.items) if (d.state === 'done' && before.has(d.id) && before.get(d.id) !== 'done') toast(`Downloaded: ${dlName(d)}`);
+  if (hadList) for (const d of dl.items) if (d.state === 'done' && before.has(d.id) && before.get(d.id) !== 'done') { toast(`Downloaded: ${dlName(d)}`); subOnDownloaded(d); }
 
   const key = dl.items.map((d) => d.id + d.state).join() + '|' + dl.held + '|' + dl.folder + '|' + dl.pauseWhileWatching;
   const changed = key !== dl.key;
