@@ -231,7 +231,14 @@ $('#pMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 $('#pPip').addEventListener('click', togglePip);
 $('#pFull').addEventListener('click', toggleFullscreen);
 $('#pMulti').addEventListener('click', () => { const c = state.current; if (!c || isVod(c)) return; stopPlayback(); mvAdd(c, { open: true }); });
-$('#pExpand').addEventListener('click', () => { if (!state.current) return; closePip(); window.focus(); openItem(state.current); });
+$('#pExpand').addEventListener('click', () => {
+  if (!state.current) return;
+  if (pipWin) {   // from the picture-in-picture window: back into the app, which comes to the front
+    closePip();
+    if (window.tunerDesktop && window.tunerDesktop.focusWindow) window.tunerDesktop.focusWindow(); else window.focus();
+  }
+  openItem(state.current);
+});
 $('#pClose').addEventListener('click', stopPlayback);
 
 /* ─────────────────────────────── opening items ─────────────────────────────── */

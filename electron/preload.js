@@ -1,9 +1,11 @@
 'use strict';
-// What the page may ask the desktop shell: which monitors exist (second-screen picker), the app version, updates and downloads.
+// What the page may ask the desktop shell: which monitors exist (second-screen picker), bringing the window forward,
+// the app version, updates and downloads.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('tunerDesktop', {
   displays: () => ipcRenderer.invoke('tuner:displays'),
+  focusWindow: () => ipcRenderer.invoke('tuner:focus'),
   appInfo: () => ipcRenderer.invoke('app:info'),
   updater: {
     status: () => ipcRenderer.invoke('updater:status'),
