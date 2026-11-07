@@ -31,11 +31,86 @@ const held = () => watching && pauseWhileWatching;
 function load() {
   let j = {};
   try { j = JSON.parse(fs.readFileSync(listFile(), 'utf8')); } catch { /* first run */ }
-  folder = j.folder || path.join(app.getPath('downloads'), 'AG Horizon');
+  folder = j.folder || path.join(app.getPath('documents'), 'AGHorizon');
   pauseWhileWatching = j.pauseWhileWatching !== false;
   items = (Array.isArray(j.items) ? j.items : [])
-    .map((it) => (it.state === 'downloading' ? { ...it, state: 'queued' } : it))   // the app was closed mid-download: carry on
-    .filter((it) => it.state !== 'done' || fs.existsSync(it.file));                // deleted by hand in Explorer / Finder
+    .map((it) => (it.state === 'downloading' ? { ...it, state: 'queued' } : it));   // the app was closed mid-download: carry on
+  relocate();
+}
+
+/* ───────────────────────────── moved or missing files ───────────────────────────── */
+// A finished download whose file isn't where it was is kept, never dropped: the folder may have been moved (and
+// chosen again in the app), or be on a drive that isn't plugged in. It's looked for at the same place under the
+// current folder (<folder>/Movies/… or <folder>/Series/…), and hidden from the page until it turns up.
+const VIDEO_EXT = /\.(mkv|mp4|m4v|avi|ts|mov|webm)$/i;
+const present = (it) => it.state !== 'done' || fs.existsSync(it.file);
+function underFolder(file) {
+  const m = /[\\/](Movies[\\/][^\\/]+[\\/][^\\/]+|Series[\\/][^\\/]+[\\/][^\\/]+[\\/][^\\/]+)$/.exec(file || '');
+  return m ? path.join(folder, m[1]) : null;
+}
+function relocate() {
+  let changed = false;
+  for (const it of items) {
+    if (present(it)) continue;
+    const moved = underFolder(it.file);
+    if (!moved || !fs.existsSync(moved)) continue;
+    it.file = moved;
+    const p = posterPath(it);
+    it.posterFile = fs.existsSync(p) ? p : '';
+    changed = true;
+  }
+  if (changed) save();
+}
+
+// Video files in the folder that the list doesn't know (e.g. the list was lost), read from their Plex-style names:
+// Movies/<Title (Year)>/<file>, Series/<Show>/Season NN/<Show> - SxxEyy….<ext>. The page matches them to the playlist.
+async function orphans() {
+  const known = new Set(items.map((it) => path.resolve(it.file).toLowerCase()));
+  const ls = (d) => fsp.readdir(d, { withFileTypes: true }).catch(() => []);
+  const out = [];
+  const found = async (file, info) => {
+    if (known.has(path.resolve(file).toLowerCase())) return;
+    const st = await fsp.stat(file).catch(() => null);
+    if (st) out.push({ file, ext: path.extname(file).slice(1).toLowerCase(), size: st.size, ...info });
+  };
+  for (const m of await ls(path.join(folder, 'Movies'))) {
+    if (!m.isDirectory()) continue;
+    for (const f of await ls(path.join(folder, 'Movies', m.name))) {
+      if (f.isFile() && VIDEO_EXT.test(f.name)) await found(path.join(folder, 'Movies', m.name, f.name), { kind: 'movie', folderName: m.name });
+    }
+  }
+  for (const s of await ls(path.join(folder, 'Series'))) {
+    if (!s.isDirectory()) continue;
+    for (const season of await ls(path.join(folder, 'Series', s.name))) {
+      if (!season.isDirectory() || !/^Season \d+$/i.test(season.name)) continue;
+      for (const f of await ls(path.join(folder, 'Series', s.name, season.name))) {
+        const se = f.isFile() && VIDEO_EXT.test(f.name) && /S(\d+)\s*E(\d+)/i.exec(f.name);
+        if (se) await found(path.join(folder, 'Series', s.name, season.name, f.name), { kind: 'episode', seriesName: s.name, season: Number(se[1]), episode: Number(se[2]) });
+      }
+    }
+  }
+  return out;
+}
+
+// Take such files back as finished downloads, with what the page found out about them (as for a new download).
+async function adopt(list) {
+  const root = path.resolve(folder).toLowerCase() + path.sep;
+  let n = 0;
+  for (const { file, meta } of Array.isArray(list) ? list : []) {
+    if (!file || !path.resolve(file).toLowerCase().startsWith(root) || !fs.existsSync(file) || items.some((x) => x.file === file)) continue;
+    const it = newItem(meta);
+    if (!it) continue;
+    items = items.filter((x) => !(x.uid === it.uid && !present(x)));   // it replaces its own lost entry
+    if (items.some((x) => x.uid === it.uid)) continue;
+    const st = await fsp.stat(file);
+    Object.assign(it, { file, ext: path.extname(file).slice(1).toLowerCase(), state: 'done', size: st.size, received: st.size, addedAt: st.mtimeMs, doneAt: st.mtimeMs });
+    const p = posterPath(it);
+    if (fs.existsSync(p)) it.posterFile = p;
+    items.push(it);
+    n++;
+  }
+  if (n) { save(); send(); }
+  return n;
 }
 let saveTimer = 0;
 function save() {
@@ -52,7 +127,7 @@ const pub = (it) => ({
   poster: it.poster, hasPoster: !!it.posterFile, state: it.state, error: it.error, size: it.size || 0,
   received: it.received || 0, speed: it.speed || 0, addedAt: it.addedAt, doneAt: it.doneAt || 0,
 });
-const snapshot = () => ({ items: items.map(pub), folder, pauseWhileWatching, held: held() });
+const snapshot = () => ({ items: items.filter(present).map(pub), folder, pauseWhileWatching, held: held() });   // missing files: kept, not shown
 function send() {
   const s = snapshot();
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('downloads:changed', s);
@@ -199,18 +274,25 @@ async function stopActive(it, state) {
 }
 
 /* ───────────────────────────── actions from the page ───────────────────────────── */
+// a list entry from what the page sends about a movie / episode
+function newItem(m) {
+  if (!m || (m.kind !== 'movie' && m.kind !== 'episode') || !/^https?:\/\//i.test(m.url || '')) return null;
+  return {
+    id: crypto.randomBytes(8).toString('hex'), uid: String(m.uid), pid: m.pid, kind: m.kind, url: m.url, ua: m.ua || '',
+    ext: m.ext, title: m.title, year: m.year || '', plot: String(m.plot || '').slice(0, 1200), poster: /^https?:\/\//i.test(m.poster || '') ? m.poster : '',
+    seriesUid: m.seriesUid || '', seriesName: m.seriesName || '', season: Number(m.season) || 0, episode: Number(m.episode) || 0, epTitle: m.epTitle || '',
+    state: 'queued', size: 0, received: 0, addedAt: Date.now(),
+  };
+}
+
 function add(list) {
   let added = 0;
   for (const m of Array.isArray(list) ? list : [list]) {
-    if (!m || (m.kind !== 'movie' && m.kind !== 'episode') || !/^https?:\/\//i.test(m.url || '')) continue;
-    const old = items.find((x) => x.uid === m.uid);
-    if (old) { if (old.state === 'failed' || old.state === 'paused') { old.state = 'queued'; old.error = ''; old.tries = 0; added++; } continue; }
-    const it = {
-      id: crypto.randomBytes(8).toString('hex'), uid: String(m.uid), pid: m.pid, kind: m.kind, url: m.url, ua: m.ua || '',
-      ext: m.ext, title: m.title, year: m.year || '', plot: String(m.plot || '').slice(0, 1200), poster: /^https?:\/\//i.test(m.poster || '') ? m.poster : '',
-      seriesUid: m.seriesUid || '', seriesName: m.seriesName || '', season: Number(m.season) || 0, episode: Number(m.episode) || 0, epTitle: m.epTitle || '',
-      state: 'queued', size: 0, received: 0, addedAt: Date.now(),
-    };
+    const it = newItem(m);
+    if (!it) continue;
+    const old = items.find((x) => x.uid === it.uid);
+    if (old && !present(old)) items = items.filter((x) => x !== old);   // its file is gone: download it again
+    else if (old) { if (old.state === 'failed' || old.state === 'paused') { old.state = 'queued'; old.error = ''; old.tries = 0; added++; } continue; }
     it.file = targetFile(it);
     items.push(it);
     added++;
@@ -280,11 +362,11 @@ function localFile(id, what) {
 function init() {
   load();
   ipcMain.handle('downloads:list', async () => {
-    const before = items.length;
-    items = items.filter((it) => it.state !== 'done' || fs.existsSync(it.file));
-    if (items.length !== before) save();
+    relocate();   // files moved back, or the drive is plugged in again
     return { ...snapshot(), free: await freeSpace() };
   });
+  ipcMain.handle('downloads:orphans', () => orphans());
+  ipcMain.handle('downloads:adopt', (_e, list) => adopt(list));
   ipcMain.handle('downloads:add', (_e, list) => add(list));
   ipcMain.handle('downloads:pause', (_e, id) => pause(id));
   ipcMain.handle('downloads:resume', (_e, id) => resume(id));
@@ -300,6 +382,7 @@ function init() {
     const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), { title: 'Choose the download folder', defaultPath: folder, properties: ['openDirectory', 'createDirectory'] });
     if (r.canceled || !r.filePaths[0]) return null;
     folder = r.filePaths[0];   // new downloads go here; finished ones stay where they are
+    relocate();                // …unless they were moved here: then they're found again
     save(); send();
     return folder;
   });

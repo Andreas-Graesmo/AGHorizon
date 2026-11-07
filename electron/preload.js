@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('tunerDesktop', {
     chooseFolder: () => ipcRenderer.invoke('downloads:chooseFolder'),
     setOption: (key, value) => ipcRenderer.invoke('downloads:setOption', key, value),
     setWatching: (on) => ipcRenderer.invoke('downloads:setWatching', on),
+    orphans: () => ipcRenderer.invoke('downloads:orphans'),
+    adopt: (list) => ipcRenderer.invoke('downloads:adopt', list),
     onChange: (cb) => { ipcRenderer.on('downloads:changed', (_e, s) => cb(s)); },
   },
 });

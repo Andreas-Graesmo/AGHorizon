@@ -49,7 +49,7 @@ function dlSyncWatching() {
 }
 
 /* ───────────────────────────── starting downloads ───────────────────────────── */
-function dlMeta(it) {
+function dlMeta(it, series = null) {   // series: the episode's show, when it isn't the open page (restoring files)
   const p = playlistById(it.pid);
   const ua = (p && p.ua) || '';
   if (it.kind === 'movie') {
@@ -62,7 +62,7 @@ function dlMeta(it) {
     };
   }
   const info = (state.detail[it.seriesUid] || {}).info || {};
-  const show = ws.detail && ws.detail.uid === it.seriesUid ? ws.detail : null;
+  const show = series || (ws.detail && ws.detail.uid === it.seriesUid ? ws.detail : null);
   return {
     uid: it.uid, pid: it.pid, kind: 'episode', url: it.url, ext: it.ext, ua, title: it.title || it.name, epTitle: it.title || '',
     seriesUid: it.seriesUid, seriesName: it.seriesName, season: it.season, episode: it.num, plot: it.plot || '',
@@ -70,6 +70,65 @@ function dlMeta(it) {
     poster: info.cover_big || info.cover || (show && show.logo) || it.logo || '',
   };
 }
+
+/* ───────────────────────────── files the list doesn't know ───────────────────────────── */
+// Video files in the download folder that aren't in the list (before 1.10.1, moving the folder lost the list).
+// Their Plex-style names say what they are; matched to a playlist they get their progress, checkmarks and pages
+// back. Needs the playlist to load; files that don't match yet are tried again next time.
+const dlClean = (s) => {   // the same as clean() in electron/downloads.js, which named the folders
+  let n = String(s || '').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
+  if (n.length > 100) n = n.slice(0, 100).trim();
+  return n;
+};
+let dlRecovering = null;
+function dlRecover() {
+  if (!dlApi || !dlApi.orphans || dlRecovering) return dlRecovering;
+  dlRecovering = (async () => {
+    const files = await dlApi.orphans().catch(() => []);
+    if (!files.length || !navigator.onLine) return;
+    const adopt = [];
+    const shows = [];
+    for (const p of state.playlists) {
+      const left = files.filter((f) => !adopt.some((a) => a.file === f.file));
+      if (!left.length) break;
+      const movieFiles = left.filter((f) => f.kind === 'movie');
+      if (movieFiles.length) {
+        const movies = await loadItems(p, 'movie').catch(() => []);
+        for (const f of movieFiles) {
+          // the folder is "<Title>" or "<Title> (<Year>)"
+          const m = movies.find((x) => { const n = dlClean(x.name); return n === f.folderName || f.folderName.startsWith(n + ' ('); });
+          if (m) adopt.push({ file: f.file, meta: { ...dlMeta(m), ext: f.ext } });
+        }
+      }
+      const epFiles = left.filter((f) => f.kind === 'episode');
+      if (epFiles.length) {
+        const series = await loadItems(p, 'series').catch(() => []);
+        for (const name of new Set(epFiles.map((f) => f.seriesName))) {
+          const s = series.find((x) => dlClean(x.name) === name);
+          if (!s) continue;
+          const d = await detailReady(s);
+          const eps = allEpisodes((d && d.seasons) || {});
+          let any = false;
+          for (const f of epFiles.filter((x) => x.seriesName === name)) {
+            const e = eps.find((x) => Number(x.season) === f.season && Number(x.num) === f.episode);
+            if (e) { adopt.push({ file: f.file, meta: { ...dlMeta(e, s), ext: f.ext } }); any = true; }
+          }
+          if (any) shows.push(s);
+        }
+      }
+    }
+    if (!adopt.length) return;
+    const n = await dlApi.adopt(adopt).catch(() => 0);
+    if (!n) return;
+    await dlInfoReady;
+    for (const s of shows) dlRemember(s);   // their offline pages
+    for (const a of adopt) if (a.meta.kind === 'movie') { const m = dlItemOf(a.meta); if (m) dlRemember(m); }
+    toast(`Found ${n} download${n === 1 ? '' : 's'} in ${dl.folder}`);
+  })().finally(() => { dlRecovering = null; });
+  return dlRecovering;
+}
+// the catalogue movie a restored download came from (for its offline page)
+const dlItemOf = (meta) => { const c = state.cache[`${meta.pid}:movie`]; return c && c.channels.find((x) => x.uid === meta.uid); };
 
 /* ───────────────────────────── titles for offline viewing ───────────────────────────── */
 // A copy of each downloaded movie / series (its catalogue item and details: every episode, plot, cast), so its page
@@ -310,7 +369,7 @@ function dlPaintRows() {
 function openDownloads() {
   renderDownloads();
   dlInfoReady.then(() => { if (ui.route === 'downloads') renderDownloads(); });   // cards use the saved copies once loaded
-  if (dlApi) dlApi.list().then(dlUpdate).catch(() => {});   // refreshes free space and drops files deleted by hand
+  if (dlApi) dlApi.list().then(dlUpdate).then(dlRecover).catch(() => {});   // free space, moved files; then files the list doesn't know
 }
 
 $('#v-downloads').addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
@@ -332,7 +391,7 @@ $('#views').addEventListener('click', (e) => {
   const d = row && dl.items.find((x) => x.id === row.dataset.id);
   switch (a.dataset.act) {
     case 'dl-open': dlApi.openFolder(); break;
-    case 'dl-folder': dlApi.chooseFolder().then((f) => { if (f) toast('New downloads will be saved in ' + f); }); break;
+    case 'dl-folder': dlApi.chooseFolder().then((f) => { if (f) { toast('New downloads will be saved in ' + f); dlRecover(); } }); break;
     case 'dl-pause': if (d) dlApi.pause(d.id); break;
     case 'dl-resume': if (d) dlApi.resume(d.id); break;
     case 'dl-more': if (d) dlMenu(d, a); break;
