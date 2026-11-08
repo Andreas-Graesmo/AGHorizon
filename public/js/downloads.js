@@ -220,6 +220,8 @@ function dlMenu(d, anchor) {
   if (d.state === 'done') items.push({ label: 'Play', run: () => dlPlay(d) });
   if (d.state === 'downloading' || d.state === 'queued') items.push({ label: 'Pause', run: () => dlApi.pause(d.id) });
   if (d.state === 'paused' || d.state === 'failed') items.push({ label: d.state === 'failed' ? 'Try again' : 'Resume', run: () => dlApi.resume(d.id) });
+  const queue = dlQueueIds();
+  if ((d.state === 'queued' || d.state === 'paused') && queue[0] !== d.id) items.push({ label: 'Download next', run: () => dlApi.reorder([d.id, ...queue.filter((x) => x !== d.id)]) });
   items.push({ label: d.state === 'done' ? 'Show in folder' : 'Open download folder', run: () => (d.state === 'done' ? dlApi.reveal(d.id) : dlApi.openFolder()) });
   if (ui.route !== 'downloads') items.push({ label: 'Go to Downloads', run: () => go('downloads') });
   if (d.state === 'done') {
@@ -295,7 +297,7 @@ function dlThumb(d) {
 }
 
 // a download that is still on its way, or failed (finished ones are cards)
-function dlRowHtml(d) {
+function dlRowHtml(d, { drag = false } = {}) {   // drag: in the Downloading list, where the order can be changed
   const busy = d.state === 'downloading' || d.state === 'queued' || d.state === 'paused';
   const title = d.kind === 'episode' ? d.seriesName : d.title;
   const sub = d.kind === 'episode' ? `${dlSE(d)}${d.epTitle && !/S\d+\s*E\d+/i.test(d.epTitle) ? ' · ' + d.epTitle : ''}` : d.year || 'Movie';
@@ -303,7 +305,8 @@ function dlRowHtml(d) {
   if (d.state === 'failed') main = '<button class="btn ghost small" data-act="dl-resume">Try again</button>';
   else if (d.state === 'paused') main = '<button class="icon-btn" data-act="dl-resume" title="Resume" aria-label="Resume"><svg class="ic fill"><use href="#i-play"/></svg></button>';
   else main = '<button class="icon-btn" data-act="dl-pause" title="Pause" aria-label="Pause"><svg class="ic"><use href="#i-pause"/></svg></button>';
-  return `<div class="dl-row ${d.state}" data-id="${esc(d.id)}">
+  return `<div class="dl-row ${d.state}" data-id="${esc(d.id)}"${drag ? ' draggable="true"' : ''}>
+    ${drag ? '<span class="dl-grip" title="Drag to change the order" aria-hidden="true"><svg class="ic"><use href="#i-grip"/></svg></span>' : ''}
     ${dlThumb(d)}
     <div class="dl-main"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}
       <div class="dl-status">${dlStatusHtml(d)}</div>
@@ -318,8 +321,8 @@ function renderDownloads() {
   const all = dl.items;
   const done = all.filter((d) => d.state === 'done');
   const failed = all.filter((d) => d.state === 'failed');
-  const order = { downloading: 0, queued: 1, paused: 2 };
-  const moving = all.filter((d) => d.state in order).sort((a, b) => order[a.state] - order[b.state] || a.addedAt - b.addedAt);
+  // in the order they download (the list's own order, which you can change by dragging)
+  const moving = all.filter((d) => d.state === 'downloading' || d.state === 'queued' || d.state === 'paused');
   const movies = done.filter((d) => d.kind === 'movie').sort((a, b) => b.doneAt - a.doneAt);
   const shows = new Map();
   for (const d of done.filter((x) => x.kind === 'episode')) {
@@ -336,7 +339,7 @@ function renderDownloads() {
   el.innerHTML = `<div class="page narrow dl-page">${pageHead('Downloads', sub, acts)}
     ${!all.length ? emptyState('i-download', 'No downloads yet', 'Use the download button on a movie or an episode – or “Download season” on a series – to watch it later without internet. Downloads are normal video files you can also open in VLC.') : ''}
     ${failed.length ? sec('Needs attention', failed.length, `<div class="dl-list">${failed.map((d) => dlRowHtml(d)).join('')}</div>`) : ''}
-    ${moving.length ? sec('Downloading', moving.length, `${dl.held ? '<p class="muted dl-note">Paused while you watch, so playback gets the connection. Change this in Settings › Downloads.</p>' : ''}<div class="dl-list">${moving.map((d) => dlRowHtml(d)).join('')}</div>`) : ''}
+    ${moving.length ? sec('Downloading', moving.length, `${dl.held ? '<p class="muted dl-note">Paused while you watch, so playback gets the connection. Change this in Settings › Downloads.</p>' : ''}<div class="dl-list dl-queue">${moving.map((d) => dlRowHtml(d, { drag: moving.length > 1 })).join('')}</div>`) : ''}
     ${movies.length ? sec('Movies', movies.length, `<div class="grid">${movies.map((d) => cardHtml(dlCard(d.uid, d), { fav: false })).join('')}</div>`) : ''}
     ${showList.length ? sec('Series', showList.length, `<div class="grid">${showList.map((eps) => cardHtml(dlCard(eps[0].seriesUid, eps[0]), { fav: false, sub: dlEpisodesLabel(eps) })).join('')}</div>`) : ''}
   </div>`;
@@ -366,6 +369,39 @@ function dlPaintRows() {
     if (bar) bar.style.width = dlPct(d) + '%';
   });
 }
+/* Dragging rows in the Downloading list changes what downloads next (top first). The row moves while you drag;
+   the new order goes to the desktop shell on drop. Redraws wait until then (dlUpdate). */
+const dlQueueIds = () => dl.items.filter((d) => d.state === 'downloading' || d.state === 'queued' || d.state === 'paused').map((d) => d.id);
+let dlDrag = null;   // { row, start: order before, redraw }
+$('#v-downloads').addEventListener('dragstart', (e) => {
+  const row = e.target.closest && e.target.closest('.dl-queue .dl-row[draggable]');
+  if (!row) return;
+  dlDrag = { row, start: dlQueueIds().join(), redraw: false };
+  row.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', row.dataset.id);
+});
+$('#v-downloads').addEventListener('dragover', (e) => {
+  const list = dlDrag && e.target.closest('.dl-queue');
+  if (!list) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  // put the row before the first one whose middle is below the pointer
+  const after = [...list.querySelectorAll('.dl-row:not(.dragging)')].find((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+  if (after) { if (after.previousElementSibling !== dlDrag.row) list.insertBefore(dlDrag.row, after); }
+  else if (list.lastElementChild !== dlDrag.row) list.appendChild(dlDrag.row);
+});
+$('#v-downloads').addEventListener('drop', (e) => { if (dlDrag && e.target.closest('.dl-queue')) e.preventDefault(); });
+$('#v-downloads').addEventListener('dragend', () => {
+  if (!dlDrag) return;
+  const { row, start, redraw } = dlDrag;
+  dlDrag = null;
+  row.classList.remove('dragging');
+  const ids = $$('#v-downloads .dl-queue .dl-row').map((r) => r.dataset.id);
+  if (ids.join() !== start) dlApi.reorder(ids);   // the shell sends the new list back, which redraws the page
+  else if (redraw) renderDownloads();
+});
+
 function openDownloads() {
   renderDownloads();
   dlInfoReady.then(() => { if (ui.route === 'downloads') renderDownloads(); });   // cards use the saved copies once loaded
@@ -414,7 +450,10 @@ function dlUpdate(s) {
   const nav = $('#nav [data-route="downloads"]');
   nav.dataset.count = dl.items.filter((d) => d.state === 'downloading' || d.state === 'queued').length;
   $$('[data-dl]').forEach(dlPaintBtn);
-  if (ui.route === 'downloads') { if (changed) renderDownloads(); else dlPaintRows(); }
+  if (ui.route === 'downloads') {
+    if (dlDrag) { if (changed) dlDrag.redraw = true; }   // not while a row is being dragged: after the drop
+    else if (changed) renderDownloads(); else dlPaintRows();
+  }
   if (!changed) return;
   dlPruneInfo();
   if (ui.route === 'ws' && ws.detail) { dlDetailShown(ws.detail); renderDetail(); }   // checkmarks, "Download season", greyed-out episodes

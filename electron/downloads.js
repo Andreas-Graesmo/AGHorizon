@@ -336,6 +336,19 @@ async function pause(id) {
   save(); send(); pump();
 }
 
+// A new order for the unfinished downloads (dragged in the list, or "Download next"). Downloads go one at a time,
+// first waiting one first; if that's no longer the one downloading, it takes over, and the other one waits with
+// its partial file (it continues from the same byte later).
+async function reorder(ids) {
+  const pos = new Map((Array.isArray(ids) ? ids : []).map((id, i) => [String(id), i]));
+  const moved = items.filter((x) => pos.has(x.id) && x.state !== 'done').sort((a, b) => pos.get(a.id) - pos.get(b.id));
+  if (!moved.length) return;
+  items = [...moved, ...items.filter((x) => !moved.includes(x))];
+  const next = items.find((x) => x.state === 'queued' || x.state === 'downloading');
+  if (active && next && next !== active.it) await stopActive(active.it, 'queued');
+  save(); send(); pump();
+}
+
 function resume(id) {
   const it = items.find((x) => x.id === id);
   if (it && (it.state === 'paused' || it.state === 'failed')) { Object.assign(it, { state: 'queued', error: '', tries: 0 }); save(); send(); pump(); }
@@ -370,6 +383,7 @@ function init() {
   ipcMain.handle('downloads:add', (_e, list) => add(list));
   ipcMain.handle('downloads:pause', (_e, id) => pause(id));
   ipcMain.handle('downloads:resume', (_e, id) => resume(id));
+  ipcMain.handle('downloads:reorder', (_e, ids) => reorder(ids));
   ipcMain.handle('downloads:remove', (_e, id, deleteFile) => remove(id, !!deleteFile));
   ipcMain.handle('downloads:reveal', (_e, id) => {
     const it = items.find((x) => x.id === id);

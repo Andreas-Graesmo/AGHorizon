@@ -836,3 +836,10 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
   .set-link[aria-current] { background: var(--accent); color: var(--accent-ink); }
   .set-card { scroll-margin-top: 64px; }
 }
+
+/* ── Downloads: dragging the Downloading list into a new order ── */
+.dl-queue .dl-row[draggable] { cursor: grab; }
+.dl-grip { flex: none; display: grid; place-items: center; width: 18px; margin: 0 -6px 0 -4px; color: var(--muted); }
+.dl-grip .ic { width: 18px; height: 18px; fill: currentColor; stroke: none; }
+.dl-queue .dl-row:hover .dl-grip { color: var(--text); }
+.dl-row.dragging { opacity: .45; cursor: grabbing; border-style: dashed; }

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('tunerDesktop', {
     add: (items) => ipcRenderer.invoke('downloads:add', items),
     pause: (id) => ipcRenderer.invoke('downloads:pause', id),
     resume: (id) => ipcRenderer.invoke('downloads:resume', id),
+    reorder: (ids) => ipcRenderer.invoke('downloads:reorder', ids),
     remove: (id, deleteFile) => ipcRenderer.invoke('downloads:remove', id, deleteFile),
     reveal: (id) => ipcRenderer.invoke('downloads:reveal', id),
     openFolder: () => ipcRenderer.invoke('downloads:openFolder'),
