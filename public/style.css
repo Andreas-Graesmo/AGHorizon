@@ -819,3 +819,20 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 /* the desktop app's picture-in-picture window has no frame: drag it by the title bar (shown on hover) */
 .player.in-pip .p-top { -webkit-app-region: drag; }
 .player.in-pip .p-top button { -webkit-app-region: no-drag; }
+
+/* ── Settings: the index beside the sections ── */
+.set-page { max-width: 1060px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; }
+.set-main { min-width: 0; max-width: 780px; }
+.set-index { position: sticky; top: 24px; display: grid; gap: 2px; padding-top: 52px; }
+.set-link { appearance: none; border: 0; background: none; text-align: left; padding: 8px 12px; border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 13.5px; cursor: pointer; border-left: 3px solid transparent; }
+.set-link:hover { color: var(--text); background: var(--panel); }
+.set-link[aria-current] { color: var(--text); background: var(--panel); border-left-color: var(--accent); }
+.set-card { scroll-margin-top: 20px; }
+/* narrow window: the index becomes a row of chips that stays at the top */
+@media (max-width: 900px) {
+  .set-page { display: block; max-width: 780px; }
+  .set-index { top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; margin-bottom: 8px; background: var(--bg); scrollbar-width: none; }
+  .set-link { flex: none; border-left: 0; border-radius: 99px; padding: 6px 12px; background: var(--panel); white-space: nowrap; }
+  .set-link[aria-current] { background: var(--accent); color: var(--accent-ink); }
+  .set-card { scroll-margin-top: 64px; }
+}

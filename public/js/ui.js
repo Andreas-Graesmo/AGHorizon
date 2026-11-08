@@ -698,7 +698,7 @@ function renderSettings() {
   const palSeg = (mode) => seg(mode + 'Palette', LS.get(`tuner.${mode}Palette`, mode === 'dark' ? 'midnight' : 'soft'),
     Object.entries(PALETTES[mode]).map(([k, [l, a, b]]) => [k, `<i class="pal-dot" style="--a:${a};--b:${b}"></i>${l}`]));
   const open = mirrorOpen();
-  $('#v-settings').innerHTML = `<div class="page narrow">${pageHead('Settings')}
+  $('#v-settings').innerHTML = `<div class="page set-page"><nav class="set-index" id="setIndex" aria-label="Settings sections"></nav><div class="set-main">${pageHead('Settings')}
     <section class="set-card"><h3>Appearance</h3>
       <div class="set-row"><div><b>Theme</b><p class="muted">Dark, light, or follow your system.</p></div>${seg('theme', theme, [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']])}</div>
       <div class="set-row"><div><b>Dark palette</b><p class="muted">Used when the app is dark. OLED black suits OLED screens and dark rooms.</p></div>${palSeg('dark')}</div>
@@ -726,8 +726,50 @@ function renderSettings() {
       <div class="set-row"><div><b>Shortcuts</b><p class="muted">Press <kbd>?</kbd> anywhere to see them.</p></div><button class="btn ghost" data-act="show-help"><svg class="ic"><use href="#i-keyboard"/></svg>Show shortcuts</button></div>
     </section>
     ${updatesCard()}
-    <p class="muted center">AG Horizon · use only with services you’re entitled to watch.</p></div>`;
+    <p class="muted center">AG Horizon · use only with services you’re entitled to watch.</p></div></div>`;
+  buildSettingsIndex();
 }
+
+// The index beside Settings: one link per section, made from the sections' titles (also those other files add),
+// with the one you're in lit up.
+function buildSettingsIndex() {
+  const cards = $$('#v-settings .set-card');
+  $('#setIndex').innerHTML = cards.map((c, i) => {
+    const h = c.querySelector('h3');
+    c.id = 'set-' + h.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `<button class="set-link" data-set-go="${c.id}"${i === 0 ? ' aria-current="true"' : ''}>${esc(h.textContent.trim())}</button>`;
+  }).join('');
+  syncSettingsIndex();
+}
+function syncSettingsIndex() {
+  const view = $('#v-settings');
+  const top = view.getBoundingClientRect().top + 90;
+  const cards = $$('#v-settings .set-card');
+  if (!cards.length) return;
+  let cur = cards[0];
+  for (const c of cards) if (c.getBoundingClientRect().top <= top) cur = c;
+  if (view.scrollTop + view.clientHeight >= view.scrollHeight - 4) cur = cards[cards.length - 1];   // the last ones can't reach the top
+  const picked = settingsIndexPick && document.getElementById(settingsIndexPick);
+  if (picked) cur = picked;   // clicked in the index: that one, until you scroll yourself
+  $$('#setIndex .set-link').forEach((b) => { if (b.dataset.setGo === cur.id) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+  // chips on a narrow window: keep the lit one in view by scrolling just the row (scrollIntoView would also stop the
+  // page's own smooth scroll after a click)
+  const row = $('#setIndex');
+  const lit = $('#setIndex [aria-current]');
+  if (lit && row.scrollWidth > row.clientWidth && (lit.offsetLeft < row.scrollLeft || lit.offsetLeft + lit.offsetWidth > row.scrollLeft + row.clientWidth)) {
+    row.scrollTo({ left: lit.offsetLeft - 12, behavior: 'smooth' });
+  }
+}
+let settingsIndexPick = '';
+$('#v-settings').addEventListener('scroll', () => { cancelAnimationFrame(syncSettingsIndex.f); syncSettingsIndex.f = requestAnimationFrame(syncSettingsIndex); });
+for (const ev of ['wheel', 'keydown', 'touchstart']) $('#v-settings').addEventListener(ev, () => { settingsIndexPick = ''; }, { passive: true });
+$('#v-settings').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-set-go]');
+  if (!b) return;
+  settingsIndexPick = b.dataset.setGo;
+  document.getElementById(b.dataset.setGo).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  syncSettingsIndex();
+});
 $('#v-settings').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-set]');
   if (!b) return;
