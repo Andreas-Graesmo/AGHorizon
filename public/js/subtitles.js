@@ -44,7 +44,10 @@ function subParse(vtt) {
 }
 
 function subApply() {
-  if (!sub.track) sub.track = video.addTextTrack('subtitles', 'Subtitles');
+  if (!sub.track) {
+    sub.track = video.addTextTrack('subtitles', 'Subtitles');
+    sub.track.addEventListener('cuechange', () => subSample());   // the panel's sample line fills the gaps between lines
+  }
   const t = sub.track;
   t.mode = 'hidden';   // cues can only be removed while the track isn't disabled
   while (t.cues && t.cues.length) t.removeCue(t.cues[0]);
@@ -402,16 +405,21 @@ document.addEventListener('mousedown', subPanelOutside, true);
 onPipDoc('mousedown', subPanelOutside, true);   // and in the picture-in-picture window
 
 // A sample line while the panel is open and no subtitles are on, on a track of its own.
+// Shown while the Appearance panel is open and no real subtitle is on screen: subtitles off, or a gap between lines.
 let subSampleTrack = null;
+let subSampleOn = false;
 function subSample() {
   if (!subSampleTrack && !subPanelOpen()) return;
-  if (!subSampleTrack) subSampleTrack = video.addTextTrack('subtitles', 'Sample');
-  const t = subSampleTrack;
-  const want = subPanelOpen() && !sub.cues.length && !sub.stream;
-  t.mode = 'hidden';
-  while (t.cues && t.cues.length) t.removeCue(t.cues[0]);
-  if (want) t.addCue(new VTTCue(0, 1e6, 'This is how subtitles\nwill look.'));
-  t.mode = want ? 'showing' : 'disabled';
+  if (!subSampleTrack) {
+    subSampleTrack = video.addTextTrack('subtitles', 'Sample');
+    subSampleTrack.mode = 'hidden';
+    subSampleTrack.addCue(new VTTCue(0, 1e6, 'This is how subtitles\nwill look.'));
+  }
+  const real = sub.track && sub.track.mode === 'showing' && sub.track.activeCues && sub.track.activeCues.length > 0;
+  const want = subPanelOpen() && !real;
+  if (want === subSampleOn) return;   // only on a change, so it doesn't flicker
+  subSampleOn = want;
+  subSampleTrack.mode = want ? 'showing' : 'hidden';   // hidden, not disabled: keeps its cue
 }
 $('#v-settings').addEventListener('change', (e) => {
   const k = e.target.dataset.sub;
