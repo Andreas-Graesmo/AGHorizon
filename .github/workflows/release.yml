@@ -19,10 +19,37 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+      # Electron (~100 MB) and electron-builder's tools come from GitHub's file servers on every build; keep them
+      # between builds, so a build rarely depends on those downloads (a new Electron version downloads once).
+      - name: Cache Electron and electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+      # downloads can fail for a moment (e.g. "504 Gateway Time-out"): try again before giving up
       - name: Install
-        run: npm install
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            npm install && exit 0
+            echo "npm install failed (try $i of 3), trying again in 30 seconds"; sleep 30
+          done
+          exit 1
       - name: Download the video libraries so the app also works offline
-        run: npm run setup
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            npm run setup && exit 0
+            echo "Download failed (try $i of 3), trying again in 30 seconds"; sleep 30
+          done
+          exit 1
       - name: Add the OpenSubtitles API key (repository secret OPENSUBTITLES_API_KEY)
         shell: bash
         run: |
