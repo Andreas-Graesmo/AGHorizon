@@ -49,6 +49,7 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
    ```
    npm run release:patch     # 1.5.0 → 1.5.1  (fixes)
    npm run release:minor     # 1.5.0 → 1.6.0  (new features)
+   npm run release:major     # 1.5.0 → 2.0.0  (a big step, e.g. a redesign)
    ```
    (This runs `npm version`, which edits `package.json`, commits, tags `vX.Y.Z`, and then pushes both. Your working folder must have no uncommitted changes.)
 3. Wait for the Action to finish, open **Releases**, edit the new draft's notes and **Publish release**.
