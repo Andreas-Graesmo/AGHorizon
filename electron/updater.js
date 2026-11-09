@@ -10,7 +10,9 @@ const pkg = require('../package.json');
 let autoUpdater = null;
 try { ({ autoUpdater } = require('electron-updater')); } catch { /* dependency missing: updates are simply unavailable */ }
 
-const pub = [].concat((pkg.build && pkg.build.publish) || [])[0] || {};   // the repository electron-builder publishes to
+// From "repository": electron-builder strips "build" (and its publish settings) from the installed app's package.json.
+const repo = /github\.com[/:]([^/]+)\/([^/#]+?)(?:\.git)?$/i.exec(String((pkg.repository && pkg.repository.url) || pkg.repository || '').trim());
+const pub = repo ? { owner: repo[1], repo: repo[2] } : {};
 const releasesUrl = pub.owner && pub.repo ? `https://github.com/${pub.owner}/${pub.repo}/releases/latest` : '';
 
 let status = { state: 'idle' };
