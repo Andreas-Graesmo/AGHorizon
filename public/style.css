@@ -745,10 +745,13 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-ring circle { fill: none; stroke: color-mix(in srgb, currentColor 25%, transparent); stroke-width: 2.6; }
 .dl-ring circle.v { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }
 .dl-ring.paused circle.v { stroke: var(--muted); }
-.ep.has-dl { grid-template-columns: 34px 1fr auto auto; }
+.ep { grid-template-columns: 34px 1fr auto 33px 33px; }   /* number, title, duration or ✓, download, ⋮ */
 .ep.off { opacity: .4; cursor: default; }   /* offline and not downloaded */
 .ep.off:hover { background: none; border-color: transparent; }
-.ep-dl { color: var(--muted); }
+.ep-dl, .ep-more { color: var(--muted); width: 33px; height: 33px; padding: 8px; }
+.ep-dl.on { color: var(--accent); }   /* downloaded */
+.ep-more .ic { width: 17px; height: 17px; }
+.ep-w { width: 17px; height: 17px; color: var(--accent); stroke-width: 2.4; vertical-align: middle; }   /* watched */
 .ep-dl .ic, .ep-dl .dl-ring { width: 17px; height: 17px; }
 .seasons { align-items: center; }
 .dl-season-note { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
@@ -843,3 +846,17 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-grip .ic { width: 18px; height: 18px; fill: currentColor; stroke: none; }
 .dl-queue .dl-row:hover .dl-grip { color: var(--text); }
 .dl-row.dragging { opacity: .45; cursor: grabbing; border-style: dashed; }
+
+/* ── series page: downloads in the season list ── */
+.chip-btn .ic { width: 13px; height: 13px; vertical-align: -2px; }
+.chip-btn.has-dl .ic { margin-left: 5px; color: var(--accent); }
+.chip-btn.has-dl.on .ic { color: inherit; }
+.chip-btn.dl-tab { display: inline-flex; align-items: center; gap: 5px; }   /* a tab like the seasons */
+.ep-season { margin: 14px 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.ep-season:first-of-type { margin-top: 4px; }
+/* a download's state icon (downloading / downloaded): not a button; its actions are in the ⋮ menu */
+.dl-ind { cursor: default; }   /* still shows its tooltip ("Downloaded", "Downloading 45 %") */
+.icon-btn.dl-ind:hover { background: none; color: var(--muted); }
+.btn.dl-ind:hover { filter: none; }
+.dl-ind.on:hover { color: var(--accent); }
+.dt-btns .sq.dl-ind:hover { background: color-mix(in srgb, var(--panel-3) 80%, transparent); }   /* the movie page's square buttons */

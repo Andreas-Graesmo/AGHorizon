@@ -710,27 +710,45 @@ function renderDetail() {
   } else if (d.seasons) {
     const eps = allEpisodes(d.seasons);
     const isDone = (e) => { const p = progressOf(e.uid); return p && p.w; };
-    const playable = offline ? eps.filter((e) => dlDone(e.uid)) : eps;
+    // Downloads: "Downloaded" is a tab like the seasons (state.season = 'dl') that lists just the downloaded episodes,
+    // from every season; chosen by itself offline, where only they play. Play / Continue then picks among them too.
+    // Seasons that have downloads are marked.
+    const hasDl = eps.some((e) => dlDone(e.uid));
+    const chosen = state.season[it.uid];
+    const dlOnly = hasDl && (chosen === 'dl' || (chosen === undefined && offline));
+    const playable = offline || dlOnly ? eps.filter((e) => dlDone(e.uid)) : eps;
     const next = playable.find((e) => !isDone(e)) || playable[0];
     const nums = Object.keys(d.seasons).map(Number).sort((a, b) => a - b);
-    const cur = state.season[it.uid] ?? (next ? next.season : nums[0]);
+    const cur = dlOnly ? null : Number(chosen !== undefined && chosen !== 'dl' ? chosen : next ? next.season : nums[0]);
     if (next) {
       const p = progressOf(next.uid);
       primary = p && !p.w && p.t > 10 ? 'Resume' : eps.every((e) => !progressOf(e.uid)) ? 'Play' : 'Continue';
       primarySub = `S${String(next.season).padStart(2, '0')}E${String(next.num).padStart(2, '0')}`;
       primaryAct = `ep" data-uid="${esc(next.uid)}`;
     }
-    seriesBlock = `<h3>Episodes<small>${eps.length}</small></h3><div class="seasons">${nums.map((n) => `<button class="chip-btn${n === cur ? ' on' : ''}" data-act="season" data-s="${n}">Season ${n}</button>`).join('')}<div class="grow"></div>${offline ? '' : dlSeasonHtml(d.seasons[cur], cur)}</div>
-      <div class="ep-list">${(d.seasons[cur] || []).map((e) => {
-        const p = progressOf(e.uid);
-        const pct = p && p.d && !p.w ? Math.round((p.t / p.d) * 100) : 0;
-        const off = offline && !dlDone(e.uid);
-        const dlb = !off && dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '';
-        return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${dlb ? ' has-dl' : ''}${off ? ' off' : ''}" data-act="ep" data-uid="${esc(e.uid)}"${off ? ' title="Not downloaded"' : ''}>
+    const epRow = (e) => {
+      const p = progressOf(e.uid);
+      const pct = p && p.d && !p.w ? Math.round((p.t / p.d) * 100) : 0;
+      const off = offline && !dlDone(e.uid);
+      // download button (a blue download icon once downloaded), or an empty slot so the rows line up; then ⋮
+      const dlb = !off && dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '<span class="ep-dl"></span>';
+      const watched = !!(p && p.w);
+      return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${off ? ' off' : ''}" data-act="ep" data-uid="${esc(e.uid)}"${off ? ' title="Not downloaded"' : ''}>
           <span class="ep-n">${e.num || ''}</span>
           <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
-          <span class="ep-d">${p && p.w ? '✓' : esc(e.duration || '')}</span>${dlb}</div>`;
-      }).join('')}</div>`;
+          <span class="ep-d">${watched ? '<svg class="ic ep-w" aria-label="Watched"><use href="#i-check"/></svg>' : esc(e.duration || '')}</span>${dlb}
+          <button class="icon-btn ep-more" data-act="ep-more" data-uid="${esc(e.uid)}" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>`;
+    };
+    const dlInSeason = (n) => (d.seasons[n] || []).some((e) => dlDone(e.uid));
+    const dlMark = '<svg class="ic"><use href="#i-download"/></svg>';
+    const dlTab = hasDl ? `<button class="chip-btn dl-tab${dlOnly ? ' on' : ''}" data-act="season" data-s="dl" title="The episodes on this computer, from every season">${dlMark}Downloaded</button>` : '';
+    const seasonChips = nums.map((n) => `<button class="chip-btn${n === cur ? ' on' : ''}${dlInSeason(n) ? ' has-dl' : ''}" data-act="season" data-s="${n}"${dlInSeason(n) ? ' title="Has downloaded episodes"' : ''}>Season ${n}${dlInSeason(n) ? dlMark : ''}</button>`).join('');
+    const list = dlOnly
+      ? nums.filter(dlInSeason).map((n) => `<div class="ep-season">Season ${n}</div><div class="ep-list">${d.seasons[n].filter((e) => dlDone(e.uid)).map(epRow).join('')}</div>`).join('')
+      : `<div class="ep-list">${(d.seasons[cur] || []).map(epRow).join('')}</div>`;
+    const dlCount = eps.filter((e) => dlDone(e.uid)).length;
+    seriesBlock = `<h3>Episodes<small>${dlOnly ? `${dlCount} of ${eps.length} downloaded` : eps.length}</small></h3><div class="seasons">${dlTab}${seasonChips}<div class="grow"></div>${offline || dlOnly ? '' : dlSeasonHtml(d.seasons[cur], cur)}</div>
+      ${list}`;
   } else if (d.loading) seriesBlock = '<p class="muted">Loading episodes…</p>';
   else if (d.error) seriesBlock = `<p class="err-text">Couldn’t load episodes: ${esc(d.error)}</p>`;
 
@@ -782,14 +800,17 @@ $('#wsDetail').addEventListener('click', (e) => {
   if (act === 'close') closeDetail();
   else if (act === 'play') { toPlayer(); playChannel(withBestUrl(it)); }
   else if (act === 'restart') { delete state.progress[it.uid]; persistProgress(); toPlayer(); playChannel(withBestUrl(it)); }
-  else if (act === 'season') { state.season[it.uid] = Number(b.dataset.s); renderDetail(); }
-  else if (act === 'ep') {
+  else if (act === 'season') { state.season[it.uid] = b.dataset.s === 'dl' ? 'dl' : Number(b.dataset.s); renderDetail(); }
+  else if (act === 'ep-more') {
+    const ep = allEpisodes((state.detail[it.uid] || it).seasons).find((x) => x.uid === b.dataset.uid);
+    if (ep) showMenu(b, epMenuItems(ep));
+  } else if (act === 'ep') {
     if (b.classList.contains('off')) return;   // offline and not downloaded
     const ep = allEpisodes((state.detail[it.uid] || it).seasons).find((x) => x.uid === b.dataset.uid);
     if (ep) { toPlayer(); playChannel(ep); }
   } else if (act === 'dl') {
     const target = b.dataset.dl === it.uid ? it : allEpisodes((state.detail[it.uid] || it).seasons).find((x) => x.uid === b.dataset.dl);
-    if (target) dlClick(target, b);
+    if (target) dlClick(target);
   } else if (act === 'dl-season') {
     const eps = ((state.detail[it.uid] || it).seasons || {})[b.dataset.s] || [];
     dlStart(eps.filter((x) => !dlOf(x.uid) || dlOf(x.uid).state === 'failed'));
@@ -802,12 +823,33 @@ $('#wsDetail').addEventListener('click', (e) => {
     if (p && p.w) delete state.progress[it.uid]; else state.progress[it.uid] = { t: 0, d: (p && p.d) || 0, w: 1, ts: Date.now() };
     persistProgress(); renderDetail();
   } else if (act === 'more-menu') {
+    const d = dlOf(it.uid);
     showMenu(b, [
       { label: 'Start over', run: () => { delete state.progress[it.uid]; persistProgress(); toPlayer(); playChannel(withBestUrl(it)); } },
       { label: 'Copy stream link', run: () => copyLink(withBestUrl(it)) },
+      ...(d ? [{ heading: true, label: 'Download' }, ...dlMenuItems(d).filter((x) => x.label !== 'Play')] : []),   // the Play / Resume button is right there
     ]);
   }
 });
+
+// An episode's ⋮ menu: playing and watched state, then what can be done with its download.
+function epMenuItems(ep) {
+  const p = progressOf(ep.uid);
+  const watched = !!(p && p.w);
+  const playable = !(isOffline() && !dlDone(ep.uid));
+  const items = [];
+  if (playable && p && !p.w && p.t > 10) items.push({ label: 'Play from the start', run: () => { delete state.progress[ep.uid]; persistProgress(); $('#wsDetail').scrollTop = 0; playChannel(ep); } });
+  items.push({
+    label: watched ? 'Mark as not watched' : 'Mark as watched',
+    run: () => {
+      if (watched) delete state.progress[ep.uid]; else state.progress[ep.uid] = { t: 0, d: (p && p.d) || 0, w: 1, ts: Date.now() };
+      persistProgress(); renderDetail();
+    },
+  });
+  const d = dlOf(ep.uid);
+  if (d) items.push({ heading: true, label: 'Download' }, ...dlMenuItems(d).filter((x) => x.label !== 'Play'));
+  return items;
+}
 
 // Wait until the details (episodes) of a series are available, e.g. when opening an episode from "Continue watching".
 async function detailReady(it) {

@@ -187,6 +187,7 @@ async function dlOpen(card) {
   const it = snap.item;
   if (!playlistById(it.pid)) { toast('That playlist was removed.', 'err'); return; }
   await openWorkspace(it.pid, modeOf(it));
+  if (it.kind === 'series') state.season[it.uid] = 'dl';   // straight to the "Downloaded" tab
   const real = !isOffline() && ws.items.find((x) => x.uid === it.uid);
   if (real) { openDetail(real); return; }
   ws.offline = true;   // no catalogue: show the copy; episodes that aren't downloaded are greyed out
@@ -214,7 +215,9 @@ async function dlDelete(d) {
   await dlApi.remove(d.id, true);
 }
 
-function dlMenu(d, anchor) {
+function dlMenu(d, anchor) { showMenu(anchor, dlMenuItems(d)); }
+// what can be done with a download in its state (also part of an episode's ⋮ menu)
+function dlMenuItems(d) {
   const items = [];
   if (d.state === 'failed' && d.error) items.push({ heading: true, label: d.error });
   if (d.state === 'done') items.push({ label: 'Play', run: () => dlPlay(d) });
@@ -228,33 +231,35 @@ function dlMenu(d, anchor) {
     items.push({ label: 'Remove from list (keep the file)', run: () => dlApi.remove(d.id, false) });
     items.push({ label: 'Delete download', run: () => dlDelete(d) });
   } else items.push({ label: 'Cancel download', run: () => dlApi.remove(d.id, true) });
-  showMenu(anchor, items);
+  return items;
 }
 
-// The download button on a movie or episode: starts the download, or offers what fits its current state.
-function dlClick(it, anchor) {
-  const d = dlOf(it.uid);
-  if (!d) dlStart([it]);
-  else dlMenu(d, anchor);
+// The download button on a movie or episode starts the download (after that it's an icon, see dlBtnHtml).
+function dlClick(it) {
+  if (!dlOf(it.uid)) dlStart([it]);
 }
 
 function dlBtnState(uid) {
   const d = dlOf(uid);
   const ring = (pct, cls) => `<svg class="dl-ring ${cls}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle class="v" cx="12" cy="12" r="9" stroke-dasharray="${(pct * 56.55) / 100} 56.55"/></svg>`;
   if (!d) return { cls: '', title: 'Download', html: '<svg class="ic"><use href="#i-download"/></svg>' };
-  if (d.state === 'done') return { cls: 'on', title: 'Downloaded', html: '<svg class="ic"><use href="#i-check-plain"/></svg>' };
+  if (d.state === 'done') return { cls: 'on', title: 'Downloaded', html: '<svg class="ic"><use href="#i-download"/></svg>' };   // a checkmark means "watched"
   if (d.state === 'failed') return { cls: 'err', title: 'Download failed: ' + (d.error || ''), html: '<svg class="ic"><use href="#i-info"/></svg>' };
   if (d.state === 'paused') return { cls: '', title: `Download paused at ${dlPct(d)}%`, html: ring(dlPct(d), 'paused') };
   if (d.state === 'queued') return { cls: '', title: dl.held ? 'Waiting – downloads pause while you watch' : 'Queued for download', html: ring(dlPct(d), 'paused') };
   return { cls: 'on', title: `Downloading ${dlPct(d)}%`, html: ring(dlPct(d), '') };
 }
+// A button that starts the download; once there is one (downloading, paused, done…) just an icon showing its state.
+// What can be done with it then is in the ⋮ menu of the movie / episode.
 function dlBtnHtml(it, cls) {
   const s = dlBtnState(it.uid);
+  if (dlOf(it.uid)) return `<span class="${cls} dl-btn dl-ind ${s.cls}" data-cls="${cls}" data-dl="${esc(it.uid)}" title="${esc(s.title)}" role="img" aria-label="${esc(s.title)}">${s.html}</span>`;
   return `<button class="${cls} dl-btn ${s.cls}" data-cls="${cls}" data-act="dl" data-dl="${esc(it.uid)}" title="${esc(s.title)}" aria-label="${esc(s.title)}">${s.html}</button>`;
 }
 function dlPaintBtn(b) {
+  if (!!dlOf(b.dataset.dl) !== (b.tagName === 'SPAN')) { b.outerHTML = dlBtnHtml({ uid: b.dataset.dl }, b.dataset.cls); return; }   // button ⇄ icon
   const s = dlBtnState(b.dataset.dl);
-  b.className = `${b.dataset.cls} dl-btn ${s.cls}`;
+  b.className = `${b.dataset.cls} dl-btn dl-ind ${s.cls}`;   // only icons get here: a button that starts a download doesn't change
   b.title = s.title;
   b.setAttribute('aria-label', s.title);
   b.innerHTML = s.html;
