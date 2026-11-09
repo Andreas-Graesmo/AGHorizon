@@ -179,21 +179,24 @@ function dlFallback(uid) {
   return { item: { uid, pid: d.pid, id: '', kind: 'series', name: d.seriesName, year: d.year, logo: d.poster }, detail: { info: {}, seasons } };
 }
 
-// A card on the Downloads page opens its movie / series page: the live one when the playlist loads, else the saved copy.
+// A movie / series with downloads opens its saved copy at once; the catalogue and fresh details load behind it
+// (on a weak connection that takes long, offline it never comes). Returns the item shown, or null if nothing is saved.
 async function dlOpen(card) {
   await dlInfoReady;
   const snap = dlInfo.map[card.uid] || dlFallback(card.uid);
-  if (!snap) return;
+  if (!snap) return null;
   const it = snap.item;
-  if (!playlistById(it.pid)) { toast('That playlist was removed.', 'err'); return; }
-  await openWorkspace(it.pid, modeOf(it));
-  if (it.kind === 'series') state.season[it.uid] = 'dl';   // straight to the "Downloaded" tab
-  const real = !isOffline() && ws.items.find((x) => x.uid === it.uid);
-  if (real) { openDetail(real); return; }
-  ws.offline = true;   // no catalogue: show the copy; episodes that aren't downloaded are greyed out
+  if (!playlistById(it.pid)) { toast('That playlist was removed.', 'err'); return null; }
+  const catalogue = openWorkspace(it.pid, modeOf(it));
+  if (it.kind === 'series' && card.dlCard) state.season[it.uid] = 'dl';   // from Downloads: straight to the "Downloaded" tab
   const d = state.detail[it.uid];
-  if (!d || d.loading || d.error || !snap.detail) state.detail[it.uid] = snap.detail || { info: {} };
+  if (!d || d.loading || d.error) state.detail[it.uid] = { ...(snap.detail || { info: {} }), saved: true };   // loadDetail refreshes it
   openDetail(it);
+  catalogue.then(() => {
+    // no catalogue: episodes that aren't downloaded are greyed out
+    if (ws.detail === it && (isOffline() || !ws.items.some((x) => x.uid === it.uid))) { ws.offline = true; renderDetail(); }
+  });
+  return it;
 }
 
 async function dlStart(list) {

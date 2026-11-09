@@ -246,8 +246,10 @@ function buildSeasons(item, p, j) {
 async function loadDetail(it) {
   const p = playlistById(it.pid);
   if (it.seasons) { state.detail[it.uid] = { info: {}, seasons: it.seasons }; return; }
-  if (!p || !it.xtream || state.detail[it.uid]) return;
-  state.detail[it.uid] = { loading: true, info: {} };
+  const had = state.detail[it.uid];
+  if (!p || !it.xtream || (had && !had.saved)) return;
+  if (had) had.saved = false;   // a saved copy (downloads.js) stays on screen while the fresh details load
+  else state.detail[it.uid] = { loading: true, info: {} };
   try {
     if (it.kind === 'movie') {
       const j = await apiJson(xt.api(p, 'get_vod_info', `&vod_id=${it.id}`), p);
@@ -257,7 +259,7 @@ async function loadDetail(it) {
       state.detail[it.uid] = { info: j.info || {}, seasons: buildSeasons(it, p, j) };
     }
   } catch (e) {
-    state.detail[it.uid] = { info: {}, error: e.message };
+    if (!had) state.detail[it.uid] = { info: {}, error: e.message };
   }
   uiDetailLoaded(it);
 }

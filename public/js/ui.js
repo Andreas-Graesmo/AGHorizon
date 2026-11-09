@@ -247,12 +247,14 @@ async function openItem(it) {
   if (it.dlCard) return dlOpen(it);   // Downloads page: also works offline
   const mode = modeOf(it);
   const inPlace = ui.route === 'ws' && ws.pid === it.pid && ws.mode === mode && !ws.loading;
-  if (!inPlace) {
-    if (!playlistById(it.pid)) { toast('That playlist was removed.', 'err'); return; }
-    await openWorkspace(it.pid, mode);
-  }
   const wanted = it.kind === 'episode' ? it.seriesUid : it.uid;
-  const real = ws.items.find((i) => i.uid === wanted);
+  if (!inPlace && !playlistById(it.pid)) { toast('That playlist was removed.', 'err'); return; }
+  // something of it is downloaded: its saved page opens at once instead of waiting for the catalogue
+  let real = !inPlace && mode !== 'live' ? await dlOpen({ uid: wanted }) : null;
+  if (!real) {
+    if (!inPlace) await openWorkspace(it.pid, mode);
+    real = ws.items.find((i) => i.uid === wanted);
+  }
   if (!real) { toast('That title is not in the playlist any more.', 'err'); return; }
 
   if (mode === 'live') {
