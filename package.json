@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "web": "node server.js",
+    "test": "node --test",
     "setup": "node scripts/get-vendor.js",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",

@@ -38,8 +38,8 @@ jobs:
         shell: bash
         run: |
           for i in 1 2 3; do
-            npm install && exit 0
-            echo "npm install failed (try $i of 3), trying again in 30 seconds"; sleep 30
+            npm ci && exit 0
+            echo "npm ci failed (try $i of 3), trying again in 30 seconds"; sleep 30
           done
           exit 1
       - name: Download the video libraries so the app also works offline

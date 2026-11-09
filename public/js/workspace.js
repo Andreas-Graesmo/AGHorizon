@@ -58,7 +58,7 @@ async function loadWs({ force = false } = {}) {
   if (!['*', '*fav', '*recent'].includes(ws.cat) && !ws.items.some((c) => c.group === ws.cat)) ws.cat = '*';
   renderWsChrome();
   renderWsBody();
-  if (mode === 'live' && !ws.errors.length && (force || !state.epg[p.id])) loadEpg(p, force);
+  if (mode === 'live' && !ws.errors.length && (force || (!state.epg[p.id] && state.epgState[p.id] !== 'loading'))) loadEpg(p, force);
 }
 
 function cachedCount(p, mode) {

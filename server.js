@@ -54,9 +54,7 @@ function friendlyError(e) {
 }
 
 async function upstream(urlStr, { ua, range, signal } = {}) {
-  let u;
-  try { u = new URL(urlStr); } catch { throw httpError(400, 'Invalid URL'); }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw httpError(400, 'Only http(s) URLs are supported');
+  const u = checkUrl(urlStr);
   const headers = { 'User-Agent': ua || DEFAULT_UA, Accept: '*/*' };
   if (range) headers.Range = range;
   return fetch(u, { headers, redirect: 'follow', signal });
@@ -574,7 +572,7 @@ function start(port = PORT) {
   });
 }
 
-module.exports = { start, server, setLocalFiles };
+module.exports = { start, server, setLocalFiles, parseXmltvTime, rewriteM3u8 };   // the last two for test/
 
 // `node server.js` runs it as a plain web server; the desktop app (electron/main.js) calls start() instead.
 if (require.main === module) {

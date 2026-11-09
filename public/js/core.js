@@ -72,7 +72,6 @@ const state = {
 for (const p of state.playlists) if (!p.added) p.added = Date.now();   // playlists saved by older versions
 const playlistById = (id) => state.playlists.find((p) => p.id === id);
 const savePlaylists = () => LS.set('tuner.playlists', state.playlists);
-const saveFavs = () => LS.set('tuner.favs', [...state.favs]);
 function dropCaches(id) {
   for (const k of Object.keys(state.cache)) if (k === id || k.startsWith(id + ':')) delete state.cache[k];
   delete state.epg[id]; delete state.epgState[id];
@@ -340,8 +339,15 @@ function groupEpisodes(episodes, p) {
 }
 
 /* ─────────────────────────── playlist loading ─────────────────────────── */
-async function loadPlaylist(p, force) {
-  if (!force && state.cache[p.id]) return state.cache[p.id];
+// A caller that doesn't force a reload waits for a load already running (e.g. the start-up reload) instead of fetching again.
+const playlistLoads = {};   // playlist id -> promise of the running load
+function loadPlaylist(p, force) {
+  if (!force && state.cache[p.id]) return Promise.resolve(state.cache[p.id]);
+  if (!force && playlistLoads[p.id]) return playlistLoads[p.id];
+  const job = fetchAndCache(p).finally(() => { if (playlistLoads[p.id] === job) delete playlistLoads[p.id]; });
+  return (playlistLoads[p.id] = job);
+}
+async function fetchAndCache(p) {
   state.status[p.id] = 'checking';
   try {
     const res = await fetchPlaylist(p);

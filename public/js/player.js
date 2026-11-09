@@ -85,8 +85,8 @@ function ensureLib(globalName, sources) {
     return false;
   })());
 }
-const loadHls = () => ensureLib('Hls', ['vendor/hls.min.js', 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js']);
-const loadMpegts = () => ensureLib('mpegts', ['vendor/mpegts.js', 'https://cdn.jsdelivr.net/npm/mpegts.js@1/dist/mpegts.js']);
+const loadHls = () => ensureLib('Hls', ['vendor/hls.min.js', 'https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js']);
+const loadMpegts = () => ensureLib('mpegts', ['vendor/mpegts.js', 'https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js']);
 
 function teardown() {
   if (hlsPlayer) { try { hlsPlayer.destroy(); } catch { /* ignore */ } hlsPlayer = null; }

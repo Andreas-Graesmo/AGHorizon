@@ -10,15 +10,8 @@ const pkg = require('../package.json');
 let autoUpdater = null;
 try { ({ autoUpdater } = require('electron-updater')); } catch { /* dependency missing: updates are simply unavailable */ }
 
-function findRepo() {
-  const r = pkg.repository && (typeof pkg.repository === 'string' ? pkg.repository : pkg.repository.url);
-  const m = r && /github\.com[/:]([^/]+)\/([^/#]+?)(?:\.git)?$/i.exec(String(r).trim()) || (r && /^github:([^/]+)\/(.+)$/i.exec(String(r).trim()));
-  if (m) return { owner: m[1], repo: m[2] };
-  const p = [].concat((pkg.build && pkg.build.publish) || [])[0];
-  return p && p.owner && p.repo ? { owner: p.owner, repo: p.repo } : {};
-}
-const pub = findRepo();
-const releasesUrl = pub.owner && pub.repo && !/^YOUR-/i.test(pub.owner) ? `https://github.com/${pub.owner}/${pub.repo}/releases/latest` : '';
+const pub = [].concat((pkg.build && pkg.build.publish) || [])[0] || {};   // the repository electron-builder publishes to
+const releasesUrl = pub.owner && pub.repo ? `https://github.com/${pub.owner}/${pub.repo}/releases/latest` : '';
 
 let status = { state: 'idle' };
 function send(next) {
@@ -31,6 +24,13 @@ const reason = () => {
   if (!releasesUrl) return 'No GitHub repository is configured yet (see RELEASING.md).';
   return '';
 };
+
+// "v1.12.0" vs "1.9.3": compare the numbers part by part
+function newer(tag, current) {
+  const a = tag.replace(/^v/i, '').split('.').map(Number), b = current.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  return false;
+}
 
 async function manualCheck() {
   if (!releasesUrl) { send({ state: 'error', message: 'No GitHub repository is configured yet: set your username and repository in package.json (see RELEASING.md).' }); return status; }

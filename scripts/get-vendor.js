@@ -6,8 +6,8 @@ const fs = require('fs');
 const path = require('path');
 
 const FILES = {
-  'hls.min.js': 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js',
-  'mpegts.js': 'https://cdn.jsdelivr.net/npm/mpegts.js@1/dist/mpegts.js',
+  'hls.min.js': 'https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js',
+  'mpegts.js': 'https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js',
 };
 const dir = path.join(__dirname, '..', 'public', 'vendor');
 
