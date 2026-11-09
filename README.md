@@ -101,3 +101,5 @@ See [RELEASING.md](RELEASING.md) for how to publish new versions on GitHub and u
 ## Credits
 
 Navigation icons (Live TV, Series, Movies) are from [Font Awesome Free](https://fontawesome.com) and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+Cast photos come from [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.

@@ -52,12 +52,13 @@ jobs:
             echo "Download failed (try $i of 3), trying again in 30 seconds"; sleep 30
           done
           exit 1
-      - name: Add the OpenSubtitles API key (repository secret OPENSUBTITLES_API_KEY)
+      - name: Add the API keys (repository secrets OPENSUBTITLES_API_KEY and TMDB_API_KEY)
         shell: bash
         run: |
-          node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '' }))"
+          node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '', tmdbApiKey: process.env.TMDB_API_KEY || '' }))"
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
       - name: Build and upload installers
         run: npx electron-builder --publish always
         env:

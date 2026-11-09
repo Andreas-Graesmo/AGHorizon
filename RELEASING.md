@@ -68,6 +68,7 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
 - **Intel Macs** – not built. `ffmpeg-static` ships a different binary per processor type, so each needs its own build machine. Ask if you want it added.
 - **Version numbers** must always go up; the app only offers updates with a higher version than the installed one.
 - **OpenSubtitles** – the app's API key is a repository secret, not part of the code: **Settings → Secrets and variables → Actions → New repository secret**, name `OPENSUBTITLES_API_KEY`. The release build writes it into the app. Without it, the app works but can't search OpenSubtitles. To use it when running from source, create `secrets.json` in the app folder containing `{ "opensubtitlesApiKey": "your key" }` (it is in `.gitignore`).
+- **TMDB (cast photos)** – the same way: a repository secret named `TMDB_API_KEY`, holding the "API Key" from themoviedb.org → Settings → API (free account). Without it, the cast shows initials. From source: add `"tmdbApiKey": "your key"` to `secrets.json`.
 - **Never** put passwords or provider logins in the repository. Playlists are stored inside the app on each computer, not in the code.
 - To test an installer on your own machine without GitHub: `npm install`, then `npm run dist` (output in `dist/`).
 - If the Action fails, open the failed run in the **Actions** tab and read the red step. The most common causes are forgetting step 3 (workflow permissions) or a tag that doesn't match the version in `package.json`.

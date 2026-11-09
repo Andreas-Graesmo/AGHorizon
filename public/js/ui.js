@@ -625,9 +625,11 @@ async function indexForSearch() {
 /* ─────────────────────────────────── settings ─────────────────────────────────── */
 /* ───────────────────────────────── updates (desktop app) ───────────────────────────────── */
 const upd = { info: null, st: { state: 'idle' } };
+// TMDB's terms ask apps that use its API to say so
+const tmdbCredit = () => (state.tmdb ? '<div class="set-row"><div><b>Cast photos</b><p class="muted">From TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div></div>' : '');
 function updatesCard() {
   const d = window.tunerDesktop;
-  if (!d || !d.updater) return `<section class="set-card"><h3>About &amp; updates</h3><div class="set-row"><div><b>AG Horizon</b><p class="muted">You are using the browser version. Updates are delivered through the desktop app.</p></div></div></section>`;
+  if (!d || !d.updater) return `<section class="set-card"><h3>About &amp; updates</h3><div class="set-row"><div><b>AG Horizon</b><p class="muted">You are using the browser version. Updates are delivered through the desktop app.</p></div></div>${tmdbCredit()}</section>`;
   const info = upd.info || {};
   const st = upd.st || { state: 'idle' };
   let line = 'Not checked yet.';
@@ -644,6 +646,7 @@ function updatesCard() {
   return `<section class="set-card"><h3>About &amp; updates</h3>
     <div class="set-row"><div><b>AG Horizon ${info.version ? 'v' + esc(info.version) : ''}</b><p class="muted">${line}</p></div><div class="upd-btns">${btn}</div></div>
     <div class="set-row"><div><b>Check for updates when the app starts</b></div><label class="switch"><input type="checkbox" data-set="autoUpdate"${auto ? ' checked' : ''}><span></span></label></div>
+    ${tmdbCredit()}
   </section>`;
 }
 /* banner above the views: shown for a newer version until dismissed (remembered per version and step, so a dismissed "available" doesn't return on every start) */

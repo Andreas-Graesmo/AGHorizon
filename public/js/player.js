@@ -589,4 +589,4 @@ async function mirrorButton(anchor) {
 }
 
 /* ─────────────────────────────── capabilities ─────────────────────────────── */
-fetch('/api/capabilities').then((r) => r.json()).then((j) => { state.ffmpeg = !!j.ffmpeg; state.opensubtitles = !!j.opensubtitles; uiCaps(); }).catch(() => uiCaps());
+fetch('/api/capabilities').then((r) => r.json()).then((j) => { state.ffmpeg = !!j.ffmpeg; state.opensubtitles = !!j.opensubtitles; state.tmdb = !!j.tmdb; uiCaps(); }).catch(() => uiCaps());

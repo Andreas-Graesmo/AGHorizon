@@ -300,7 +300,7 @@ function ffmpegInput(url, ua, extra = []) {
 }
 
 function handleCapabilities(req, res) {
-  sendJson(res, 200, { ffmpeg: !!ffmpeg(), opensubtitles: subs.osAvailable });
+  sendJson(res, 200, { ffmpeg: !!ffmpeg(), opensubtitles: subs.osAvailable, tmdb: !!TMDB_KEY });
 }
 
 // Reports duration and codecs so the UI can choose between "copy video" and "re-encode video".
@@ -498,6 +498,32 @@ async function handleSubsApi(req, res, pathname) {
   send(res, 404, 'Not found');
 }
 
+/* ------------------------------------------------------------- cast photos */
+// GET /api/cast?type=movie|tv&id=<tmdb id> -> [{ name, role, photo }]  (TMDB, with the app's key like OpenSubtitles:
+// env TMDB_API_KEY or "tmdbApiKey" in secrets.json, written by the release build)
+const TMDB_KEY = process.env.TMDB_API_KEY || (() => { try { return require('./secrets.json').tmdbApiKey || ''; } catch { return ''; } })();
+const castCache = new Map();   // "movie:603" -> list
+async function handleCast(req, res, q) {
+  if (!TMDB_KEY) throw httpError(501, 'Cast photos aren’t available in this build');
+  const type = q.get('type') === 'tv' ? 'tv' : 'movie';
+  const id = q.get('id') || '';
+  if (!/^\d{1,10}$/.test(id)) throw httpError(400, 'Invalid id');
+  const key = `${type}:${id}`;
+  if (!castCache.has(key)) {
+    // series: aggregate_credits lists everyone across all seasons, with their character names under roles
+    const r = await fetch(`https://api.themoviedb.org/3/${type}/${id}/${type === 'tv' ? 'aggregate_credits' : 'credits'}?api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw httpError(r.status === 404 ? 404 : 502, `TMDB answered HTTP ${r.status}`);
+    const cast = ((await r.json()).cast || []).slice(0, 12).map((c) => ({
+      name: c.name || '',
+      role: c.character || (c.roles && c.roles[0] && c.roles[0].character) || '',
+      photo: c.profile_path ? `https://image.tmdb.org/t/p/w185${c.profile_path}` : '',
+    }));
+    castCache.set(key, cast);
+    if (castCache.size > 200) castCache.delete(castCache.keys().next().value);
+  }
+  sendJson(res, 200, castCache.get(key));
+}
+
 /* ----------------------------------------------------------------- static */
 
 function serveStatic(req, res, pathname) {
@@ -545,6 +571,7 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/epg' && req.method === 'POST') await handleEpg(req, res);
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
+    else if (url.pathname === '/api/cast' && req.method === 'GET') await handleCast(req, res, url.searchParams);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);

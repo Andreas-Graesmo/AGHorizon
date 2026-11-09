@@ -676,6 +676,21 @@ function runtimeLabel(info) {
 }
 const splitNames = (s) => String(s || '').split(/\s*[,;/]\s*/).map((x) => x.trim()).filter(Boolean);
 
+// The cast with photos from TMDB (/api/cast), when the provider gives the title's TMDB id. null until it has loaded
+// (the page shows the provider's names meanwhile); asked once per title and session.
+function castPhotos(it, info, offline) {
+  const id = info.tmdb_id || info.tmdb;
+  if (!state.tmdb || !id || offline) return null;
+  const c = state.castPhotos[it.uid];
+  if (c === undefined) {
+    state.castPhotos[it.uid] = 'loading';
+    fetch(`/api/cast?type=${it.kind === 'series' ? 'tv' : 'movie'}&id=${enc(id)}`)
+      .then((r) => (r.ok ? r.json() : [])).catch(() => [])
+      .then((list) => { state.castPhotos[it.uid] = list; if (list.length && ws.detail && ws.detail.uid === it.uid && ui.route === 'ws') renderDetail(); });
+  }
+  return Array.isArray(c) && c.length ? c : null;
+}
+
 function renderDetail() {
   const it = ws.detail;
   const box = $('#wsDetail');
@@ -756,7 +771,9 @@ function renderDetail() {
   const back = !offline && bd && /^https?:\/\//i.test(bd) ? bd : '';
   const chips = [year, runtime, ...genres.slice(0, 3), info.country, rating && '★ ' + rating].filter(Boolean);
   const trailer = offline ? '' : info.youtube_trailer ? (/^https?:/.test(info.youtube_trailer) ? info.youtube_trailer : 'https://www.youtube.com/watch?v=' + info.youtube_trailer) : '';
-  const crew = [...directors.slice(0, 4).map((n) => [n, 'Director']), ...castNames.slice(0, 12).map((n) => [n, 'Actor'])];
+  const photos = castPhotos(it, info, offline);
+  const crew = [...directors.slice(0, 4).map((n) => [n, 'Director', '']),
+    ...(photos ? photos.map((c) => [c.name, c.role || 'Actor', c.photo]) : castNames.slice(0, 12).map((n) => [n, 'Actor', '']))];
   const pl = wsPlaylist();
 
   box.innerHTML = `<div class="detail-in">
@@ -783,7 +800,7 @@ function renderDetail() {
       </div></div>
     </div>
     <div class="dt-sec">
-      ${crew.length ? `<h3>Cast &amp; crew<small>${crew.length}</small></h3><div class="cast-row">${crew.map(([n, r]) => `<div class="cast"><div class="av">${esc(initials(n))}</div><b>${esc(n)}</b><small>${r}</small></div>`).join('')}</div>` : ''}
+      ${crew.length ? `<h3>Cast &amp; crew<small>${crew.length}</small></h3><div class="cast-row">${crew.map(([n, r, ph]) => `<div class="cast"><div class="av">${esc(initials(n))}${ph ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(ph)}" alt="">` : ''}</div><b>${esc(n)}</b><small>${esc(r)}</small></div>`).join('')}</div>` : ''}
       ${seriesBlock}
     </div></div>`;
   box.scrollTop = keep;

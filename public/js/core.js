@@ -67,6 +67,7 @@ const state = {
   progress: LS.get('tuner.progress', {}), // uid -> { t, d, w, ts }
   status: {},       // playlist id -> 'checking' | 'ok' | 'down'   (runtime only)
   ffmpeg: false,
+  castPhotos: {},   // movie / series uid -> 'loading' | [{ name, role, photo }] from TMDB (workspace.js)
 };
 
 for (const p of state.playlists) if (!p.added) p.added = Date.now();   // playlists saved by older versions

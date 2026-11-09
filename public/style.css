@@ -391,7 +391,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .dt-sec h3 small { color: var(--muted); font-weight: 500; margin-left: 6px; }
 .cast-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 12px; }
 .cast { flex: none; width: 82px; text-align: center; }
-.cast .av { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 7px; background: var(--panel-2); border: 1px solid var(--panel-3); display: grid; place-items: center; color: var(--muted); font-weight: 700; font-size: 13px; }
+.cast .av { position: relative; overflow: hidden; width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 7px; background: var(--panel-2); border: 1px solid var(--panel-3); display: grid; place-items: center; color: var(--muted); font-weight: 700; font-size: 13px; }
+.cast .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }   /* over the initials, which show if it fails */
 .cast b { display: block; font-size: 11px; font-weight: 500; line-height: 1.25; }
 .cast small { color: var(--muted); font-size: 10px; }
 .big-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 78px; height: 78px; border-radius: 50%; border: 0; cursor: pointer; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
