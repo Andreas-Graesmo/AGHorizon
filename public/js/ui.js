@@ -131,7 +131,7 @@ $('#nav').addEventListener('click', (e) => {
     openWorkspace(pid, b.dataset.mode);
   }
 });
-$('#btnHome').addEventListener('click', () => go('dashboard'));
+$('#btnBrand').addEventListener('click', () => go('dashboard'));
 $('#btnAdd').addEventListener('click', () => openPlaylistDialog());
 $('#btnKeys').addEventListener('click', openHelp);
 $('#btnMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
@@ -157,7 +157,6 @@ function syncNavState() {
     b.classList.toggle('on', on);
     b.disabled = !state.playlists.length;
   });
-  $('#btnHome').classList.toggle('on', ui.route === 'dashboard');
 }
 $('#plSwitch').addEventListener('click', openSwitcher);
 function uiPlaylistsChanged() {
@@ -356,7 +355,7 @@ function renderDashboard() {
   const el = $('#v-dashboard');
   clearInterval(hero.timer);
   if (!state.playlists.length) {
-    el.innerHTML = `<div class="page">${emptyState('i-nav-live', 'Welcome to AG Horizon', 'Add an Xtream Codes login or an M3U playlist to start watching live TV, movies and series.', addBtn)}</div>`;
+    el.innerHTML = `<div class="page">${emptyState('i-logo', 'Welcome to AG Horizon', 'Add an Xtream Codes login or an M3U playlist to start watching live TV, movies and series.', addBtn)}</div>`;
     return;
   }
   hero.items = heroCandidates();

@@ -16,6 +16,8 @@
     <!-- Navigation icons: Font Awesome Free 7 (https://fontawesome.com, icons licensed CC BY 4.0). Live TV = tower-broadcast, Series = tv, Movies = film drawn as an outline.
          To use your own (e.g. Font Awesome Pro) icons, replace the path data below with the "d" value of the SVG and keep the viewBox in sync. -->
     <symbol id="i-multi" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></symbol>
+    <!-- app logo; inline styles because page CSS can't reach inside <use>, and .ic would turn it into strokes -->
+    <symbol id="i-logo" viewBox="0 0 64 64" style="fill: currentColor; stroke: none"><rect width="64" height="64" rx="14" style="fill: var(--panel-2)"/><path d="M17 40a15 15 0 0 1 30 0z"/><rect x="10" y="42" width="44" height="4" rx="2"/><rect x="18" y="50" width="28" height="3" rx="1.5" opacity=".5"/></symbol>
     <symbol id="i-nav-live" viewBox="0 0 24 24"><circle cx="12" cy="10" r="2"/><path d="M12 12v9M8.5 6.5a5 5 0 0 0 0 7M15.5 6.5a5 5 0 0 1 0 7M5.6 3.6a9 9 0 0 0 0 12.8M18.4 3.6a9 9 0 0 1 0 12.8"/></symbol>
     <symbol id="i-nav-series" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8"/></symbol>
     <symbol id="i-nav-movie" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7.5 3v18M16.5 3v18M3 12h18M3 7.5h4.5M3 16.5h4.5M16.5 7.5H21M16.5 16.5H21"/></symbol>
@@ -90,7 +92,7 @@
 
   <!-- ───────────── top bar ───────────── -->
   <header id="topbar">
-    <button id="btnHome" class="tb-btn" title="Dashboard" aria-label="Dashboard"><svg class="ic"><use href="#i-dashboard"/></svg></button>
+    <button id="btnBrand" class="brand" title="AG Horizon – Dashboard" aria-label="AG Horizon – Dashboard"><svg aria-hidden="true"><use href="#i-logo"/></svg></button>
     <button id="btnBack" class="tb-btn" title="Back (Alt+←)" aria-label="Back" hidden><svg class="ic"><use href="#i-arrow-left"/></svg></button>
     <button id="plSwitch" class="pl-switch" title="Switch playlist"><span class="src-ico xs"><svg class="ic"><use href="#i-cloud"/></svg><i class="dot unknown" id="plDot"></i></span><span class="ps-text"><b id="plName">No playlist</b><small id="plType">Add one to start</small></span><svg class="ic chev"><use href="#i-chev-down"/></svg></button>
     <div id="topSearch" class="top-search">
@@ -110,6 +112,7 @@
 
   <!-- ───────────── icon rail ───────────── -->
   <nav id="nav" aria-label="Main">
+    <button class="nav-item" data-route="dashboard" title="Dashboard"><svg class="ic"><use href="#i-dashboard"/></svg></button>
     <button class="nav-item" data-route="playlists" title="Playlists"><svg class="ic"><use href="#i-list"/></svg></button>
     <button class="nav-item" data-route="search" title="Global search (Ctrl+F)"><svg class="ic"><use href="#i-search"/></svg></button>
     <button class="nav-item" data-route="favorites" title="Favorites"><svg class="ic"><use href="#i-heart"/></svg></button>
