@@ -53,6 +53,7 @@ function createWindow() {
     backgroundColor: '#0c0e12',
     title: 'AG Horizon',
     autoHideMenuBar: true,
+    show: false,   // shown by reveal() below
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -61,7 +62,12 @@ function createWindow() {
       autoplayPolicy: 'no-user-gesture-required', // lets "next episode" start by itself
     },
   });
-  if (s.maximized) win.maximize();
+  // Shown once the page has drawn its first view in the saved theme (boot.js says so), so start-up shows no empty
+  // or wrong-coloured frames. If the page never says so (an error, a font that doesn't load), after a few seconds anyway.
+  const w = win;
+  const reveal = () => { if (w.isDestroyed() || w.isVisible()) return; if (s.maximized) w.maximize(); w.show(); };
+  w.webContents.ipc.once('app:ready', reveal);
+  setTimeout(reveal, 5000);
 
   win.loadURL(origin + '/');
 

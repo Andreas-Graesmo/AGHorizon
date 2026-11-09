@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('tunerDesktop', {
   displays: () => ipcRenderer.invoke('tuner:displays'),
   focusWindow: () => ipcRenderer.invoke('tuner:focus'),
   appInfo: () => ipcRenderer.invoke('app:info'),
+  ready: () => ipcRenderer.send('app:ready'),   // the first view is drawn: main.js shows the window
   updater: {
     status: () => ipcRenderer.invoke('updater:status'),
     check: () => ipcRenderer.invoke('updater:check'),
