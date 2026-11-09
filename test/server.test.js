@@ -10,6 +10,11 @@ test('guide times honour their time zone', () => {
   assert.strictEqual(parseXmltvTime('garbage'), null);
 });
 
+test('package.json names the GitHub repository the installed app updates from', () => {
+  // electron/updater.js reads only "repository": electron-builder strips "build" from the installed app
+  assert.match(require('../package.json').repository.url, /github\.com\/[^/]+\/[^/.]+/);
+});
+
 test('HLS playlists route segments and keys back through the proxy', () => {
   const out = rewriteM3u8('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\nseg1.ts\n\nhttps://cdn.example/seg2.ts', 'http://host.example/live/a/index.m3u8', 'VLC').split('\n');
   const prox = (u) => `/api/stream?url=${encodeURIComponent(u)}&ua=VLC`;
