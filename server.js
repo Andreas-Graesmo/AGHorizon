@@ -361,7 +361,7 @@ function handleKeyframe(req, res, q) {
 }
 
 let activeConversions = 0;
-const MAX_CONVERSIONS = 3;
+const MAX_CONVERSIONS = 4;   // Multi view's 2 × 2 grid
 
 function handleTranscode(req, res, q) {
   const bin = ffmpeg();
@@ -371,6 +371,7 @@ function handleTranscode(req, res, q) {
   const start = Math.max(0, Number(q.get('start')) || 0);
   const keepHevc = q.get('video') === 'hevc';   // the player decodes HEVC itself
   const copyVideo = q.get('video') === 'copy' || keepHevc;
+  const maxH = Math.min(1080, Math.max(240, Number(q.get('maxh')) || 1080));   // Multi view asks for less: smaller pictures, less CPU
 
   const args = [
     ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000',
@@ -380,7 +381,7 @@ function handleTranscode(req, res, q) {
     ...(copyVideo
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-         '-vf', "scale=-2:'min(1080,ih)'", '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
+         '-vf', `scale=-2:'min(${maxH},ih)'`, '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
     '-c:a', 'aac', '-b:a', '192k', '-ac', '2', // stereo AAC plays everywhere (and downmixes DTS / AC-3 5.1)
     // Chromium shows copied HEVC about a GOP late in fragmented MP4 (sound runs ~2 s ahead), but in sync in Matroska
     ...(keepHevc ? ['-f', 'matroska', '-live', '1'] : ['-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4']),
@@ -522,6 +523,9 @@ function serveStatic(req, res, pathname) {
 
 function requestAllowed(req) {
   // Guard against DNS-rebinding / other websites using the local proxy.
+  // An <img> or no-cors fetch from another site sends no Origin, but browsers mark it in Sec-Fetch-Site.
+  const site = req.headers['sec-fetch-site'];
+  if (site && site !== 'same-origin' && site !== 'none') return false;
   if (LOOPBACK) {
     const hostname = (req.headers.host || '').replace(/:\d+$/, '');
     if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname)) return false;
