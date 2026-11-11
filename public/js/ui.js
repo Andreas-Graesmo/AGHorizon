@@ -12,6 +12,28 @@ const ago = (ts) => {
   return Math.round(s / 86400) + ' d ago';
 };
 
+/* ───────────────────────────── confirm ───────────────────────────── */
+// The app's own "Are you sure?" instead of the browser's confirm(). Resolves true for the OK button, false for
+// Cancel, Esc or a click outside. danger: the button is red (something gets deleted).
+function askConfirm({ title, text = '', list = [], ok = 'OK', danger = false }) {
+  const dlg = $('#confirmDlg');
+  $('#confirmTitle').textContent = title;
+  $('#confirmText').textContent = text;
+  $('#confirmList').replaceChildren(...list.map((s) => Object.assign(document.createElement('li'), { textContent: s })));
+  const yes = $('#confirmYes');
+  yes.textContent = ok;
+  yes.classList.toggle('danger', danger);
+  return new Promise((resolve) => {
+    const done = (v) => { dlg.removeEventListener('close', onClose); dlg.removeEventListener('click', onClick); if (dlg.open) dlg.close(); resolve(v); };
+    const onClose = () => done(false);   // Esc
+    const onClick = (e) => { if (e.target === yes) done(true); else if (e.target.id === 'confirmNo' || e.target === dlg) done(false); };   // dlg itself: the backdrop
+    dlg.addEventListener('close', onClose);
+    dlg.addEventListener('click', onClick);
+    dlg.showModal();
+    (danger ? $('#confirmNo') : yes).focus();   // Enter doesn't delete by accident
+  });
+}
+
 /* ───────────────────────────── toasts & menus ───────────────────────────── */
 function toast(msg, kind = '') {
   const el = document.createElement('div');
@@ -550,10 +572,10 @@ function playlistMenu(p, anchor) {
     { label: 'Delete…', run: () => deletePlaylist(p.id) },
   ]);
 }
-function cleanupSources() {
+async function cleanupSources() {
   const dead = state.playlists.filter((p) => statusOf(p) === 'down');
   if (!dead.length) { toast(state.playlists.some((p) => statusOf(p) === 'unknown' || statusOf(p) === 'checking') ? 'Still checking sources – try again in a moment.' : 'All sources are responding.'); return; }
-  if (!confirm(`Delete ${dead.length} source${dead.length === 1 ? '' : 's'} that did not respond?\n\n${dead.map((p) => '• ' + p.name).join('\n')}`)) return;
+  if (!await askConfirm({ title: `Delete ${dead.length} source${dead.length === 1 ? '' : 's'} that didn’t respond?`, list: dead.map((p) => p.name), ok: 'Delete', danger: true })) return;
   for (const p of dead) deletePlaylist(p.id, true);
   toast(`Removed ${dead.length} source${dead.length === 1 ? '' : 's'}`);
 }
@@ -890,7 +912,8 @@ $('#views').addEventListener('click', (e) => {
     case 'hero-pause': hero.paused = !hero.paused; renderHero(); break;
     case 'hero-go': hero.i = Number(a.dataset.k); renderHero(); break;
     case 'hist-clear': state.recent = []; LS.set('tuner.recent', []); renderRoute(ui.route); toast('History cleared'); break;
-    case 'favs-clear': if (confirm('Remove all favorites?')) { state.favs.clear(); state.favdata = {}; persistFavs(); renderSettings(); toast('Favorites cleared'); } break;
+    case 'favs-clear': askConfirm({ title: 'Remove all favorites?', text: 'This can’t be undone.', ok: 'Remove all', danger: true })
+      .then((yes) => { if (yes) { state.favs.clear(); state.favdata = {}; persistFavs(); renderSettings(); toast('Favorites cleared'); } }); break;
     case 'show-help': openHelp(); break;
     case 'upd-check': window.tunerDesktop.updater.check(); break;
     case 'upd-download': window.tunerDesktop.updater.download(); break;

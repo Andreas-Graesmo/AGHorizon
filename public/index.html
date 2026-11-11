@@ -409,6 +409,10 @@
 </dialog>
 
 <!-- ───────────── keyboard shortcuts ───────────── -->
+<dialog id="confirmDlg" class="confirm-dlg" aria-labelledby="confirmTitle">
+  <div class="confirm-body"><h2 id="confirmTitle"></h2><p id="confirmText"></p><ul id="confirmList"></ul></div>
+  <div class="confirm-act"><button class="btn ghost" id="confirmNo">Cancel</button><button class="btn" id="confirmYes">OK</button></div>
+</dialog>
 <dialog id="helpDlg">
   <div class="dlg-head"><h2>Keyboard shortcuts</h2><button id="helpClose" class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
   <div class="help-body" id="helpBody"></div>

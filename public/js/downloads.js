@@ -213,7 +213,7 @@ async function dlStart(list) {
 }
 
 async function dlDelete(d) {
-  if (!confirm(`Delete “${dlName(d)}” from this computer?`)) return;
+  if (!await askConfirm({ title: `Delete “${dlName(d)}”?`, text: 'The file is removed from this computer.', ok: 'Delete', danger: true })) return;
   await dlApi.remove(d.id, true);
 }
 

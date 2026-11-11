@@ -120,9 +120,9 @@ form.addEventListener('submit', async (e) => {
   toast(idx >= 0 ? 'Playlist saved' : 'Playlist added');
 });
 
-function deletePlaylist(id, silent) {
+async function deletePlaylist(id, silent) {
   const p = playlistById(id);
-  if (!p || !(silent || confirm(`Delete “${p.name}”? Your favorites from it stay in the list, but can't be opened any more.`))) return;
+  if (!p || !(silent || await askConfirm({ title: `Delete “${p.name}”?`, text: 'Your favorites from it stay in the list, but can’t be opened any more.', ok: 'Delete', danger: true }))) return;
   state.playlists = state.playlists.filter((x) => x.id !== id);
   dropCaches(id);
   if (p.type === 'file') idb.del('file:' + id).catch(() => {});

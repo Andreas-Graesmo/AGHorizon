@@ -409,7 +409,7 @@ setInterval(mvRefreshNames, 30000);
 
 /* ── clicks ── */
 $('#mvLayouts').addEventListener('click', (e) => { const b = e.target.closest('[data-l]'); if (b) mvSetLayout(b.dataset.l); });
-$('#mvClear').addEventListener('click', () => { if (mvFilled() && confirm('Remove all channels from Multi view?')) mvClearAll(); });
+$('#mvClear').addEventListener('click', async () => { if (mvFilled() && await askConfirm({ title: 'Remove all channels from Multi view?', ok: 'Remove all', danger: true })) mvClearAll(); });
 $('#mvMute').addEventListener('click', () => { mv.muted = !mv.muted; applyMvSound(); mvRender(); });
 $('#mvGrid').addEventListener('click', (e) => {
   const tile = e.target.closest('.mv-tile');

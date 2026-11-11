@@ -881,6 +881,14 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .menu-sep { border: 0; border-top: 1px solid var(--line); margin: 5px 4px; }
 
 /* Xtream account info */
+dialog.confirm-dlg { width: min(420px, calc(100vw - 24px)); }
+.confirm-body { padding: 20px 22px 6px; overflow-y: auto; }
+.confirm-body h2 { font-size: 16.5px; line-height: 1.3; }
+.confirm-body p { margin-top: 8px; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.confirm-body p:empty, .confirm-body ul:empty { display: none; }
+.confirm-body ul { margin: 10px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; max-height: 40vh; overflow-y: auto; }
+.confirm-act { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 22px 18px; }
+.btn.danger { background: var(--red); color: #fff; }
 dialog.acct-dlg { width: min(960px, calc(100vw - 24px)); overflow: hidden; }
 .acct-dlg .dlg-head { gap: 12px; }
 .acct-dlg .dlg-head small { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; }
