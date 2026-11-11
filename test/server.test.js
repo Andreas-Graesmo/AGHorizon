@@ -26,3 +26,20 @@ test('HLS playlists route segments and keys back through the proxy', () => {
     prox('https://cdn.example/seg2.ts'),
   ]);
 });
+
+test('the local server refuses requests from other websites (DNS rebinding, cross-site)', async (t) => {
+  const http = require('http');
+  const { start, server } = require('../server');
+  const port = await start(0);
+  t.after(() => server.close());
+  const status = (headers) => new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port, path: '/api/capabilities', headers }, (r) => { r.resume(); resolve(r.statusCode); }).on('error', reject);
+  });
+  const self = `127.0.0.1:${port}`;
+  assert.strictEqual(await status({ Host: self }), 200);
+  assert.strictEqual(await status({ Host: `localhost:${port}`, Origin: `http://localhost:${port}` }), 200);
+  assert.strictEqual(await status({ Host: `evil.example:${port}` }), 403);                     // a rebound domain
+  assert.strictEqual(await status({ Host: self, Origin: 'http://evil.example' }), 403);        // fetch from another site
+  assert.strictEqual(await status({ Host: self, 'Sec-Fetch-Site': 'cross-site' }), 403);       // <img> / no-cors from another site
+  assert.strictEqual(await status({ Host: self, Origin: 'null' }), 403);                       // sandboxed page or file://
+});
