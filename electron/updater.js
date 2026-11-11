@@ -24,6 +24,8 @@ const reason = () => {
   if (!autoUpdater) return 'The update component is not installed.';
   if (!app.isPackaged) return 'Updates only work in the installed app, not when started from source.';
   if (!releasesUrl) return 'No GitHub repository is configured yet (see RELEASING.md).';
+  // electron-updater on macOS needs a code-signed app, and the release build isn't signed
+  if (process.platform === 'darwin') return 'On a Mac, download new versions from GitHub.';
   return '';
 };
 
