@@ -116,7 +116,10 @@ let saveTimer = 0;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = 0;
-  try { fs.writeFileSync(listFile(), JSON.stringify({ folder, pauseWhileWatching, items })); } catch { /* not critical */ }
+  try {   // via a temp file, so a crash mid-write never leaves a broken list (load() would then start empty)
+    fs.writeFileSync(listFile() + '.tmp', JSON.stringify({ folder, pauseWhileWatching, items }));
+    fs.renameSync(listFile() + '.tmp', listFile());
+  } catch { /* not critical */ }
 }
 const saveSoon = () => { if (!saveTimer) saveTimer = setTimeout(save, 3000); };
 

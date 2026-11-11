@@ -162,7 +162,7 @@ async function openAccountInfo(p) {
   const chips = (list) => list.filter(Boolean).map((x) => `<span class="acct-chip">${esc(x)}</span>`).join('') || '–';
   const row = (k, v, cls = '') => `<div class="acct-row"><span>${k}</span><b class="${cls}">${v}</b></div>`;
   const active = String(u.status).toLowerCase() === 'active';
-  const cons = `${u.active_cons ?? '?'}/${u.max_connections ?? '?'}`;
+  const cons = esc(`${u.active_cons ?? '?'}/${u.max_connections ?? '?'}`);   // from the provider: goes into innerHTML
   const pct = Math.min(100, 100 * (Number(u.active_cons) || 0) / (Number(u.max_connections) || 1));
   const proto = s.server_protocol || 'http';
   const pill = $('#acctPill');
