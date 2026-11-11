@@ -597,4 +597,4 @@ function start(port) {
   });
 }
 
-module.exports = { start, server, setLocalFiles, parseXmltvTime, rewriteM3u8 };   // the last two for test/
+module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, rewriteM3u8 };   // the last two for test/

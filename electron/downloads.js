@@ -16,7 +16,7 @@ const path = require('path');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 
-const DEFAULT_UA = 'VLC/3.0.20 LibVLC/3.0.20';
+const { DEFAULT_UA } = require('../server');   // one User-Agent for playback and downloads
 const MAX_TRIES = 3; // automatic retries after a dropped connection (each one resumes where it stopped)
 
 const listFile = () => path.join(app.getPath('userData'), 'downloads.json');
