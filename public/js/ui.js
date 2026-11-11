@@ -235,7 +235,7 @@ $('#pExpand').addEventListener('click', () => {
   if (!state.current) return;
   if (pipWin) {   // from the picture-in-picture window: back into the app, which comes to the front
     closePip();
-    if (window.tunerDesktop && window.tunerDesktop.focusWindow) window.tunerDesktop.focusWindow(); else window.focus();
+    window.tunerDesktop.focusWindow();
   }
   openItem(state.current);
 });
@@ -629,8 +629,6 @@ const upd = { info: null, st: { state: 'idle' } };
 // TMDB's terms ask apps that use its API to say so
 const tmdbCredit = () => (state.tmdb ? '<div class="set-row"><div><b>Cast photos</b><p class="muted">From TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div></div>' : '');
 function updatesCard() {
-  const d = window.tunerDesktop;
-  if (!d || !d.updater) return `<section class="set-card"><h3>About &amp; updates</h3><div class="set-row"><div><b>AG Horizon</b><p class="muted">You are using the browser version. Updates are delivered through the desktop app.</p></div></div>${tmdbCredit()}</section>`;
   const info = upd.info || {};
   const st = upd.st || { state: 'idle' };
   let line = 'Not checked yet.';
@@ -684,7 +682,6 @@ function updStatus(s) {
 }
 function initUpdates() {
   const d = window.tunerDesktop;
-  if (!d || !d.updater) return;
   d.updater.onStatus(updStatus);
   Promise.all([d.appInfo(), d.updater.status()]).then(([info, st]) => {
     upd.info = info; upd.st = st || upd.st;
@@ -712,13 +709,13 @@ function renderSettings() {
       <div class="set-row"><div><b>Accent colour</b></div><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch${accent === k ? ' on' : ''}" data-set="accent" data-val="${k}" style="--c:${c}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
     </section>
     <section class="set-card"><h3>Playback</h3>
-      <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted. The desktop app includes it; for the web version install ffmpeg or set FFMPEG_PATH.'}</p></div>
+      <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted.'}</p></div>
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
     </section>
     <section class="set-card"><h3>Second screen</h3>
-      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider. In the desktop app it goes full screen on the display you pick; in a browser, drag it to the other screen and press F (Esc closes it).</p></div>
+      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider. It goes full screen on the display you pick (Esc closes it).</p></div>
         <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close second screen' : 'Open second screen'}</button></div>
       <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Second screen” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Second screen'], ['both', 'Both']])}</div>
     </section>

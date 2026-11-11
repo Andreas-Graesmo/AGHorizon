@@ -1,6 +1,6 @@
 # AG Horizon
 
-A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator. It can also run as a plain local web app.
+A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator.
 
 - **Dashboard** with *continue watching*, recently viewed and favorites from all your playlists
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
@@ -37,20 +37,11 @@ The result is in `dist/`. Each platform is best built on that platform.
 - **Sources** (list icon in the left rail) shows every playlist with type, date added, last update, server and user. Filter by type or status, sort, reload, edit, or use *Clean up inactive sources…*.
 - Click the playlist name in the top bar for a quick switcher (type to search, ↑ ↓ and Enter to open).
 
-## Or run it as a web app (no Electron)
-
-```bash
-npm run web      # or: node server.js
-```
-
-Then open <http://localhost:8787>.
-
 ## Second screen (show the video on two displays)
 
 Click the **cast** button on the player (or the cast icon in the top bar).
 
-- **Desktop app:** pick the monitor or TV. A borderless window opens full screen there, showing exactly what the main player shows. Press **Esc** in that window (or click the button again) to close it.
-- **Browser:** a pop-up window opens; drag it to the other screen and press **F** for full screen.
+- Pick the monitor or TV. A borderless window opens full screen there, showing exactly what the main player shows. Press **Esc** in that window (or click the button again) to close it.
 - It does **not** open a second connection to your provider: the main player hands the second window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
 - **Sound** (Settings › Second screen): play it on this window, on the second screen only (useful when the TV has the speakers), or on both.
 
@@ -58,8 +49,7 @@ Click the **cast** button on the player (or the cast icon in the top bar).
 
 The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
 
-- The **desktop app bundles ffmpeg** (via the `ffmpeg-static` package, installed by `npm install`).
-- For the **web version**, install ffmpeg yourself (it must be on your PATH) or set `FFMPEG_PATH=/path/to/ffmpeg`.
+- The app **bundles ffmpeg** (via the `ffmpeg-static` package, installed by `npm install`).
 - The bundled ffmpeg build is GPL-licensed; that matters only if you redistribute installers to other people.
 
 ## How it works

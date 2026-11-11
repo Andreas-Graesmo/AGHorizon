@@ -16,11 +16,9 @@ const path = require('path');
 const zlib = require('zlib');
 const { Readable } = require('stream');
 
-const PORT = Number(process.env.PORT) || 8787;
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = '127.0.0.1';   // only the desktop app talks to this server
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DEFAULT_UA = 'VLC/3.0.20 LibVLC/3.0.20';
-const LOOPBACK = ['127.0.0.1', 'localhost', '::1'].includes(HOST);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -552,10 +550,8 @@ function requestAllowed(req) {
   // An <img> or no-cors fetch from another site sends no Origin, but browsers mark it in Sec-Fetch-Site.
   const site = req.headers['sec-fetch-site'];
   if (site && site !== 'same-origin' && site !== 'none') return false;
-  if (LOOPBACK) {
-    const hostname = (req.headers.host || '').replace(/:\d+$/, '');
-    if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname)) return false;
-  }
+  const hostname = (req.headers.host || '').replace(/:\d+$/, '');
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname)) return false;
   const origin = req.headers.origin;
   if (origin) {
     try { if (new URL(origin).host !== req.headers.host) return false; } catch { return false; }
@@ -590,7 +586,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 // Start listening. Resolves with the port actually used (pass 0 for "any free port").
-function start(port = PORT) {
+function start(port) {
   return new Promise((resolve, reject) => {
     const onError = (e) => reject(e);
     server.once('error', onError);
@@ -602,15 +598,3 @@ function start(port = PORT) {
 }
 
 module.exports = { start, server, setLocalFiles, parseXmltvTime, rewriteM3u8 };   // the last two for test/
-
-// `node server.js` runs it as a plain web server; the desktop app (electron/main.js) calls start() instead.
-if (require.main === module) {
-  start().then((port) => {
-    const shown = HOST === '0.0.0.0' ? 'localhost' : HOST;
-    console.log(`AG Horizon running at http://${shown}:${port}`);
-    if (!LOOPBACK) console.log('Warning: listening on a non-local address – anyone on your network can use this proxy.');
-  }).catch((e) => {
-    console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is already in use – set another with PORT=9000` : e.message);
-    process.exit(1);
-  });
-}

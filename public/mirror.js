@@ -29,15 +29,7 @@ window.setTitleText = (text) => {
 };
 ['loadedmetadata', 'loadeddata', 'canplay', 'resize', 'emptied', 'playing', 'timeupdate'].forEach((e) => v.addEventListener(e, updateMessage));
 
-function toggleFull() {
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  else document.documentElement.requestFullscreen().catch(() => {});
-}
-document.addEventListener('dblclick', toggleFull);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'f' || e.key === 'F') toggleFull();
-  else if (e.key === 'Escape' && !document.fullscreenElement) window.close();   // Esc closes the second screen
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });   // Esc closes the second screen
 document.addEventListener('mousemove', () => {
   document.body.classList.remove('idle');
   clearTimeout(idleTimer);

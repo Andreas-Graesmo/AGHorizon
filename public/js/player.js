@@ -431,31 +431,20 @@ function syncMediaSession() {
 /* ─────────────────────────── picture-in-picture ─────────────────────────── */
 /*
  * Our own picture-in-picture window: the whole player (picture, controls, subtitles) moves into an always-on-top
- * window (document picture-in-picture) and back when it closes. Small, it looks like the mini player. Where that
- * API is missing (other browsers) the browser's own picture-in-picture is used.
+ * window and back when it closes. Small, it looks like the mini player.
  */
 let pipWin = null;
 const pipHandlers = [];   // document-level handlers the window needs too: [type, fn, capture]
 const onPipDoc = (type, fn, capture = false) => { pipHandlers.push([type, fn, capture]); if (pipDoc) pipDoc.addEventListener(type, fn, capture); };
 
-// The desktop app opens a frameless always-on-top pop-up for it (electron/main.js); Electron doesn't create
-// document picture-in-picture windows. Browsers use document picture-in-picture where they have it.
-const ownPip = () => !!window.tunerDesktop || !!window.documentPictureInPicture;
-async function togglePip() {
-  if (pipWin) { pipWin.close(); return; }
-  if (ownPip()) { openPipWindow(); return; }
-  try {
-    if (document.pictureInPictureElement) await document.exitPictureInPicture();
-    else if (document.pictureInPictureEnabled) await video.requestPictureInPicture();
-  } catch { toast('Picture-in-picture is not available for this video.', 'err'); }
+// A frameless always-on-top pop-up (electron/main.js); Electron doesn't create document picture-in-picture windows.
+function togglePip() {
+  if (pipWin) pipWin.close(); else openPipWindow();
 }
 
 async function openPipWindow() {
   if (!state.current) return;
-  let w = null;
-  try {
-    w = window.tunerDesktop ? window.open('about:blank', 'ag-horizon-pip') : await documentPictureInPicture.requestWindow({ width: 480, height: 270 });
-  } catch { /* below */ }
+  const w = window.open('about:blank', 'ag-horizon-pip');
   if (!w) { toast('Picture-in-picture is not available.', 'err'); return; }
   const d = w.document;
   // the app's look: stylesheets, icons (<use href="#i-…"> needs the sprite in the same document), theme and accent
@@ -569,23 +558,19 @@ function closeMirror() { try { if (mirrorOpen()) mirrorWin.close(); } catch { /*
 window.addEventListener('beforeunload', () => { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } });
 setInterval(() => { if (mirrorWin && mirrorWin.closed) mirrorClosed(); }, 1000);
 
-// Button → in the desktop app offer a choice of monitors, in a browser just open the window.
+// Button → with more than one monitor, offer a choice; otherwise just open the window.
 async function mirrorButton(anchor) {
   if (mirrorOpen()) { closeMirror(); return; }
-  const desktop = window.tunerDesktop;
-  if (desktop && desktop.displays) {
-    let list = [];
-    try { list = await desktop.displays(); } catch { /* fall through to a plain window */ }
-    if (list.length > 1) {
-      showMenu(anchor, [
-        { label: 'Show on…', heading: true },
-        ...list.map((d) => ({ label: `${d.label}${d.primary ? ' (main)' : ''} · ${d.width}×${d.height}`, run: () => openMirror(d.id) })),
-      ]);
-      return;
-    }
+  let list = [];
+  try { list = await window.tunerDesktop.displays(); } catch { /* fall through to a plain window */ }
+  if (list.length > 1) {
+    showMenu(anchor, [
+      { label: 'Show on…', heading: true },
+      ...list.map((d) => ({ label: `${d.label}${d.primary ? ' (main)' : ''} · ${d.width}×${d.height}`, run: () => openMirror(d.id) })),
+    ]);
+    return;
   }
   openMirror();
-  if (!desktop) toast('Drag the new window to your second screen, then double-click it (or press F) for full screen.');
 }
 
 /* ─────────────────────────────── capabilities ─────────────────────────────── */
