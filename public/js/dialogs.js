@@ -143,3 +143,55 @@ function refreshPlaylist(id) {
     .then((r) => { toast(`“${p.name}” updated – ${r.channels.length.toLocaleString()} channels`); if (ui.route === 'dashboard') renderDashboard(); })
     .catch((e) => toast(`“${p.name}” did not respond: ${e.message}`, 'err'));
 }
+
+/* ── Xtream account info (player_api.php login reply: user_info + server_info) ── */
+const acctDlg = $('#acctDlg');
+$('#acctClose').addEventListener('click', () => acctDlg.close());
+acctDlg.addEventListener('mousedown', (e) => { if (e.target === acctDlg) acctDlg.close(); });
+
+async function openAccountInfo(p) {
+  $('#acctName').textContent = p.name;
+  $('#acctPill').hidden = true;
+  $('#acctBody').innerHTML = '<div class="empty">Loading account…</div>';
+  if (!acctDlg.open) acctDlg.showModal();
+  let j;
+  try { j = await apiJson(xt.api(p, ''), p); } catch (e) { $('#acctBody').innerHTML = `<div class="empty err-text">${esc(e.message)}</div>`; return; }
+  const u = j.user_info || {}, s = j.server_info || {};
+  const day = (t) => (Number(t) ? new Date(Number(t) * 1000).toLocaleDateString() : '–');
+  const count = (k) => { const c = state.cache[k]; return c ? c.channels.length.toLocaleString() : '–'; };
+  const chips = (list) => list.filter(Boolean).map((x) => `<span class="acct-chip">${esc(x)}</span>`).join('') || '–';
+  const row = (k, v, cls = '') => `<div class="acct-row"><span>${k}</span><b class="${cls}">${v}</b></div>`;
+  const active = String(u.status).toLowerCase() === 'active';
+  const cons = `${u.active_cons ?? '?'}/${u.max_connections ?? '?'}`;
+  const pct = Math.min(100, 100 * (Number(u.active_cons) || 0) / (Number(u.max_connections) || 1));
+  const proto = s.server_protocol || 'http';
+  const pill = $('#acctPill');
+  pill.textContent = u.status || 'Unknown'; pill.className = 'acct-pill' + (active ? ' ok' : ' bad'); pill.hidden = false;
+  const stat = (icon, label, val, extra = '') => `<div class="acct-stat"><svg class="ic"><use href="#${icon}"/></svg><div><small>${label}</small><b>${val}</b>${extra}</div></div>`;
+  $('#acctBody').innerHTML = `
+    <div class="acct-band"><div class="acct-sub"><i></i>${esc(proto)}${s.timezone ? ' · ' + esc(s.timezone) : ''}</div>
+      <div class="acct-stats">
+        ${stat('i-user', 'Active connections', cons, `<div class="bar"><i style="width:${pct}%"></i></div>`)}
+        ${stat('i-live', 'Live TV', count(p.id))}
+        ${stat('i-film', 'Movies', count(p.id + ':movie'))}
+        ${stat('i-nav-series', 'TV Series', count(p.id + ':series'))}
+      </div></div>
+    <div class="acct-cols">
+      <section><h3>User information</h3>
+        ${row('Status', esc(u.status || '–'), active ? 'ok' : 'err-text')}
+        ${row('Username', esc(u.username || p.username), 'mono')}
+        ${row('Active connections', cons)}
+        ${row('Created', day(u.created_at))}
+        ${row('Expires', Number(u.exp_date) ? day(u.exp_date) : 'Never')}
+        ${row('Trial account', String(u.is_trial) === '1' ? 'Yes' : 'No')}
+        <h4>Allowed formats</h4><div class="acct-chips">${chips((u.allowed_output_formats || []).map((f) => String(f).toUpperCase()))}</div>
+      </section>
+      <section><h3>Server information</h3>
+        ${row('URL', esc(s.url || normServer(p.server)), 'mono')}
+        ${row('Protocol', esc(proto))}
+        ${row('Timezone', esc(s.timezone || '–'))}
+        ${row('Server time', esc(s.time_now || '–'), 'mono')}
+        <h4>Ports</h4><div class="acct-chips">${chips([s.port && 'HTTP ' + s.port, s.https_port && 'HTTPS ' + s.https_port, s.rtmp_port && 'RTMP ' + s.rtmp_port])}</div>
+      </section>
+    </div>`;
+}

@@ -33,7 +33,8 @@ function showMenu(anchor, items) {
   const fs = doc.fullscreenElement;
   const host = anchor.closest('dialog[open]') || (fs && fs.contains(anchor) ? fs : doc.body);
   if (m.parentNode !== host) host.appendChild(m);
-  m.innerHTML = items.map((it, i) => it.heading ? `<div class="menu-h">${esc(it.label)}</div>` : `<button class="menu-i" data-i="${i}">${esc(it.label)}</button>`).join('');
+  m.innerHTML = items.map((it, i) => it.sep ? '<hr class="menu-sep">' : it.heading ? `<div class="menu-h">${esc(it.label)}</div>`
+    : `<button class="menu-i${it.danger ? ' danger' : ''}" data-i="${i}">${it.icon ? `<svg class="ic"><use href="#${it.icon}"/></svg>` : ''}${esc(it.label)}</button>`).join('');
   m.hidden = false;
   const r = anchor.getBoundingClientRect();
   const w = m.offsetWidth, h = m.offsetHeight;
@@ -519,12 +520,13 @@ $('#swList').addEventListener('click', (e) => {
   if (!r) return;
   const p = sw.items[+r.dataset.i];
   if (e.target.closest('[data-more]')) {
-    // Keep the switcher open; only "Open" leaves it. Edit/Delete dialogs stack on top of it.
+    // Keep the switcher open; the Edit/Account/Remove dialogs stack on top of it.
     showMenu(e.target.closest('[data-more]'), [
-      { label: 'Open', run: () => { $('#switchDlg').close(); openWorkspace(p.id, 'live'); } },
-      { label: 'Reload', run: () => refreshPlaylist(p.id) },
-      { label: 'Edit…', run: () => openPlaylistDialog(p) },
-      { label: 'Delete…', run: () => deletePlaylist(p.id) },
+      { label: 'Refresh playlist', icon: 'i-refresh', run: () => refreshPlaylist(p.id) },
+      { label: 'Edit playlist', icon: 'i-edit', run: () => openPlaylistDialog(p) },
+      ...(p.type === 'xtream' ? [{ label: 'Account info', icon: 'i-user', run: () => openAccountInfo(p) }] : []),
+      { sep: true },
+      { label: 'Remove playlist', icon: 'i-trash', danger: true, run: () => deletePlaylist(p.id) },
     ]);
     return;
   }

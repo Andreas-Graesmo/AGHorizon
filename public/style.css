@@ -868,3 +868,38 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .btn.dl-ind:hover { filter: none; }
 .dl-ind.on:hover { color: var(--accent); }
 .dt-btns .sq.dl-ind:hover { background: color-mix(in srgb, var(--panel-3) 80%, transparent); }   /* the movie page's square buttons */
+
+/* row menu extras */
+.menu-i { display: flex; align-items: center; gap: 10px; }
+.menu-i .ic { width: 16px; height: 16px; color: var(--muted); }
+.menu-i.danger, .menu-i.danger .ic { color: var(--red); }
+.menu-sep { border: 0; border-top: 1px solid var(--line); margin: 5px 4px; }
+
+/* Xtream account info */
+dialog.acct-dlg { width: min(960px, calc(100vw - 24px)); overflow: hidden; }
+.acct-dlg .dlg-head { gap: 12px; }
+.acct-dlg .dlg-head small { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; }
+.acct-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--sel); color: var(--accent); }
+.acct-pill { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 99px; text-transform: capitalize; }
+.acct-pill.ok { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.acct-pill.bad { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+#acctBody { overflow-y: auto; min-height: 0; }
+#acctBody .empty { padding: 30px 18px; }
+.acct-band { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); border-bottom: 1px solid var(--line); padding: 14px 18px 18px; }
+.acct-sub { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+.acct-sub i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.acct-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 14px; }
+.acct-stat { display: flex; gap: 10px; align-items: flex-start; }
+.acct-stat .ic { color: var(--accent); }
+.acct-stat > div { flex: 1; } .acct-stat small { display: block; font-size: 12px; color: var(--muted); }
+.acct-stat b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.acct-stat .bar { height: 4px; border-radius: 4px; background: var(--panel-3); margin-top: 6px; max-width: 180px; overflow: hidden; }
+.acct-stat .bar i { display: block; height: 100%; background: var(--accent); }
+.acct-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 28px; padding: 16px 18px 20px; }
+.acct-cols h3 { font-size: 15px; margin-bottom: 6px; }
+.acct-cols h4 { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); margin: 12px 0 8px; }
+.acct-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.acct-row span { color: var(--muted); } .acct-row b { font-weight: 600; overflow-wrap: anywhere; }
+.acct-row .mono { font-family: ui-monospace, Consolas, monospace; }
+.acct-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.acct-chip { font: 700 12px ui-monospace, Consolas, monospace; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel-2); }
