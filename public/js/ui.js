@@ -70,7 +70,7 @@ function applyTheme() {
   const root = document.documentElement;
   root.dataset.theme = dark ? 'dark' : 'light';
   root.dataset.palette = dark ? LS.get('tuner.darkPalette', 'midnight') : LS.get('tuner.lightPalette', 'soft');
-  const [a, ink] = ACCENTS[LS.get('tuner.accent', 'blue')] || ACCENTS.blue;
+  const [a, ink] = ACCENTS[LS.get('tuner.accent', 'coral')] || ACCENTS.coral;
   root.style.setProperty('--accent', a);
   root.style.setProperty('--accent-ink', ink);
   $('#btnTheme use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
@@ -694,7 +694,7 @@ function initUpdates() {
 
 function renderSettings() {
   const theme = LS.get('tuner.theme', 'dark');
-  const accent = LS.get('tuner.accent', 'blue');
+  const accent = LS.get('tuner.accent', 'coral');
   const compat = LS.get('tuner.compat', 'auto');
   const autonext = LS.get('tuner.autonext', true);
   const keepHevc = LS.get('tuner.keepHevc', true);
