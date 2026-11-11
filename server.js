@@ -129,32 +129,74 @@ const tag = (body, name) => {
   return m ? decode(m[1]) : '';
 };
 
-function parseXmltv(xml, fromMs, toMs) {
+// XMLTV text arrives piece by piece (push), so a guide of hundreds of MB is never one string (V8 caps strings at
+// ~512 MB) and the server can answer other requests in between. Only whole <channel> / <programme> elements are
+// parsed; the unfinished end of a piece waits for the next one.
+function xmltvParser(fromMs, toMs) {
   const chNames = {}; // channel id -> [normalised display names]
-  const chRe = /<channel\b[^>]*?\bid\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/channel>/g;
-  let m;
-  while ((m = chRe.exec(xml))) {
-    const names = [];
-    const nRe = /<display-name\b[^>]*>([\s\S]*?)<\/display-name>/g;
-    let n;
-    while ((n = nRe.exec(m[3]))) { const k = normName(decode(n[1])); if (k) names.push(k); }
-    chNames[decode(m[2])] = names;
-  }
-
   const programmes = {};
-  let count = 0;
-  const pRe = /<programme\b([^>]*)>([\s\S]*?)<\/programme>/g;
-  while ((m = pRe.exec(xml))) {
-    const start = parseXmltvTime(attr(m[1], 'start'));
-    const stop = parseXmltvTime(attr(m[1], 'stop'));
-    if (start == null || stop == null || stop < fromMs || start > toMs) continue;
-    const ch = decode(attr(m[1], 'channel'));
-    if (!ch) continue;
-    (programmes[ch] ||= []).push([start, stop, tag(m[2], 'title'), tag(m[2], 'desc').slice(0, 400)]);
-    count++;
+  let count = 0, rest = '', isTv = false;
+  const parse = (xml) => {
+    const chRe = /<channel\b[^>]*?\bid\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/channel>/g;
+    let m;
+    while ((m = chRe.exec(xml))) {
+      const names = [];
+      const nRe = /<display-name\b[^>]*>([\s\S]*?)<\/display-name>/g;
+      let n;
+      while ((n = nRe.exec(m[3]))) { const k = normName(decode(n[1])); if (k) names.push(k); }
+      chNames[decode(m[2])] = names;
+    }
+    const pRe = /<programme\b([^>]*)>([\s\S]*?)<\/programme>/g;
+    while ((m = pRe.exec(xml))) {
+      const start = parseXmltvTime(attr(m[1], 'start'));
+      const stop = parseXmltvTime(attr(m[1], 'stop'));
+      if (start == null || stop == null || stop < fromMs || start > toMs) continue;
+      const ch = decode(attr(m[1], 'channel'));
+      if (!ch) continue;
+      (programmes[ch] ||= []).push([start, stop, tag(m[2], 'title'), tag(m[2], 'desc').slice(0, 400)]);
+      count++;
+    }
+  };
+  return {
+    push(text) {
+      rest += text;
+      if (!isTv) {
+        isTv = /<tv\b/i.test(rest);
+        if (!isTv && rest.length > 1e6) throw httpError(502, 'That URL did not return an XMLTV guide');
+      }
+      const p = rest.lastIndexOf('</programme>'), c = rest.lastIndexOf('</channel>');
+      const cut = Math.max(p < 0 ? -1 : p + 12, c < 0 ? -1 : c + 10);
+      if (cut < 0) return;
+      parse(rest.slice(0, cut));
+      rest = rest.slice(cut);
+    },
+    end() {
+      if (!isTv && !/<tv\b/i.test(rest)) throw httpError(502, 'That URL did not return an XMLTV guide');
+      parse(rest);
+      rest = '';
+      for (const id in programmes) programmes[id].sort((a, b) => a[0] - b[0]);
+      return { chNames, programmes, count, parsedAt: Date.now() };
+    },
+  };
+}
+
+// The guide file (plain or gzipped) as ~1 MB pieces of text, letting the event loop run between pieces.
+async function* guideText(buf) {
+  const dec = new TextDecoder();
+  const pieces = buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b
+    ? Readable.from([buf]).pipe(zlib.createGunzip({ chunkSize: 1 << 20 }))
+    : (function* () { for (let i = 0; i < buf.length; i += 1 << 20) yield buf.subarray(i, i + (1 << 20)); })();
+  for await (const piece of pieces) {
+    yield dec.decode(piece, { stream: true });
+    await new Promise(setImmediate);
   }
-  for (const id in programmes) programmes[id].sort((a, b) => a[0] - b[0]);
-  return { chNames, programmes, count, parsedAt: Date.now() };
+  yield dec.decode();
+}
+
+async function parseXmltv(buf, fromMs, toMs) {
+  const parser = xmltvParser(fromMs, toMs);
+  for await (const text of guideText(buf)) parser.push(text);
+  return parser.end();
 }
 
 const epgCache = new Map(); // url -> { t, full }
@@ -165,10 +207,8 @@ async function loadEpg(url, ua, force) {
   if (hit && !force && Date.now() - hit.t < EPG_TTL) return hit.full;
   const r = await upstream(url, { ua, signal: AbortSignal.timeout(180000) });
   if (!r.ok) throw httpError(502, `Guide download failed (HTTP ${r.status})`);
-  const xml = maybeGunzip(Buffer.from(await r.arrayBuffer())).toString('utf8');
-  if (!/<tv\b/i.test(xml)) throw httpError(502, 'That URL did not return an XMLTV guide');
   const now = Date.now();
-  const full = parseXmltv(xml, now - 3 * 3600e3, now + 36 * 3600e3);
+  const full = await parseXmltv(Buffer.from(await r.arrayBuffer()), now - 3 * 3600e3, now + 36 * 3600e3);
   epgCache.set(url, { t: now, full });
   while (epgCache.size > 6) epgCache.delete(epgCache.keys().next().value);
   return full;
@@ -598,4 +638,4 @@ function start(port) {
   });
 }
 
-module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, rewriteM3u8 };   // the last two for test/
+module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8 };   // the last three for test/

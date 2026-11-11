@@ -43,3 +43,25 @@ test('the local server refuses requests from other websites (DNS rebinding, cros
   assert.strictEqual(await status({ Host: self, 'Sec-Fetch-Site': 'cross-site' }), 403);       // <img> / no-cors from another site
   assert.strictEqual(await status({ Host: self, Origin: 'null' }), 403);                       // sandboxed page or file://
 });
+
+test('the guide parses the same however the text is split into pieces', () => {
+  const { xmltvParser } = require('../server');
+  const xml = '<?xml version="1.0"?><tv>'
+    + '<channel id="one.tv"><display-name>One HD</display-name><display-name>1</display-name></channel>'
+    + '<channel id="two.tv"><display-name>Two &amp; Co</display-name></channel>'
+    + '<programme start="20261023200000 +0000" stop="20261023210000 +0000" channel="one.tv"><title>Late</title><desc>B</desc></programme>'
+    + '<programme start="20261023190000 +0000" stop="20261023200000 +0000" channel="one.tv"><title>News &amp; weather</title></programme>'
+    + '<programme start="20261023190000 +0000" stop="20261023200000 +0000" channel="two.tv"><title><![CDATA[Film <3>]]></title></programme>'
+    + '<programme start="20201023190000 +0000" stop="20201023200000 +0000" channel="two.tv"><title>Too old</title></programme>'
+    + '</tv>';
+  const from = Date.UTC(2026, 9, 23), to = Date.UTC(2026, 9, 24);
+  const run = (size) => { const p = xmltvParser(from, to); for (let i = 0; i < xml.length; i += size) p.push(xml.slice(i, i + size)); const r = p.end(); delete r.parsedAt; return r; };
+  const whole = run(xml.length);
+  assert.deepStrictEqual(whole.chNames, { 'one.tv': ['onehd', '1'], 'two.tv': ['twoco'] });
+  assert.deepStrictEqual(whole.programmes['one.tv'].map((x) => x[2]), ['News & weather', 'Late']);   // sorted by start
+  assert.deepStrictEqual(whole.programmes['two.tv'].map((x) => x[2]), ['Film <3>']);
+  assert.strictEqual(whole.count, 3);
+  for (const size of [1, 7, 50, 333]) assert.deepStrictEqual(run(size), whole, `pieces of ${size}`);
+
+  assert.throws(() => { const p = xmltvParser(from, to); p.push('<html>not a guide</html>'); p.end(); }, /did not return an XMLTV guide/);
+});
