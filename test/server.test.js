@@ -80,3 +80,14 @@ test('two requests for the same guide at once download it once', async (t) => {
   assert.deepStrictEqual(await Promise.all([ask(), ask()]), [200, 200]);
   assert.strictEqual(hits, 1);
 });
+
+test('every page script parses', () => {
+  // the page scripts run only in the app window, so nothing else would notice a syntax error in them
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const dirs = [path.join(__dirname, '..', 'public'), path.join(__dirname, '..', 'public', 'js')];
+  const files = dirs.flatMap((d) => fs.readdirSync(d).filter((f) => f.endsWith('.js')).map((f) => path.join(d, f)));
+  assert.ok(files.length > 5);
+  for (const f of files) assert.doesNotThrow(() => new vm.Script(fs.readFileSync(f, 'utf8'), { filename: f }), f);
+});

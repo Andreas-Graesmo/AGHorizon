@@ -687,7 +687,8 @@ function initUpdates() {
     upd.info = info; upd.st = st || upd.st;
     renderUpdBanner();
     if (ui.route === 'settings') renderSettings();
-    if ((info.updater || info.platform === 'darwin') && LS.get('tuner.autoUpdate', true))   // a Mac only checks: it downloads from GitHub setTimeout(() => d.updater.check(), 6000);
+    // a Mac only checks for a newer version: it downloads it from GitHub
+    if ((info.updater || info.platform === 'darwin') && LS.get('tuner.autoUpdate', true)) setTimeout(() => d.updater.check(), 6000);
   }).catch(() => {});
 }
 
