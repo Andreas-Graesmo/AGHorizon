@@ -587,7 +587,7 @@ function serveStatic(req, res, pathname) {
       'Content-Length': st.size,
       'Cache-Control': 'no-cache',
     });
-    fs.createReadStream(file).pipe(res);
+    fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);   // e.g. the file went away after stat: an unhandled error would crash the app
   });
 }
 
