@@ -2,7 +2,7 @@
 
 A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator.
 
-- **Dashboard** with *continue watching*, recently viewed and favorites from all your playlists
+- **Dashboard** with a large slideshow, *Trending this week* (from TMDB, matched to your playlists), live channels on your favorites, and what you watched recently
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
 - **Movies and series** – category list with poster grids, sorting, detail pages with plot, cast, seasons and episodes, "Resume", auto-play of the next episode
 - **Several playlists** – Xtream Codes (server + login, or paste a `get.php?username=…&password=…` link), M3U/M3U8 by URL or file; drag an `.m3u` file onto the window to add it
@@ -11,25 +11,23 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 - Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, mini player that keeps playing while you browse
 - Keyboard: press **?** in the app for the full list
 
-## Run the desktop app
+## Download
 
-You need [Node.js](https://nodejs.org) 18 or newer.
+**[Download the latest version](https://github.com/Andreas-Graesmo/AGHorizon/releases/latest)** · [all releases](https://github.com/Andreas-Graesmo/AGHorizon/releases)
 
-```bash
-npm install     # downloads Electron and ffmpeg (once)
-npm start       # opens the app window
-```
+| System | File |
+|---|---|
+| Windows | `AG-Horizon-Setup-<version>.exe` |
+| macOS (Apple silicon) | `AG-Horizon-<version>-arm64.dmg` |
+| Linux | `AG-Horizon-<version>.AppImage` |
 
-### Make an installer
+After that the app updates itself: **Settings › About & updates**.
 
-```bash
-npm run dist          # for the system you're on
-npm run dist:win      # .exe installer   (build on Windows)
-npm run dist:mac      # .dmg             (build on macOS)
-npm run dist:linux    # .AppImage        (build on Linux)
-```
+- **Windows:** the installer isn't code-signed, so SmartScreen may say "Windows protected your PC" the first time. Click **More info › Run anyway**.
+- **macOS:** the app isn't signed either. The first time, right-click the app and choose **Open**. On a Mac the app tells you about new versions, and you download them from the releases page.
+- **Linux:** make the file executable once (`chmod +x AG-Horizon-*.AppImage`), then run it.
 
-The result is in `dist/`. Each platform is best built on that platform.
+Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 
 ## Sources and startup
 
@@ -71,7 +69,7 @@ The window shows the UI from a small server (`server.js`) that runs inside the a
 ```
 electron/main.js        desktop window, second-screen window placement
 electron/preload.js     lets the page ask which monitors exist
-server.js               proxy + EPG parser + ffmpeg conversion + static files (also runs standalone)
+server.js               proxy + EPG parser + ffmpeg conversion + static files
 public/index.html       page structure
 public/style.css        styles (dark / light, accent colours)
 public/js/core.js       storage, Xtream / M3U loading, EPG lookups
@@ -83,10 +81,6 @@ public/js/boot.js       start-up, drag & drop
 public/mirror.html/js   the second-screen window
 scripts/get-vendor.js   optional: download player libraries locally
 ```
-
-## Releases and updates
-
-See [RELEASING.md](RELEASING.md) for how to publish new versions on GitHub and update installed copies from inside the app (**Settings → About & updates**).
 
 ## Credits
 
