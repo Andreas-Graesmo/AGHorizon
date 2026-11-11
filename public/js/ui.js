@@ -303,16 +303,6 @@ function rail(title, items, { route, tagFn, subFn } = {}) {
 }
 const KIND_TAG = { live: 'Live', movie: 'Movie', series: 'Series', episode: 'Series' };
 
-function continueWatching() {
-  const out = [];
-  for (const [uid, p] of Object.entries(state.progress)) {
-    if (!p || p.w || !(p.t > 10) || !(p.d > 0)) continue;
-    const s = state.recent.find((r) => r.uid === uid) || state.favdata[uid];
-    if (s && playlistById(s.pid)) out.push({ ...s, _ts: p.ts });
-  }
-  return out.sort((a, b) => b._ts - a._ts).slice(0, 20);
-}
-
 /* ─────────────────────────────────── dashboard ─────────────────────────────────── */
 const hero = { i: 0, items: [], paused: false, timer: 0 };
 const hasImg = (it) => it.logo && /^https?:\/\//i.test(it.logo);
@@ -327,11 +317,44 @@ function chanCard(it) {
     <b title="${esc(it.name)}">${esc(it.name)}</b><small>${esc(now ? now[2] || 'On air' : it.group || '')}</small>
     <div class="cc-live"><span class="live-badge"><i></i>LIVE</span><div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>${now ? `<span>${fmtTime(now[0])} – ${fmtTime(now[1])}</span>` : ''}</div></div>`;
 }
-function dashRail(title, itemsHtml, count, route) {
-  if (!itemsHtml) return '';
-  return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3>${count != null ? `<span class="pill">${count}</span>` : ''}${route ? `<button class="link" data-act="goto" data-route="${route}">See all ›</button>` : ''}</div><div class="rail-row">${itemsHtml}</div></section>`;
+const RAIL_MAX = 20;
+// list: everything that belongs in the rail; it shows the first RAIL_MAX, and "See all" only when there are more
+function dashRail(title, list, toHtml, route) {
+  if (!list.length) return '';
+  const more = route && list.length > RAIL_MAX;
+  return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}">See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
 }
-function heroCandidates() {
+// TMDB's trending titles: asked once per session and again when 6 hours old (the server keeps them that long).
+// null until they arrive, or when this build has no TMDB key: the dashboard then shows "Recently added".
+const trend = { data: null, at: 0 };
+function trendRefresh() {
+  if (Date.now() - trend.at < 6 * 3600e3) return;
+  trend.at = Date.now();
+  fetch('/api/trending').then((r) => (r.ok ? r.json() : null)).then((j) => {
+    if (!j) return;
+    trend.data = j;
+    if (ui.route === 'dashboard') renderDashboard();
+  }).catch(() => {});
+}
+// each playlist's movies or series, the one used last first (a title in several playlists opens from that one)
+function catalogues(mode) {
+  const last = LS.get('tuner.lastPid', '');
+  return [...state.playlists].sort((a, b) => (b.id === last) - (a.id === last)).map((p) => {
+    const own = state.cache[`${p.id}:${mode}`], base = state.cache[p.id];
+    return own ? own.channels : base && p.type !== 'xtream' ? base[mode === 'movie' ? 'movies' : 'series'] : null;
+  }).filter(Boolean);
+}
+// trending movies and series that are in the playlists, alternating, most popular first
+function trendingItems() {
+  if (!trend.data) return [];
+  const m = matchTrending(trend.data.movie, catalogues('movie')), t = matchTrending(trend.data.tv, catalogues('series'));
+  const out = [];
+  for (let i = 0; i < Math.max(m.length, t.length); i++) out.push(...[m[i], t[i]].filter(Boolean));
+  return out;
+}
+function heroCandidates(trending) {
+  const hot = trending.filter((x) => x.t.backdrop).slice(0, 5).map(({ it, t }) => ({ it, tag: 'Trending', t }));
+  if (hot.length) return hot;
   const all = allCachedItems();
   const newest = [...all.movie, ...all.series].filter(hasImg).sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, 5).map((it) => ({ it, tag: 'Recently added' }));
   if (newest.length) return newest;
@@ -339,6 +362,14 @@ function heroCandidates() {
   if (rec.length) return rec;
   return Object.values(state.favdata).filter((f) => playlistById(f.pid) && f.kind !== 'live' && hasImg(f)).slice(0, 5).map((it) => ({ it, tag: 'Favorite' }));
 }
+// The wide backdrop, plot and genre come with a title's details: one request per slide, then cached in state.detail.
+function heroInfo(it, t) {
+  if (t) return { backdrop_path: t.backdrop, plot: t.overview };   // a trending title brings its picture and plot from TMDB
+  const d = state.detail[it.uid];
+  if (!d && it.xtream) loadDetail(it).then(() => { const c = hero.items[hero.i % hero.items.length]; if (c && c.it.uid === it.uid) renderHero(); });
+  return (d && d.info) || {};
+}
+const cssUrl = (u) => `url("${encodeURI(u)}")`;   // in a style attribute: no quote or bracket can end the url()
 function renderHero() {
   const box = $('#heroBox');
   if (!box) return;
@@ -346,9 +377,20 @@ function renderHero() {
   if (!c) { box.innerHTML = ''; return; }
   const { it, tag } = c;
   const pl = playlistById(it.pid);
-  box.innerHTML = `<div class="hero-bg"></div><div class="hero-img" style="background-image:url('${esc(it.logo)}')"></div>
-    <div class="hero-in"><div class="hero-eyebrow">${esc(KIND_LABEL[kindOf(it)] || 'Movie')} · ${esc(tag)}</div>
-      <h1>${esc(it.name)}</h1><span class="hero-chip">${esc(pl ? pl.name : '')}</span>
+  const info = heroInfo(it, c.t);
+  if (hero.items.length > 1) { const n = hero.items[(hero.i + 1) % hero.items.length]; heroInfo(n.it, n.t); }   // the next slide is ready when it shows
+  const bd = backdropOf(info);
+  const wide = /^https?:\/\//i.test(bd);
+  const poster = info.movie_image || info.cover_big || it.logo;
+  const meta = [String(info.releasedate || info.release_date || it.year || '').slice(0, 4), runtimeLabel(info),
+    splitNames(info.genre || it.genre).slice(0, 3).join(', '), goodRating(info.rating || it.rating) && '★ ' + goodRating(info.rating || it.rating)].filter(Boolean);
+  const plot = info.plot || info.description || it.plot || '';
+  box.innerHTML = `<div class="hero-img${wide ? '' : ' poster'}" style="background-image:${esc(cssUrl(wide ? bd : poster))}"></div>
+    ${wide ? '' : `<div class="hero-poster" style="background-image:${esc(cssUrl(poster))}"></div>`}
+    <div class="hero-in"><div class="hero-eyebrow">${esc(KIND_LABEL[kindOf(it)] || 'Movie')} · ${esc(tag)}${pl ? ' · ' + esc(pl.name) : ''}</div>
+      <h1>${esc((c.t && c.t.title) || it.name)}</h1>
+      ${meta.length ? `<div class="hero-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</div>` : ''}
+      ${plot ? `<p class="hero-plot">${esc(plot)}</p>` : ''}
       <div class="hero-act"><button class="btn white" data-act="hero-open"><svg class="ic"><use href="#i-info"/></svg>Details</button>
         <div class="hero-dots"><button class="hd-pause" data-act="hero-pause" aria-label="${hero.paused ? 'Resume' : 'Pause'} slideshow"><svg class="ic fill"><use href="#${hero.paused ? 'i-play' : 'i-pause'}"/></svg></button>${hero.items.map((_, k) => `<button data-act="hero-go" data-k="${k}" class="${k === hero.i % hero.items.length ? 'on' : ''}" aria-label="Show ${k + 1}"></button>`).join('')}</div></div></div>`;
 }
@@ -359,25 +401,29 @@ function renderDashboard() {
     el.innerHTML = `<div class="page">${emptyState('i-logo', 'Welcome to AG Horizon', 'Add an Xtream Codes login or an M3U playlist to start watching live TV, movies and series.', addBtn)}</div>`;
     return;
   }
-  hero.items = heroCandidates();
+  trendRefresh();
+  const trending = trendingItems();
+  hero.items = heroCandidates(trending);
   if (hero.i >= hero.items.length) hero.i = 0;
-  const cont = continueWatching();
-  const live = (list) => list.filter((r) => playlistById(r.pid) && r.kind === 'live');
-  const favLive = live(Object.values(state.favdata).reverse()).slice(0, 20);
-  const recLive = live(state.recent).slice(0, 20);
-  const recVod = state.recent.filter((r) => playlistById(r.pid) && r.kind !== 'live').slice(0, 20);
-  const added = [...allCachedItems().movie].sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, 20);
-  const cards = (list, o) => list.map((s) => cardHtml(s, o)).join('');
-  const sources = state.playlists.map((p) => `<button class="src-card" data-act="pl-open" data-pid="${esc(p.id)}"><div class="src-img"><svg class="ic"><use href="#i-cloud"/></svg></div><b>${esc(p.name)}</b><small>${esc(typeLabel(p))}</small></button>`).join('');
-  const body = dashRail('Continue watching', cards(cont), cont.length)
-    + dashRail('Live now on your favorites', favLive.map(chanCard).join(''), favLive.length, 'favorites')
-    + dashRail('Recently watched live TV', recLive.map(chanCard).join(''), recLive.length, 'recent')
-    + dashRail('Recently watched', cards(recVod, { tag: '' }), recVod.length, 'recent')
-    + dashRail('Recently used sources', sources, state.playlists.length, 'playlists')
-    + dashRail('Recently added', cards(added), added.length);
+  const mine = (list) => list.filter((r) => playlistById(r.pid));
+  const live = (list) => mine(list).filter((r) => r.kind === 'live');
+  const favLive = live(Object.values(state.favdata).reverse());
+  const recLive = live(state.recent);
+  // one card per show: its latest episode (or the series itself, if only its page was opened)
+  const shows = new Set();
+  const recSeries = mine(state.recent).filter((r) => (r.kind === 'episode' || r.kind === 'series') && !shows.has(r.seriesUid || r.uid) && shows.add(r.seriesUid || r.uid));
+  const recMovies = mine(state.recent).filter((r) => r.kind === 'movie');
+  const added = [...allCachedItems().movie].sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, RAIL_MAX);
+  const card = (s) => cardHtml(s, { tag: '' });
+  const body = dashRail('Live now on your favorites', favLive, chanCard, 'favorites')
+    + dashRail('Recently watched live TV', recLive, chanCard, 'recent')
+    + dashRail('Recently watched series', recSeries, card, 'recent')
+    + dashRail('Recently watched movies', recMovies, card, 'recent')
+    + (trending.length >= 5 ? dashRail('Trending this week', trending.map((x) => x.it), (s) => cardHtml(s))   // too few found: the newest instead
+      : dashRail('Recently added', added, (s) => cardHtml(s)));
   el.innerHTML = `<div class="dash">
     ${hero.items.length ? '<div class="hero" id="heroBox"></div>' : '<div style="height:26px"></div>'}
-    ${body || '<div class="hint-card">Nothing watched yet – open a playlist from the menu above and pick something. Your recently viewed items, favorites and “continue watching” appear here.</div>'}
+    ${body || '<div class="hint-card">Nothing watched yet – open a playlist from the menu above and pick something. Your favorite channels and what you watch appear here.</div>'}
   </div>`;
   renderHero();
   if (hero.items.length > 1) hero.timer = setInterval(() => { if (ui.route !== 'dashboard') { clearInterval(hero.timer); return; } if (!hero.paused) { hero.i = (hero.i + 1) % hero.items.length; renderHero(); } }, 8000);
@@ -798,7 +844,6 @@ $('#views').addEventListener('click', (e) => {
   const pid = a.dataset.pid || (card && card.dataset.pid);
   switch (a.dataset.act) {
     case 'add-pl': openPlaylistDialog(); break;
-    case 'pl-open': openWorkspace(pid, 'live'); break;
     case 'pl-edit': e.stopPropagation(); openPlaylistDialog(playlistById(pid)); break;
     case 'pl-del': e.stopPropagation(); deletePlaylist(pid); break;
     case 'pl-refresh': e.stopPropagation(); refreshPlaylist(pid); break;

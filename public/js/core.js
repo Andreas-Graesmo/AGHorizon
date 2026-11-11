@@ -180,6 +180,7 @@ async function loadShortEpg(ch) {
 
 /* ───────────────────────── Xtream: movies & series ───────────────────────── */
 const yearOf = (s) => { const m = /\b((?:19|20)\d{2})\b/.exec(String(s || '')); return m ? m[1] : ''; };
+const tmdbOf = (s) => { const v = String(s.tmdb || s.tmdb_id || ''); return /^\d{1,10}$/.test(v) ? v : ''; };   // newer panels send it: matches Trending exactly
 const goodRating = (r) => { const n = parseFloat(r); return n > 0 ? String(Math.round(n * 10) / 10) : ''; };
 const catNames = (cats) => { const o = {}; (Array.isArray(cats) ? cats : []).forEach((c) => { o[c.category_id] = c.category_name; }); return o; };
 
@@ -197,7 +198,7 @@ async function loadXtreamMovies(p) {
       return {
         uid: `${p.id}:m${s.stream_id}`, pid: p.id, id: String(s.stream_id), kind: 'movie', num: i + 1,
         name: s.name || `Movie ${s.stream_id}`, logo: s.stream_icon || '', group: names[s.category_id] || 'Uncategorized',
-        year: yearOf(s.year || s.releasedate) || yearOf(s.name), rating: goodRating(s.rating), added: Number(s.added) || 0,
+        year: yearOf(s.year || s.releasedate) || yearOf(s.name), rating: goodRating(s.rating), added: Number(s.added) || 0, tmdb: tmdbOf(s),
         ext, url: `${base}/movie/${enc(p.username)}/${enc(p.password)}/${s.stream_id}.${ext}`, xtream: true,
       };
     }),
@@ -215,7 +216,7 @@ async function loadXtreamSeries(p) {
     channels: list.map((s, i) => ({
       uid: `${p.id}:s${s.series_id}`, pid: p.id, id: String(s.series_id), kind: 'series', num: i + 1,
       name: s.name || `Series ${s.series_id}`, logo: s.cover || '', group: names[s.category_id] || 'Uncategorized',
-      year: yearOf(s.releaseDate || s.release_date) || yearOf(s.name), rating: goodRating(s.rating), added: Number(s.last_modified) || 0,
+      year: yearOf(s.releaseDate || s.release_date) || yearOf(s.name), rating: goodRating(s.rating), added: Number(s.last_modified) || 0, tmdb: tmdbOf(s),
       plot: s.plot || '', cast: s.cast || '', genre: s.genre || '', xtream: true,
     })),
   };
@@ -473,6 +474,9 @@ const withBestUrl = (it) => {
   return ext && ext !== it.ext ? { ...it, ext, url: it.url.replace(/\.[^./]+$/, '.' + ext) } : it;
 };
 
+
+// the wide background picture in a title's details (Xtream sends one URL or a list)
+const backdropOf = (info) => (Array.isArray(info.backdrop_path) ? info.backdrop_path[0] : info.backdrop_path || info.backdrop || '') || '';
 
 /* snapshots: just enough to list an item later (Favorites, Recently viewed, Dashboard) */
 const snap = (it) => ({

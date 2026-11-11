@@ -572,6 +572,35 @@ async function handleCast(req, res, q) {
   sendJson(res, 200, castCache.get(key));
 }
 
+// GET /api/trending -> { movie: [...], tv: [...] }, this week's 40 most popular of each on TMDB, best first:
+// { id, title, original, year, overview, backdrop }. The page matches them against the playlists. Kept 6 hours.
+let trending = null;   // { t, job }
+const TRENDING_TTL = 6 * 3600e3;
+async function loadTrending() {
+  const one = async (type, page) => {
+    const r = await fetch(`https://api.themoviedb.org/3/trending/${type}/week?page=${page}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw httpError(502, `TMDB answered HTTP ${r.status}`);
+    return ((await r.json()).results || []).map((x) => ({
+      id: x.id,
+      title: x.title || x.name || '',
+      original: x.original_title || x.original_name || '',
+      year: String(x.release_date || x.first_air_date || '').slice(0, 4),
+      overview: x.overview || '',
+      backdrop: x.backdrop_path ? `https://image.tmdb.org/t/p/w1280${x.backdrop_path}` : '',
+    }));
+  };
+  const [m1, m2, t1, t2] = await Promise.all([one('movie', 1), one('movie', 2), one('tv', 1), one('tv', 2)]);
+  return { movie: [...m1, ...m2], tv: [...t1, ...t2] };
+}
+async function handleTrending(req, res) {
+  if (!TMDB_KEY) throw httpError(501, 'Trending isn’t available in this build');
+  if (!trending || Date.now() - trending.t > TRENDING_TTL) {
+    trending = { t: Date.now(), job: loadTrending() };
+    trending.job.catch(() => { trending = null; });   // a failed ask is tried again next time
+  }
+  sendJson(res, 200, await trending.job);
+}
+
 /* ----------------------------------------------------------------- static */
 
 function serveStatic(req, res, pathname) {
@@ -618,6 +647,7 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/cast' && req.method === 'GET') await handleCast(req, res, url.searchParams);
+    else if (url.pathname === '/api/trending' && req.method === 'GET') await handleTrending(req, res);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
     else if (url.pathname === '/api/transcode' && req.method === 'GET') handleTranscode(req, res, url.searchParams);

@@ -8,6 +8,12 @@ const realFetch = globalThis.fetch;
 const asked = [];
 globalThis.fetch = async (url) => {
   asked.push(String(url));
+  if (String(url).includes('/trending/')) {
+    const tv = String(url).includes('/trending/tv/'), page = /page=(\d)/.exec(url)[1];
+    return new Response(JSON.stringify({ results: [tv
+      ? { id: 10 + +page, name: 'Show ' + page, original_name: 'Serie ' + page, first_air_date: '2025-01-02', overview: 'o', backdrop_path: '/s.jpg' }
+      : { id: 20 + +page, title: 'Film ' + page, original_title: 'Film ' + page, release_date: '2026-03-04', backdrop_path: null }] }), { status: 200 });
+  }
   const cast = String(url).includes('/tv/')
     ? [{ name: 'Bryan Cranston', profile_path: '/b.jpg', roles: [{ character: 'Walter White' }] }]
     : [{ name: 'Keanu Reeves', character: 'Neo', profile_path: '/k.jpg' }, { name: 'No Photo', character: '' }];
@@ -31,4 +37,16 @@ test('cast photos come from TMDB, mapped for movies and series, and are cached',
   assert.strictEqual(asked.length, 2);   // the second ask for 603 came from the cache
   assert.match(asked[1], /\/tv\/1396\/aggregate_credits\?api_key=test-key$/);
   assert.strictEqual((await get('type=movie&id=1;rm'))[0], 400);
+});
+
+test('trending comes from TMDB, movies and series, and is kept for hours', async (t) => {
+  const port = await start(0);
+  t.after(() => server.close());
+  const before = asked.length;
+  const get = () => realFetch(`http://127.0.0.1:${port}/api/trending`).then((r) => r.json());
+  const j = await get();
+  assert.deepStrictEqual(j.movie.map((x) => [x.id, x.title, x.year, x.backdrop]), [[21, 'Film 1', '2026', ''], [22, 'Film 2', '2026', '']]);
+  assert.deepStrictEqual(j.tv[0], { id: 11, title: 'Show 1', original: 'Serie 1', year: '2025', overview: 'o', backdrop: 'https://image.tmdb.org/t/p/w1280/s.jpg' });
+  await get();
+  assert.strictEqual(asked.length - before, 4);   // two pages each of movies and series, once
 });

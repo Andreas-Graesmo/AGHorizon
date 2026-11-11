@@ -699,7 +699,7 @@ function renderDetail() {
   const d = state.detail[it.uid] || (it.seasons ? { info: {}, seasons: it.seasons } : {});
   const info = d.info || {};
   const poster = info.movie_image || info.cover_big || info.cover || it.logo;
-  const bd = Array.isArray(info.backdrop_path) ? info.backdrop_path[0] : info.backdrop_path || info.backdrop || '';
+  const bd = backdropOf(info);
   const plot = info.plot || info.description || it.plot || '';
   const castNames = splitNames(info.cast || info.actors || it.cast);
   const directors = splitNames(info.director);

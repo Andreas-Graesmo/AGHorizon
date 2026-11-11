@@ -206,24 +206,27 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .chan-card .cc-live .bar i { background: var(--red); }
 .live-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800; letter-spacing: .5px; color: var(--red); text-transform: uppercase; }
 .live-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
-.src-card { flex: none; width: 134px; cursor: pointer; text-align: left; appearance: none; border: 0; background: none; padding: 0; }
-.src-card .src-img { height: 76px; border-radius: 10px; background: linear-gradient(145deg, var(--panel-2), var(--panel)); border: 1px solid var(--line); display: grid; place-items: center; color: #5b7fd6; }
-.src-card .src-img .ic { width: 34px; height: 34px; fill: currentColor; stroke: none; }
-.src-card b { display: block; margin-top: 8px; font-size: 12.5px; }
-.src-card small { color: var(--muted); font-size: 11px; }
-
-/* dashboard hero */
-.dash { max-width: none; margin: 0; padding: 0 0 80px; }
-.dash > .rail, .dash > .hint-card { max-width: 1160px; margin-left: auto; margin-right: auto; padding-left: 28px; padding-right: 28px; box-sizing: border-box; }
-.hero { position: relative; min-height: 340px; margin: 0; padding: 0 28px; display: flex; align-items: flex-end; overflow: hidden; }
-.hero-bg { position: absolute; inset: 0; background: radial-gradient(900px 380px at 92% 20%, rgba(52, 140, 86, .32), transparent 70%), radial-gradient(700px 300px at 10% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%); }
-.hero-img { position: absolute; right: 0; top: 0; bottom: 0; width: 62%; background-size: cover; background-position: center 20%; opacity: .42; filter: blur(2px); mask-image: linear-gradient(90deg, transparent, #000 55%); -webkit-mask-image: linear-gradient(90deg, transparent, #000 55%); }
-.hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--bg) 4%, transparent 60%); pointer-events: none; }
-.hero-in { position: relative; z-index: 1; width: 100%; max-width: 1104px; margin: 0 auto; padding: 80px 0 22px; }
-.hero-eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: color-mix(in srgb, var(--text) 80%, transparent); margin-bottom: 8px; }
-.hero h1 { font-size: 40px; line-height: 1.08; font-weight: 700; letter-spacing: -.5px; max-width: 760px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.hero-chip { display: inline-block; margin-top: 12px; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: var(--panel-3); }
-.hero-act { display: flex; align-items: center; margin-top: 14px; gap: 10px; }
+/* dashboard: the hero picture fills the whole width and most of the height, the rails run out to the edges */
+.dash { --dash-pad: clamp(24px, 4vw, 72px); max-width: none; margin: 0; padding: 0 0 80px; }
+.dash > .rail { padding-left: var(--dash-pad); padding-right: var(--dash-pad); }
+.dash > .hint-card { margin-left: var(--dash-pad); margin-right: var(--dash-pad); }
+.dash .rail-row .card { width: clamp(134px, 8.6vw, 196px); }   /* posters grow a little on big screens */
+.dash .rail-row .chan-card { width: clamp(238px, 15vw, 310px); }
+.hero { position: relative; height: clamp(380px, 64vh, 780px); padding: 0 var(--dash-pad); display: flex; align-items: flex-end; overflow: hidden; }
+.hero-img { position: absolute; inset: 0; background-size: cover; background-position: center 25%; }
+.hero-img.poster { inset: -40px; filter: blur(30px) saturate(1.15); opacity: .6; }   /* no wide picture: the poster, blurred, as a backdrop */
+.hero-poster { position: absolute; z-index: 1; right: var(--dash-pad); top: 12%; height: 58%; aspect-ratio: 2 / 3; border-radius: 12px; background-size: cover; background-position: center; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 72%, transparent) 28%, transparent 60%),
+    linear-gradient(0deg, var(--bg) 3%, color-mix(in srgb, var(--bg) 45%, transparent) 30%, transparent 58%); }
+.hero-in { position: relative; z-index: 2; width: 100%; padding: 0 0 76px; }
+.dash > .hero + .rail { position: relative; z-index: 2; margin-top: -44px; }   /* the first rail overlaps the picture, so content shows without scrolling */
+.hero-eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: color-mix(in srgb, var(--text) 80%, transparent); margin-bottom: 10px; }
+.hero h1 { font-size: clamp(34px, 3.3vw, 58px); line-height: 1.06; font-weight: 700; letter-spacing: -.5px; max-width: min(820px, 58%); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-meta { display: flex; flex-wrap: wrap; margin-top: 12px; font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--text) 86%, transparent); }
+.hero-meta span + span::before { content: "·"; margin: 0 8px; opacity: .6; }
+.hero-plot { margin-top: 12px; max-width: min(640px, 50%); font-size: 14px; line-height: 1.55; color: color-mix(in srgb, var(--text) 82%, transparent); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-act { display: flex; align-items: center; margin-top: 18px; gap: 10px; }
 .hero-dots { margin-left: auto; display: flex; align-items: center; gap: 9px; margin-right: 6px; }
 .hero-dots button { appearance: none; border: 0; padding: 0; background: color-mix(in srgb, var(--text) 35%, transparent); width: 5px; height: 5px; border-radius: 5px; cursor: pointer; transition: width .2s; }
 .hero-dots button.on { width: 22px; background: var(--text); }
@@ -584,6 +587,8 @@ dialog.palette { top: 11vh; margin: 0 auto auto; width: min(620px, 94vw); }
   .dt-poster { max-width: 140px; }
   .grid2, .type-tiles { grid-template-columns: 1fr; }
   .top-search { display: none; }
+  .hero-poster { display: none; }
+  .hero h1, .hero-plot { max-width: 100%; }
 }
 body.dropping::after { content: "Drop an .m3u playlist to add it"; position: fixed; inset: 12px; z-index: 500; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 16px; background: color-mix(in srgb, var(--bg) 85%, transparent); font-size: 20px; font-weight: 700; pointer-events: none; }
 
