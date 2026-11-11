@@ -61,6 +61,7 @@ const state = {
   cache: {},        // playlist id -> { channels, movies, series, epgUrl }  /  `${id}:movie` -> { channels }
   epg: {},          // playlist id -> { programmes, lower, byName }
   epgState: {},     // playlist id -> 'loading' | 'ready' | 'none' | 'error: …'
+  heroWait: true,   // at start: the movies and series the dashboard's hero needs are still loading (boot.js clears it)
   short: {},        // channel uid -> { t, list }   (Xtream short EPG)
   current: null,    // what is playing: channel | movie | episode
   detail: {},       // item uid -> { info, seasons, loading, error }

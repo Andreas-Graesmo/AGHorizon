@@ -326,7 +326,7 @@ function rail(title, items, { route, tagFn, subFn } = {}) {
 const KIND_TAG = { live: 'Live', movie: 'Movie', series: 'Series', episode: 'Series' };
 
 /* ─────────────────────────────────── dashboard ─────────────────────────────────── */
-const hero = { i: 0, items: [], paused: false, timer: 0 };
+const hero = { i: 0, items: [], paused: false, timer: 0, settled: false };   // settled: the first real hero has been shown
 const hasImg = (it) => it.logo && /^https?:\/\//i.test(it.logo);
 function chanCard(it) {
   cardIndex.set(it.uid, it);
@@ -348,15 +348,16 @@ function dashRail(title, list, toHtml, route) {
 }
 // TMDB's trending titles: asked once per session and again when 6 hours old (the server keeps them that long).
 // null until they arrive, or when this build has no TMDB key: the dashboard then shows "Recently added".
-const trend = { data: null, at: 0 };
+const trend = { data: null, at: 0, done: false };   // done: the first answer came (or failed)
 function trendRefresh() {
   if (Date.now() - trend.at < 6 * 3600e3) return;
   trend.at = Date.now();
-  fetch('/api/trending').then((r) => (r.ok ? r.json() : null)).then((j) => {
-    if (!j) return;
-    trend.data = j;
+  fetch('/api/trending').then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => {
+    if (j) trend.data = j;
+    else if (trend.done) return;   // a later refresh failed: keep what's shown
+    trend.done = true;
     if (ui.route === 'dashboard') renderDashboard();
-  }).catch(() => {});
+  });
 }
 // each playlist's movies or series, the one used last first (a title in several playlists opens from that one)
 function catalogues(mode) {
@@ -460,6 +461,12 @@ function renderDashboard() {
   const trending = trendingItems();
   hero.items = heroCandidates(trending);
   if (hero.i >= hero.items.length) hero.i = 0;
+  // At start the hero waits (a placeholder of the same size) until it knows what to show: the movies and series, and
+  // Trending with its length check. Otherwise a fallback, like the film watched last, flashes first. Only the first time.
+  // At most 6 s: a provider or TMDB that hangs doesn't keep the spinner.
+  if (!hero.deadline) { hero.deadline = Date.now() + 6000; setTimeout(() => { if (!hero.settled && ui.route === 'dashboard') renderDashboard(); }, 6100); }
+  const heroWait = !hero.settled && Date.now() < hero.deadline && (state.heroWait || !trend.done || trendChecking);
+  if (!heroWait) hero.settled = true;
   const mine = (list) => list.filter((r) => playlistById(r.pid));
   const live = (list) => mine(list).filter((r) => r.kind === 'live');
   const favLive = live(Object.values(state.favdata).reverse());
@@ -477,7 +484,9 @@ function renderDashboard() {
     + (trending.length >= 5 ? dashRail('Trending this week', trending.map((x) => x.it), (s) => cardHtml(s))   // too few found: the newest instead
       : dashRail('Recently added', added, (s) => cardHtml(s)));
   el.innerHTML = `<div class="dash">
-    ${hero.items.length ? '<div class="hero" id="heroBox"></div>' : '<div style="height:26px"></div>'}
+    ${heroWait ? '<div class="hero hero-wait" aria-label="Loading"><div class="spinner"></div></div>'   // same height, so the rails don't jump when it arrives
+    : hero.items.length ? '<div class="hero" id="heroBox"></div>'
+    : '<div style="height:26px"></div>'}
     ${body || '<div class="hint-card">Nothing watched yet – open a playlist from the menu above and pick something. Your favorite channels and what you watch appear here.</div>'}
   </div>`;
   renderHero();

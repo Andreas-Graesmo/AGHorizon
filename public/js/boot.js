@@ -47,6 +47,8 @@ requestAnimationFrame(() => setTimeout(tunerDesktop.ready));
 
 /* Reload every playlist when the app starts (last used one first), so lists, guide and status are fresh. */
 async function startupReload() {
+  const heroReady = () => { if (!state.heroWait) return; state.heroWait = false; if (ui.route === 'dashboard') renderDashboard(); };
+  let waiting = false;   // the hero's lists are on their way
   const lastSaved = LS.get('tuner.lastPid', '');
   const last = playlistById(lastSaved) ? lastSaved : (state.playlists[0] && state.playlists[0].id);
   const order = [...state.playlists].sort((x, y) => (y.id === last) - (x.id === last));
@@ -54,13 +56,16 @@ async function startupReload() {
     if (!playlistById(p.id)) continue;
     try {
       await loadPlaylist(p, true);
-    } catch { continue; }   // status is already marked "not responding"
+    } catch { if (p.id === last) heroReady(); continue; }   // status is already marked "not responding"
     if (p.id === last) {
+      waiting = true;
       if (!state.epgState[p.id]) loadEpg(p);
-      for (const m of ['movie', 'series']) loadItems(p, m).then(() => { if (ui.route === 'dashboard') renderDashboard(); }).catch(() => {});
+      const lists = ['movie', 'series'].map((m) => loadItems(p, m).then(() => { if (ui.route === 'dashboard') renderDashboard(); }).catch(() => {}));
+      Promise.all(lists).then(heroReady);   // loaded or failed: the hero shows, or its placeholder goes
     }
     if (ui.route === 'dashboard') renderDashboard();
   }
+  if (!waiting) heroReady();   // no playlists, or the last-used one was removed meanwhile
 }
 startupReload();
 initUpdates();
