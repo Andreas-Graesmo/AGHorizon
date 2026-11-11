@@ -20,8 +20,8 @@ function trendIndex(items) {
   if (!ix) {
     ix = { byId: new Map(), byKey: new Map() };
     for (const it of items) {
-      // several versions of one title: keep one that wasn't filmed in a cinema ([CAM], [TS]) when there is one
-      if (it.tmdb && (!ix.byId.has(String(it.tmdb)) || (isCam(ix.byId.get(String(it.tmdb)).name) && !isCam(it.name)))) ix.byId.set(String(it.tmdb), it);
+      if (isCam(it.name)) continue;   // filmed in a cinema ([CAM], [TS]): not worth showing
+      if (it.tmdb && !ix.byId.has(String(it.tmdb))) ix.byId.set(String(it.tmdb), it);
       const k = trendKey(it.name);
       if (!k) continue;
       if (!ix.byKey.has(k)) ix.byKey.set(k, []);
@@ -55,4 +55,8 @@ function matchTrending(trend, catalogues) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { trendKey, matchTrending };
+// Does the provider's length (minutes) fit TMDB's? Off by more than 15 minutes and a quarter: no (a trailer, part of a
+// cinema recording, the wrong film). Unknown on either side: yes.
+const lengthsMatch = (ours, tmdb) => !ours || !tmdb || Math.abs(ours - tmdb) <= Math.max(15, tmdb * 0.25);
+
+if (typeof module !== 'undefined') module.exports = { trendKey, matchTrending, lengthsMatch };

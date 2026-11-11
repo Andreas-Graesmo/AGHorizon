@@ -68,7 +68,7 @@ const state = {
   progress: LS.get('tuner.progress', {}), // uid -> { t, d, w, ts }
   status: {},       // playlist id -> 'checking' | 'ok' | 'down'   (runtime only)
   ffmpeg: false,
-  castPhotos: {},   // movie / series uid -> 'loading' | [{ name, role, photo }] from TMDB (workspace.js)
+  tmdbInfo: {},     // "movie:603" -> 'loading' | { runtime, cast: [{ name, role, photo }] } from TMDB (workspace.js)
 };
 
 for (const p of state.playlists) if (!p.added) p.added = Date.now();   // playlists saved by older versions
@@ -217,6 +217,7 @@ async function loadXtreamSeries(p) {
       uid: `${p.id}:s${s.series_id}`, pid: p.id, id: String(s.series_id), kind: 'series', num: i + 1,
       name: s.name || `Series ${s.series_id}`, logo: s.cover || '', group: names[s.category_id] || 'Uncategorized',
       year: yearOf(s.releaseDate || s.release_date) || yearOf(s.name), rating: goodRating(s.rating), added: Number(s.last_modified) || 0, tmdb: tmdbOf(s),
+      runtime: Number(s.episode_run_time) || 0,   // minutes per episode, when the provider says (Trending compares it)
       plot: s.plot || '', cast: s.cast || '', genre: s.genre || '', xtream: true,
     })),
   };

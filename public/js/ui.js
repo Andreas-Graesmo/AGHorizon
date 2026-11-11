@@ -345,12 +345,45 @@ function catalogues(mode) {
   }).filter(Boolean);
 }
 // trending movies and series that are in the playlists, alternating, most popular first
+// trending movies and series that are in the playlists and whose length checks out (below), alternating, most popular first
 function trendingItems() {
   if (!trend.data) return [];
   const m = matchTrending(trend.data.movie, catalogues('movie')), t = matchTrending(trend.data.tv, catalogues('series'));
-  const out = [];
-  for (let i = 0; i < Math.max(m.length, t.length); i++) out.push(...[m[i], t[i]].filter(Boolean));
-  return out;
+  const all = [];
+  for (let i = 0; i < Math.max(m.length, t.length); i++) all.push(...[m[i], t[i]].filter(Boolean));
+  trendVerify(all);
+  return all.filter((x) => trendOk[trendKeyOf(x)] === true);
+}
+
+// A provider file much shorter or longer than the title on TMDB (a trailer, part of a cinema recording) isn't the real
+// thing, so Trending leaves it out. A length that's unknown on either side passes. Movies: the provider gives the length
+// only in a title's details (~200 ms each, 3 at a time); series: per episode, in the list. Each title is checked once:
+// the verdicts are kept in tuner.trendOk, so Trending shows at once on the next start.
+const TREND_OK = 'tuner.trendOk';
+const trendOk = LS.get(TREND_OK, {});   // "<uid>|<tmdb id>" -> true (shown) | false (left out)
+const trendKeyOf = ({ it, t }) => `${it.uid}|${t.id}`;
+const trendTried = new Set();   // asked this session: a title the provider can't answer for isn't asked again until the next start
+let trendChecking = false;
+function trendVerify(all) {
+  const todo = all.filter((x) => !(trendKeyOf(x) in trendOk) && !trendTried.has(trendKeyOf(x)));
+  if (trendChecking || !todo.length) return;
+  trendChecking = true;
+  todo.forEach((x) => trendTried.add(trendKeyOf(x)));
+  const one = async ({ it, t }) => {
+    const tm = await tmdbGet(it.kind === 'series' ? 'tv' : 'movie', t.id);
+    if (!tm || !tm.runtime) return true;
+    if (it.kind === 'series') return lengthsMatch(it.runtime, tm.runtime);
+    await loadDetail(it);
+    const d = state.detail[it.uid];
+    return d && !d.loading && !d.error ? lengthsMatch(runtimeSecs(d.info || {}) / 60, tm.runtime) : null;   // null: try again next time
+  };
+  const worker = async () => { for (let x; (x = todo.shift());) { const ok = await one(x).catch(() => null); if (ok !== null) trendOk[trendKeyOf(x)] = ok; } };
+  Promise.all([worker(), worker(), worker()]).then(() => {
+    const keep = new Set(all.map(trendKeyOf));   // forget titles that are no longer trending
+    LS.set(TREND_OK, Object.fromEntries(Object.entries(trendOk).filter(([k]) => keep.has(k))));
+    trendChecking = false;
+    if (ui.route === 'dashboard') renderDashboard();
+  });
 }
 function heroCandidates(trending) {
   const hot = trending.filter((x) => x.t.backdrop).slice(0, 5).map(({ it, t }) => ({ it, tag: 'Trending', t }));
@@ -364,10 +397,10 @@ function heroCandidates(trending) {
 }
 // The wide backdrop, plot and genre come with a title's details: one request per slide, then cached in state.detail.
 function heroInfo(it, t) {
-  if (t) return { backdrop_path: t.backdrop, plot: t.overview };   // a trending title brings its picture and plot from TMDB
   const d = state.detail[it.uid];
   if (!d && it.xtream) loadDetail(it).then(() => { const c = hero.items[hero.i % hero.items.length]; if (c && c.it.uid === it.uid) renderHero(); });
-  return (d && d.info) || {};
+  const info = (d && d.info) || {};
+  return t ? { ...info, backdrop_path: t.backdrop || backdropOf(info), plot: t.overview || info.plot } : info;   // trending: TMDB's picture and plot
 }
 const cssUrl = (u) => `url("${encodeURI(u)}")`;   // in a style attribute: no quote or bracket can end the url()
 function renderHero() {

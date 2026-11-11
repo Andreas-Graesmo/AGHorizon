@@ -546,30 +546,34 @@ async function handleSubsApi(req, res, pathname) {
   send(res, 404, 'Not found');
 }
 
-/* ------------------------------------------------------------- cast photos */
-// GET /api/cast?type=movie|tv&id=<tmdb id> -> [{ name, role, photo }]  (TMDB, with the app's key like OpenSubtitles:
-// env TMDB_API_KEY or "tmdbApiKey" in secrets.json, written by the release build)
+/* ------------------------------------------------------------- TMDB */
+// GET /api/tmdb?type=movie|tv&id=<tmdb id> -> { runtime, cast: [{ name, role, photo }] }, one TMDB request per title.
+// runtime: minutes (a series: per episode), 0 when TMDB doesn't know. Providers' own runtimes are often wrong.
+// (TMDB, with the app's key like OpenSubtitles: env TMDB_API_KEY or "tmdbApiKey" in secrets.json, written by the release build)
 const TMDB_KEY = process.env.TMDB_API_KEY || (() => { try { return require('./secrets.json').tmdbApiKey || ''; } catch { return ''; } })();
-const castCache = new Map();   // "movie:603" -> list
-async function handleCast(req, res, q) {
-  if (!TMDB_KEY) throw httpError(501, 'Cast photos aren’t available in this build');
+const tmdbCache = new Map();   // "movie:603" -> { runtime, cast }
+async function handleTmdb(req, res, q) {
+  if (!TMDB_KEY) throw httpError(501, 'TMDB isn’t available in this build');
   const type = q.get('type') === 'tv' ? 'tv' : 'movie';
   const id = q.get('id') || '';
   if (!/^\d{1,10}$/.test(id)) throw httpError(400, 'Invalid id');
   const key = `${type}:${id}`;
-  if (!castCache.has(key)) {
+  if (!tmdbCache.has(key)) {
     // series: aggregate_credits lists everyone across all seasons, with their character names under roles
-    const r = await fetch(`https://api.themoviedb.org/3/${type}/${id}/${type === 'tv' ? 'aggregate_credits' : 'credits'}?api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    const credits = type === 'tv' ? 'aggregate_credits' : 'credits';
+    const r = await fetch(`https://api.themoviedb.org/3/${type}/${id}?append_to_response=${credits}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw httpError(r.status === 404 ? 404 : 502, `TMDB answered HTTP ${r.status}`);
-    const cast = ((await r.json()).cast || []).slice(0, 12).map((c) => ({
+    const j = await r.json();
+    const runtime = Number(type === 'tv' ? (j.episode_run_time || [])[0] || (j.last_episode_to_air && j.last_episode_to_air.runtime) : j.runtime) || 0;
+    const cast = ((j[credits] && j[credits].cast) || []).slice(0, 12).map((c) => ({
       name: c.name || '',
       role: c.character || (c.roles && c.roles[0] && c.roles[0].character) || '',
       photo: c.profile_path ? `https://image.tmdb.org/t/p/w185${c.profile_path}` : '',
     }));
-    castCache.set(key, cast);
-    if (castCache.size > 200) castCache.delete(castCache.keys().next().value);
+    tmdbCache.set(key, { runtime, cast });
+    if (tmdbCache.size > 200) tmdbCache.delete(tmdbCache.keys().next().value);
   }
-  sendJson(res, 200, castCache.get(key));
+  sendJson(res, 200, tmdbCache.get(key));
 }
 
 // GET /api/trending -> { movie: [...], tv: [...] }, this week's 40 most popular of each on TMDB, best first:
@@ -646,7 +650,7 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/epg' && req.method === 'POST') await handleEpg(req, res);
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
-    else if (url.pathname === '/api/cast' && req.method === 'GET') await handleCast(req, res, url.searchParams);
+    else if (url.pathname === '/api/tmdb' && req.method === 'GET') await handleTmdb(req, res, url.searchParams);
     else if (url.pathname === '/api/trending' && req.method === 'GET') await handleTrending(req, res);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);

@@ -666,30 +666,35 @@ function openDetail(it) {
 function closeDetail() { ws.detail = null; renderWsChrome(); renderVod(); }
 
 function runtimeLabel(info) {
-  let sec = Number(info.duration_secs) || 0;
-  if (!sec && info.duration) { const m = String(info.duration).match(/^(\d+):(\d+)(?::(\d+))?$/); if (m) sec = m[3] != null ? +m[1] * 3600 + +m[2] * 60 + +m[3] : +m[1] * 60 + +m[2]; }
-  if (!sec && info.episode_run_time) sec = Number(info.episode_run_time) * 60;
-  if (!sec && info.runtime) sec = Number(info.runtime) * 60;
+  const sec = runtimeSecs(info);
   if (!sec) return '';
   const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
   return h ? `${h} h ${m} min` : `${m} min`;
 }
+// the provider's length of a title in seconds, from its details (0: not given)
+function runtimeSecs(info) {
+  let sec = Number(info.duration_secs) || 0;
+  if (!sec && info.duration) { const m = String(info.duration).match(/^(\d+):(\d+)(?::(\d+))?$/); if (m) sec = m[3] != null ? +m[1] * 3600 + +m[2] * 60 + +m[3] : +m[1] * 60 + +m[2]; }
+  if (!sec && info.episode_run_time) sec = Number(info.episode_run_time) * 60;
+  if (!sec && info.runtime) sec = Number(info.runtime) * 60;
+  return sec;
+}
 const splitNames = (s) => String(s || '').split(/\s*[,;/]\s*/).map((x) => x.trim()).filter(Boolean);
 
-// The cast with photos from TMDB (/api/cast), when the provider gives the title's TMDB id. null until it has loaded
-// (the page shows the provider's names meanwhile); asked once per title and session.
-function castPhotos(it, info, offline) {
-  const id = info.tmdb_id || info.tmdb;
-  if (!state.tmdb || !id || offline) return null;
-  const c = state.castPhotos[it.uid];
-  if (c === undefined) {
-    state.castPhotos[it.uid] = 'loading';
-    fetch(`/api/cast?type=${it.kind === 'series' ? 'tv' : 'movie'}&id=${enc(id)}`)
-      .then((r) => (r.ok ? r.json() : [])).catch(() => [])
-      .then((list) => { state.castPhotos[it.uid] = list; if (list.length && ws.detail && ws.detail.uid === it.uid && ui.route === 'ws') renderDetail(); });
+// Cast photos (and TMDB's runtime, which Trending compares) from /api/tmdb, by a title's TMDB id: { runtime, cast }, or null
+// until it has loaded (the page shows the provider's names meanwhile). Asked once per title and session; onLoad runs when it arrives.
+function tmdbFor(type, id, onLoad) {
+  if (!state.tmdb || !id) return null;
+  const key = `${type}:${id}`;
+  if (!(key in state.tmdbInfo)) {
+    state.tmdbInfo[key] = 'loading';
+    tmdbGet(type, id).then((j) => { state.tmdbInfo[key] = j || {}; if (j) onLoad(); });
   }
-  return Array.isArray(c) && c.length ? c : null;
+  const c = state.tmdbInfo[key];
+  return c !== 'loading' ? c : null;
 }
+const tmdbJobs = {};   // "movie:603" -> promise of { runtime, cast } | null (no TMDB, or it doesn't know the title)
+const tmdbGet = (type, id) => (tmdbJobs[`${type}:${id}`] ||= fetch(`/api/tmdb?type=${type}&id=${enc(id)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null));
 
 function renderDetail() {
   const it = ws.detail;
@@ -706,12 +711,14 @@ function renderDetail() {
   const rating = goodRating(info.rating || it.rating);
   const year = String(info.releasedate || info.release_date || it.year || '').slice(0, 4);
   const genres = splitNames(info.genre || it.genre).slice(0, 4);
+  const offline = isOffline();   // only downloaded episodes / movies can be played
+  const tm = offline ? null : tmdbFor(it.kind === 'series' ? 'tv' : 'movie', info.tmdb_id || info.tmdb || it.tmdb,
+    () => { if (ws.detail && ws.detail.uid === it.uid && ui.route === 'ws') renderDetail(); });
   const runtime = runtimeLabel(info);
   const isFav = state.favs.has(it.uid);
   const playingUid = state.current && state.current.uid;
   const docked = dockedInDetail();
   const watched = (() => { const p = progressOf(it.uid); return !!(p && p.w); })();
-  const offline = isOffline();   // only downloaded episodes / movies can be played
 
   let primary = '', primarySub = '', primaryAct = '', seriesBlock = '';
   if (it.kind === 'movie') {
@@ -771,7 +778,7 @@ function renderDetail() {
   const back = !offline && bd && /^https?:\/\//i.test(bd) ? bd : '';
   const chips = [year, runtime, ...genres.slice(0, 3), info.country, rating && '★ ' + rating].filter(Boolean);
   const trailer = offline ? '' : info.youtube_trailer ? (/^https?:/.test(info.youtube_trailer) ? info.youtube_trailer : 'https://www.youtube.com/watch?v=' + info.youtube_trailer) : '';
-  const photos = castPhotos(it, info, offline);
+  const photos = tm && tm.cast && tm.cast.length ? tm.cast : null;
   const crew = [...directors.slice(0, 4).map((n) => [n, 'Director', '']),
     ...(photos ? photos.map((c) => [c.name, c.role || 'Actor', c.photo]) : castNames.slice(0, 12).map((n) => [n, 'Actor', '']))];
   const pl = wsPlaylist();
