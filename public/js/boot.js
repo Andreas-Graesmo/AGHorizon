@@ -43,7 +43,7 @@ window.addEventListener('drop', async (e) => {
 
 go('dashboard', {}, { push: false });
 // desktop app: the window is hidden until this first view has been drawn (after the next frame)
-if (window.tunerDesktop && tunerDesktop.ready) requestAnimationFrame(() => setTimeout(tunerDesktop.ready));
+requestAnimationFrame(() => setTimeout(tunerDesktop.ready));
 
 /* Reload every playlist when the app starts (last used one first), so lists, guide and status are fresh. */
 async function startupReload() {

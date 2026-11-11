@@ -122,7 +122,7 @@ class MvTile {
       if (token !== this.token) return;
       if (rest.length) { this.start(ch, rest, token, msg); return; }
       this.teardown();
-      const hint = !state.ffmpeg ? ' ffmpeg was not found, so unsupported codecs can’t be converted.' : compatMode() === 'off' ? ' Compatibility mode is switched off in Settings.' : '';
+      const hint = !state.ffmpeg ? ' ffmpeg was not found, so unsupported codecs can’t be converted.' : compatMode() === 'off' ? ' Compatibility mode is switched off in Settings › Playback.' : '';
       this.ov('error', "Couldn't play this channel", `${msg}.${hint} The stream may be offline, or your provider’s connection limit may be used up.`);
     };
     if (!kind) { fail(lastError || 'No playable format'); return; }

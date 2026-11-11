@@ -2,7 +2,7 @@
 /* AG Horizon – downloads for offline viewing (desktop app only). The downloading itself happens in electron/downloads.js;
    this is the page side: download buttons on movies and episodes, the Downloads page, and playing the saved copy instead of the stream. */
 
-const dlApi = window.tunerDesktop && window.tunerDesktop.downloads;
+const dlApi = window.tunerDesktop.downloads;
 const dl = { items: [], byUid: new Map(), folder: '', held: false, pauseWhileWatching: true, free: 0, key: '' };
 
 const fmtBytes = (n) => {
@@ -14,7 +14,7 @@ const dlSE = (d) => `S${String(d.season || 0).padStart(2, '0')}E${String(d.episo
 const dlName = (d) => (d.kind === 'episode' ? `${d.seriesName} · ${dlSE(d)}` : d.title);
 const dlOf = (uid) => dl.byUid.get(uid);
 const dlLocalUrl = (d) => `${location.origin}/api/local/${d.id}`;
-const dlCanDownload = (it) => !!dlApi && (it.kind === 'movie' || it.kind === 'episode') && /^https?:\/\//i.test(it.url || '') && !/\.m3u8?(\?|$)/i.test(it.url);
+const dlCanDownload = (it) => (it.kind === 'movie' || it.kind === 'episode') && /^https?:\/\//i.test(it.url || '') && !/\.m3u8?(\?|$)/i.test(it.url);
 const dlPct = (d) => (d.size ? Math.min(100, Math.floor((d.received / d.size) * 100)) : 0);
 
 // The saved copy plays instead of the stream: it works offline and doesn't use one of the provider's connections.
@@ -43,7 +43,6 @@ function dlNextEpisode(c) {
 // Most accounts allow 1–2 connections, so downloads wait while a provider stream plays (setting in Settings › Downloads).
 let dlWatchingSent = null;
 function dlSyncWatching() {
-  if (!dlApi) return;
   const on = !!(state.current && !state.current.local) || (ui.route === 'multiview' && mv.slots.some(Boolean));
   if (on !== dlWatchingSent) { dlWatchingSent = on; dlApi.setWatching(on); }
 }
@@ -82,7 +81,7 @@ const dlClean = (s) => {   // the same as clean() in electron/downloads.js, whic
 };
 let dlRecovering = null;
 function dlRecover() {
-  if (!dlApi || !dlApi.orphans || dlRecovering) return dlRecovering;
+  if (dlRecovering) return dlRecovering;
   dlRecovering = (async () => {
     const files = await dlApi.orphans().catch(() => []);
     if (!files.length || !navigator.onLine) return;
@@ -141,7 +140,7 @@ const dlHasAny = (uid) => dl.items.some((d) => d.uid === uid || d.seriesUid === 
 
 // Remember a movie or series while it's at hand (its page is open, or something of it is being downloaded).
 function dlRemember(it) {
-  if (!dlApi || !it || (it.kind !== 'movie' && it.kind !== 'series')) return;
+  if (!it || (it.kind !== 'movie' && it.kind !== 'series')) return;
   const d = state.detail[it.uid];
   const old = dlInfo.map[it.uid];
   const detail = d && !d.loading && !d.error ? d : old && old.detail;
@@ -325,7 +324,6 @@ function dlRowHtml(d, { drag = false } = {}) {   // drag: in the Downloading lis
 
 function renderDownloads() {
   const el = $('#v-downloads');
-  if (!dlApi) { el.innerHTML = `<div class="page">${pageHead('Downloads')}${emptyState('i-download', 'Downloads need the desktop app', 'Saving movies and episodes for offline viewing works in the AG Horizon desktop app.')}</div>`; return; }
   const all = dl.items;
   const done = all.filter((d) => d.state === 'done');
   const failed = all.filter((d) => d.state === 'failed');
@@ -413,14 +411,13 @@ $('#v-downloads').addEventListener('dragend', () => {
 function openDownloads() {
   renderDownloads();
   dlInfoReady.then(() => { if (ui.route === 'downloads') renderDownloads(); });   // cards use the saved copies once loaded
-  if (dlApi) dlApi.list().then(dlUpdate).then(dlRecover).catch(() => {});   // free space, moved files; then files the list doesn't know
+  dlApi.list().then(dlUpdate).then(dlRecover).catch(() => {});   // free space, moved files; then files the list doesn't know
 }
 
 $('#v-downloads').addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
 
 /* Settings › Downloads (desktop only) */
 function dlSettingsCard() {
-  if (!dlApi) return '';
   return `<section class="set-card"><h3>Downloads</h3>
     <div class="set-row"><div><b>Download folder</b><p class="muted dl-path">${esc(dl.folder)}</p></div><div class="upd-btns"><button class="btn ghost" data-act="dl-open">Open</button> <button class="btn ghost" data-act="dl-folder">Change</button></div></div>
     <div class="set-row"><div><b>Pause downloads while I watch</b><p class="muted">Most providers allow only one or two connections at a time. Downloads wait while a stream plays and continue afterwards. Downloaded titles don’t count.</p></div><label class="switch"><input type="checkbox" data-set="dlPause"${dl.pauseWhileWatching ? ' checked' : ''}><span></span></label></div>
@@ -430,7 +427,7 @@ $('#v-settings').addEventListener('change', (e) => { if (e.target.dataset.set ==
 
 $('#views').addEventListener('click', (e) => {
   const a = e.target.closest('[data-act^="dl-"]');
-  if (!a || !dlApi) return;
+  if (!a) return;
   const row = a.closest('.dl-row');
   const d = row && dl.items.find((x) => x.id === row.dataset.id);
   switch (a.dataset.act) {
@@ -474,7 +471,6 @@ window.addEventListener('online', dlConnChanged);
 window.addEventListener('offline', dlConnChanged);
 
 function initDownloads() {
-  if (!dlApi) return;
   $('#nav [data-route="downloads"]').hidden = false;
   dlApi.onChange(dlUpdate);
   dlApi.list().then(dlUpdate).catch(() => {});

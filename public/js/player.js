@@ -136,8 +136,8 @@ async function startPlayback(ch, kinds, token, lastError) {
     if (token !== playToken) return;
     if (rest.length) startPlayback(ch, rest, token, msg);
     else {
-      const hint = !state.ffmpeg ? ' ffmpeg was not found, so unsupported codecs can’t be converted – install ffmpeg (or use the desktop app, which includes it).'
-        : compatMode() === 'off' ? ' Compatibility mode is switched off in Playlists › Playback.' : '';
+      const hint = !state.ffmpeg ? ' ffmpeg was not found, so unsupported codecs can’t be converted.'
+        : compatMode() === 'off' ? ' Compatibility mode is switched off in Settings › Playback.' : '';
       if (isVod(ch)) showOverlay('error', "Couldn't play this video", `${msg}.${hint} The stream may be offline, or your provider’s connection limit may be used up. You can also copy the link and open it in VLC or mpv.`);
       else showOverlay('error', "Couldn't play this channel", `${msg}.${hint} The stream may be offline, or your subscription may have hit its connection limit.`);
     }
