@@ -411,4 +411,4 @@ function init() {
   pump();
 }
 
-module.exports = { init, localFile };
+module.exports = { init, localFile, removeEmptyDirs, targetFile };   // the last two for test/
