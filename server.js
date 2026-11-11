@@ -90,6 +90,7 @@ async function handleFetch(req, res, q) {
 
 /* ------------------------------------------------------------------- EPG */
 
+// keep identical to normName in public/js/core.js, which sends the channel names the guide is matched by
 const normName = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };

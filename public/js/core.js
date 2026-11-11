@@ -10,6 +10,7 @@ const $$ = (s, r) => (r ? [...r.querySelectorAll(s)] : [...document.querySelecto
 const enc = encodeURIComponent;
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
+// keep identical to normName in server.js: the guide matches channels by these names
 const normName = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 const uidOf = () => Math.random().toString(36).slice(2, 10);
 const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
