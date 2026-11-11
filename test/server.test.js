@@ -65,3 +65,18 @@ test('the guide parses the same however the text is split into pieces', () => {
 
   assert.throws(() => { const p = xmltvParser(from, to); p.push('<html>not a guide</html>'); p.end(); }, /did not return an XMLTV guide/);
 });
+
+test('two requests for the same guide at once download it once', async (t) => {
+  const http = require('http');
+  const zlib = require('zlib');
+  const { start, server } = require('../server');
+  let hits = 0;
+  const guide = zlib.gzipSync('<tv><channel id="a"><display-name>A</display-name></channel></tv>');
+  const files = http.createServer((req, res) => { hits++; setTimeout(() => res.end(guide), 50); }).listen(0, '127.0.0.1');
+  await new Promise((r) => files.once('listening', r));
+  const port = await start(0);
+  t.after(() => { server.close(); files.close(); });
+  const ask = () => fetch(`http://127.0.0.1:${port}/api/epg`, { method: 'POST', body: JSON.stringify({ url: `http://127.0.0.1:${files.address().port}/same.xml.gz`, ids: ['a'] }) }).then((r) => r.status);
+  assert.deepStrictEqual(await Promise.all([ask(), ask()]), [200, 200]);
+  assert.strictEqual(hits, 1);
+});

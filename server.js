@@ -201,10 +201,17 @@ async function parseXmltv(buf, fromMs, toMs) {
 
 const epgCache = new Map(); // url -> { t, full }
 const EPG_TTL = 30 * 60 * 1000;
+const epgLoading = new Map(); // url -> promise, so two playlists asking for the same guide at once download it once
 
-async function loadEpg(url, ua, force) {
+function loadEpg(url, ua, force) {
   const hit = epgCache.get(url);
   if (hit && !force && Date.now() - hit.t < EPG_TTL) return hit.full;
+  if (epgLoading.has(url)) return epgLoading.get(url);
+  const job = downloadEpg(url, ua).finally(() => epgLoading.delete(url));
+  epgLoading.set(url, job);
+  return job;
+}
+async function downloadEpg(url, ua) {
   const r = await upstream(url, { ua, signal: AbortSignal.timeout(180000) });
   if (!r.ok) throw httpError(502, `Guide download failed (HTTP ${r.status})`);
   const now = Date.now();
