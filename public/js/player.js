@@ -1,5 +1,5 @@
 'use strict';
-/* AG Horizon – player: hls.js / mpegts.js / native, ffmpeg compatibility mode, custom seek bar, second-screen mirror. */
+/* AG Horizon – player: hls.js / mpegts.js / native, ffmpeg compatibility mode, custom seek bar, picture mirroring. */
 
 const video = $('#video');
 const overlay = $('#overlay');
@@ -507,15 +507,15 @@ function movePlayer(move, { later = false } = {}) {
 }
 const closePip = () => { if (pipWin) pipWin.close(); };
 
-/* ───────────────────────── second screen (mirror window) ───────────────────────── */
+/* ───────────────────────── mirror picture (mirror window) ───────────────────────── */
 /*
  * The mirror window shows exactly what this player shows. It doesn't open a second connection to
  * your provider: we hand it a live MediaStream captured from the main <video>, so the picture
  * is identical and in sync, and connection limits aren't affected.
- * Sound can play on this window, on the second screen, or on both (Settings › Second screen).
+ * Sound can play on this window, on the mirror window, or on both (Settings › Mirror picture).
  */
 let mirrorWin = null;
-let mirrorMuteSaved = null;          // our own mute state, restored when "sound on second screen only" ends
+let mirrorMuteSaved = null;          // our own mute state, restored when "sound on mirror window only" ends
 const mirrorOpen = () => !!mirrorWin && !mirrorWin.closed;
 const mirrorSound = () => LS.get('tuner.mirrorSound', 'main'); // 'main' | 'mirror' | 'both'
 
@@ -565,7 +565,7 @@ async function mirrorButton(anchor) {
   try { list = await window.tunerDesktop.displays(); } catch { /* fall through to a plain window */ }
   if (list.length > 1) {
     showMenu(anchor, [
-      { label: 'Show on…', heading: true },
+      { label: 'Mirror to…', heading: true },
       { label: 'Floating window (stays on top)', run: () => openMirror() },
       ...list.map((d) => ({ label: `${d.label}${d.primary ? ' (main)' : ''} · ${d.width}×${d.height}`, run: () => openMirror(d.id) })),
     ]);

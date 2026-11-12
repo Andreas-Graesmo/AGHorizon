@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AG Horizon – second screen</title>
+<title>AG Horizon – mirror picture</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #cfd3dc; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
@@ -13,15 +13,18 @@
   #title { position: absolute; left: 24px; bottom: 22px; padding: 7px 14px; border-radius: 10px; background: rgba(0, 0, 0, .62); color: #fff; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #title.show { opacity: 1; }
   body.idle { cursor: none; }
-  /* floating window: drag it by the picture; the 6px rim stays free so the edges still resize it */
-  body.float #drag { position: absolute; inset: 6px; -webkit-app-region: drag; }
+  /* floating window: drag it by the picture (mirror.js); the ✕ shows while the mouse is over the window and moving */
+  body.float { user-select: none; }
+  #close { display: none; }
+  body.float #close { display: grid; place-items: center; position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s; }
+  body.float:hover:not(.idle) #close, body.float #close:focus-visible { opacity: 1; }
 </style>
 </head>
 <body>
 <video id="v" autoplay muted playsinline></video>
 <div id="msg"><div><strong>Waiting for the video…</strong><p>Play something in AG Horizon and it will appear here.<br>Press Esc to close this screen.</p></div></div>
 <div id="title"></div>
-<div id="drag"></div>
+<button id="close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
 <script src="mirror.js"></script>
 </body>
 </html>
