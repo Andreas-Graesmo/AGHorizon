@@ -32,14 +32,17 @@ declare
   h bytea := sha256(convert_to(coalesce(p_token, ''), 'UTF8'));
 begin
   if p_vault !~ '^[0-9a-f]{64}$' or p_token !~ '^[0-9a-f]{64}$' then raise exception 'denied'; end if;
-  if p_create then
+  if p_create and not exists (select 1 from sync_vault where id = p_vault) then
+    -- the public key is in the app, so anyone can make vaults: at most 10 new ones an hour keeps a script from filling
+    -- the database (10 × 10 computers × 256 KB = 25 MB an hour at worst)
+    if (select count(*) from sync_vault where created_at > now() - interval '1 hour') >= 10 then raise exception 'busy'; end if;
     insert into sync_vault (id, token_hash) values (p_vault, h) on conflict (id) do nothing;
   end if;
   update sync_vault set last_seen = now() where id = p_vault and token_hash = h;
   if not found then raise exception 'denied'; end if;
 end $$;
 
--- Save this computer's blob (base64). At most 10 computers per vault and 1 MB per blob.
+-- Save this computer's blob (base64). At most 10 computers per vault and 256 KB per blob (a heavy user's is ~80 KB).
 create or replace function public.sync_put(p_vault text, p_token text, p_device text, p_blob text)
 returns timestamptz language plpgsql security definer set search_path = public, pg_temp as $$
 declare
@@ -48,7 +51,7 @@ declare
 begin
   perform sync_check(p_vault, p_token, true);
   if p_device !~ '^[0-9a-f]{16,32}$' then raise exception 'bad device'; end if;
-  if octet_length(b) > 1048576 then raise exception 'too large'; end if;
+  if octet_length(b) > 262144 then raise exception 'too large'; end if;
   if not exists (select 1 from sync_blob where vault_id = p_vault and device_id = p_device)
      and (select count(*) from sync_blob where vault_id = p_vault) >= 10 then
     raise exception 'too many devices';

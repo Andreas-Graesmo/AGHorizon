@@ -15,9 +15,9 @@
 | Table | Columns | Readable by the project? |
 |---|---|---|
 | `sync_vault` | random vault id, SHA-256 of the access token, created, last used | Only the random ids and times |
-| `sync_blob` | vault id, random device id, updated, encrypted blob (≤ 1 MB) | No: AES-256-GCM with a key that never leaves the computers |
+| `sync_blob` | vault id, random device id, updated, encrypted blob (≤ 256 KB) | No: AES-256-GCM with a key that never leaves the computers |
 
-The public key can't read or write the tables (row level security, no policies). Everything goes through `sync_put`, `sync_get` and `sync_delete`, which check the token. A vault holds at most 10 computers.
+The public key can't read or write the tables (row level security, no policies). Everything goes through `sync_put`, `sync_get` and `sync_delete`, which check the token. A vault holds at most 10 computers, and at most 10 new vaults are made an hour (the public key is in the app, so this keeps a script from filling the database).
 
 Supabase still sees IP addresses in its logs, and when each vault was used. Say so in the privacy text, together with the 12-month clean-up.
 

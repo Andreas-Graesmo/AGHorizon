@@ -64,7 +64,7 @@ function syncTransport(mode, keys) {
     const j = await r.json().catch(() => null);
     if (!r.ok) {
       const m = (j && j.message) || '';
-      const e = new Error({ denied: 'Nothing has been synced with this code yet.', 'too many devices': 'This sync code is already used on 10 computers. Remove one in Settings › Sync on another computer.', 'too large': 'There is too much to sync.' }[m] || `The sync service answered: ${m || 'HTTP ' + r.status}`);
+      const e = new Error({ denied: 'Nothing has been synced with this code yet.', 'too many devices': 'This sync code is already used on 10 computers. Remove one in Settings › Sync on another computer.', 'too large': 'There is too much to sync.', busy: 'The sync service is busy. Try again in an hour.' }[m] || `The sync service answered: ${m || 'HTTP ' + r.status}`);
       e.denied = m === 'denied';
       throw e;
     }
@@ -93,9 +93,6 @@ async function syncCycle({ full = false } = {}) {
     const now = Date.now();
     const { pkOf, pidOf, pks } = await playlistKeys();
     const db = loadSyncDb();
-    const local = exportLocal(state, pkOf);
-    markRemoved(db, cfg.known, local, pks, now);
-    mergeRecs(db, local);
 
     const all = full || !cfg.since || now - (cfg.fullAt || 0) > 6 * 3600e3;   // now and then the whole list, so removed computers drop off
     let rows = [];
@@ -111,6 +108,10 @@ async function syncCycle({ full = false } = {}) {
       } catch { devices[row.device] = { name: 'Can’t be read', at: row.updated, bad: 1 }; }
     }
     if (all) cfg.fullAt = now;
+    // read this computer's state only now, after the last await: a change made while we waited isn't overwritten
+    const local = exportLocal(state, pkOf);
+    markRemoved(db, cfg.known, local, pks, now);
+    mergeRecs(db, local);
     pruneRecs(db, now);
     syncApply(applyRecs(db, state, pidOf, pkOf));
     cfg.known = Object.keys(exportLocal(state, pkOf));
