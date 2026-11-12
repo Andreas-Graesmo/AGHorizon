@@ -948,7 +948,7 @@ function paletteCommands() {
     ['Open Settings', 'i-gear', () => go('settings')],
     ['Add a playlist', 'i-plus', () => openPlaylistDialog()],
     ['Switch light / dark theme', 'i-sun', () => $('#btnTheme').click()],
-    ['Show on a second screen', 'i-cast', () => mirrorButton($('#btnPalette'))],
+    ['Show on a second screen', 'i-screens', () => mirrorButton($('#btnPalette'))],
     ['Keyboard shortcuts', 'i-keyboard', openHelp],
     ['Show / hide the categories', 'i-panel', () => { if (ui.route === 'ws') toggleWsSide(); }],
   ];
