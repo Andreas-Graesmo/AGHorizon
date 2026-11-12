@@ -43,6 +43,7 @@ Click the **Mirror picture** button on the player (the two-screens icon, also in
 - With one display, a small window opens that stays on top of other windows (drag it by the picture, resize it by the edges) while the player keeps playing in the app.
 - With more displays, pick that floating window or a monitor or TV. On a monitor, a borderless window opens full screen there, showing exactly what the main player shows.
 - Press **Esc** in that window (or click the button again) to close it. The floating window also shows a ✕ in its top right corner while the mouse is over it.
+- The floating window looks like the player and has its controls while the mouse is over it: the title, play / pause, back and forward 15 seconds and (when the window is wide enough) a seek bar for movies and series, a LIVE badge for live TV, and a speaker that brings up a volume slider (press it again to mute). They steer the player in the app.
 - It does **not** open a second connection to your provider: the main player hands the mirror window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
 - **Sound** (Settings › Mirror picture): play it on this window, on the mirror window only (useful when the TV has the speakers), or on both.
 

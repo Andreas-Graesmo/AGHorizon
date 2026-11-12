@@ -529,16 +529,35 @@ function applyMirrorSound() {
     video.muted = mirrorMuteSaved;
     mirrorMuteSaved = null;
   }
-  try { if (mirrorOpen() && mirrorWin.setMuted) mirrorWin.setMuted(mode === 'main'); } catch { /* window closing */ }
+  try { if (mirrorOpen() && mirrorWin.setSound) mirrorWin.setSound(mode); } catch { /* window closing */ }
 }
+
+// The floating mirror window has the player's controls too (mirror.js). They call togglePlay, seekBy, seekTo and
+// the three functions below through window.opener; mirrorCtl tells that window what its controls should show.
+function mirrorSetMuted(m) { video.muted = m; if (!m && video.volume === 0) video.volume = 0.5; }
+function mirrorSetVolume(vol) { video.volume = Math.max(0, Math.min(1, vol)); video.muted = false; }
+function mirrorClock(sec) { return fmtClock(sec); }
+function mirrorCtl() {
+  try {
+    if (!mirrorOpen() || !mirrorWin.setCtl) return;
+    const vod = !!(state.current && isVod(state.current));
+    const dur = durTime();
+    mirrorWin.setCtl({
+      on: !!state.current, paused: video.paused, vod, muted: video.muted || video.volume === 0, volume: video.volume,
+      cur: curTime() || 0, dur: vod && isFinite(dur) && dur > 0 ? dur : 0,
+    });
+  } catch { /* window closing */ }
+}
+['play', 'pause', 'volumechange', 'loadedmetadata', 'durationchange', 'timeupdate', 'emptied'].forEach((ev) => video.addEventListener(ev, mirrorCtl));
 
 function attachMirror() {
   if (!mirrorOpen()) return;
   try {
     // A fresh capture every time: after the source changes (new channel, seek in converted video) the old stream stops updating.
     const stream = video.captureStream ? video.captureStream() : null;
-    if (stream && mirrorWin.setStream) mirrorWin.setStream(stream, mirrorSound() === 'main');
+    if (stream && mirrorWin.setStream) mirrorWin.setStream(stream, mirrorSound());
     applyMirrorSound();
+    mirrorCtl();
   } catch (e) { console.warn('mirror attach failed', e); }
 }
 function mirrorTitle(text) { try { if (mirrorOpen() && mirrorWin.setTitleText) mirrorWin.setTitleText(text || ''); } catch { /* window closing */ } }
