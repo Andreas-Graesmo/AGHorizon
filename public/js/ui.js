@@ -826,7 +826,7 @@ function renderSettings() {
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
     </section>
     <section class="set-card"><h3>Second screen</h3>
-      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider. It goes full screen on the display you pick (Esc closes it).</p></div>
+      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider: a small one that stays on top, or full screen on the display you pick (Esc closes it).</p></div>
         <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close second screen' : 'Open second screen'}</button></div>
       <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Second screen” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Second screen'], ['both', 'Both']])}</div>
     </section>

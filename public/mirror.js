@@ -5,6 +5,7 @@ const msg = document.getElementById('msg');
 const titleEl = document.getElementById('title');
 let titleTimer = 0;
 let idleTimer = 0;
+if (!new URLSearchParams(location.search).has('d')) document.body.classList.add('float');   // no monitor picked: the small window that stays on top
 
 function updateMessage() {
   // Hide the hint as soon as a picture is showing (or audio-only is flowing).

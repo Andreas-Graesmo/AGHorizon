@@ -558,7 +558,7 @@ function closeMirror() { try { if (mirrorOpen()) mirrorWin.close(); } catch { /*
 window.addEventListener('beforeunload', () => { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } });
 setInterval(() => { if (mirrorWin && mirrorWin.closed) mirrorClosed(); }, 1000);
 
-// Button → with more than one monitor, offer a choice; otherwise just open the window.
+// Button → with more than one monitor, offer a choice; otherwise just open the floating window.
 async function mirrorButton(anchor) {
   if (mirrorOpen()) { closeMirror(); return; }
   let list = [];
@@ -566,6 +566,7 @@ async function mirrorButton(anchor) {
   if (list.length > 1) {
     showMenu(anchor, [
       { label: 'Show on…', heading: true },
+      { label: 'Floating window (stays on top)', run: () => openMirror() },
       ...list.map((d) => ({ label: `${d.label}${d.primary ? ' (main)' : ''} · ${d.width}×${d.height}`, run: () => openMirror(d.id) })),
     ]);
     return;
