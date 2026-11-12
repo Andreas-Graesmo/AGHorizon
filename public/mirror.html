@@ -13,12 +13,15 @@
   #title { position: absolute; left: 24px; bottom: 22px; padding: 7px 14px; border-radius: 10px; background: rgba(0, 0, 0, .62); color: #fff; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #title.show { opacity: 1; }
   body.idle { cursor: none; }
+  /* floating window: drag it by the picture; the 6px rim stays free so the edges still resize it */
+  body.float #drag { position: absolute; inset: 6px; -webkit-app-region: drag; }
 </style>
 </head>
 <body>
 <video id="v" autoplay muted playsinline></video>
 <div id="msg"><div><strong>Waiting for the video…</strong><p>Play something in AG Horizon and it will appear here.<br>Press Esc to close this screen.</p></div></div>
 <div id="title"></div>
+<div id="drag"></div>
 <script src="mirror.js"></script>
 </body>
 </html>

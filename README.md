@@ -40,7 +40,9 @@ Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 
 Click the **cast** button on the player (or the cast icon in the top bar).
 
-- Pick the monitor or TV. A borderless window opens full screen there, showing exactly what the main player shows. Press **Esc** in that window (or click the button again) to close it.
+- With one display, a small window opens that stays on top of other windows (drag it by the picture, resize it by the edges) while the player keeps playing in the app.
+- With more displays, pick that floating window or a monitor or TV. On a monitor, a borderless window opens full screen there, showing exactly what the main player shows.
+- Press **Esc** in that window (or click the button again) to close it.
 - It does **not** open a second connection to your provider: the main player hands the second window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
 - **Sound** (Settings › Second screen): play it on this window, on the second screen only (useful when the TV has the speakers), or on both.
 

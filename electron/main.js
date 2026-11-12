@@ -97,6 +97,7 @@ function createWindow() {
           autoHideMenuBar: true,
           frame: false,
           show: true,
+          minWidth: 260, minHeight: 146,
           webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
         },
       };
@@ -104,19 +105,20 @@ function createWindow() {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  // Put the second-screen window full screen on the monitor that was picked (?d=<display id>).
+  // Put the second-screen window full screen on the monitor that was picked (?d=<display id>);
+  // with no monitor picked it floats on top like the picture-in-picture window.
   win.webContents.on('did-create-window', (child, details) => {
-    if (details.frameName === 'ag-horizon-pip') {   // bottom right of the screen the app is on, kept 16:9 when resized
+    const float = () => {   // bottom right of the screen the app is on, kept 16:9 when resized
       const area = screen.getDisplayMatching(win.getBounds()).workArea;
       child.setBounds({ x: area.x + area.width - 480 - 24, y: area.y + area.height - 270 - 24, width: 480, height: 270 });
       child.setAlwaysOnTop(true, 'floating');
       child.setAspectRatio(16 / 9);
-      return;
-    }
+    };
+    if (details.frameName === 'ag-horizon-pip') { float(); return; }
     let id = null;
     try { id = new URL(details.url).searchParams.get('d'); } catch { /* no display chosen */ }
     const target = screen.getAllDisplays().find((d) => String(d.id) === id);
-    if (!target) return;
+    if (!target) { float(); return; }
     child.setBounds(target.bounds);
     if (process.platform === 'darwin') child.setSimpleFullScreen(true); else child.setFullScreen(true);
   });
