@@ -70,3 +70,41 @@ if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: re
   }, { rootMargin: '0px 0px -8% 0px' });
   els.forEach((el) => { el.classList.add('reveal'); io.observe(el); });
 }
+
+/* ── click a screenshot to see it large; ← → to step through them, Esc or a click to close ── */
+const shots = [...document.querySelectorAll('.shot img, .card-light img')];
+if (shots.length && typeof HTMLDialogElement === 'function') {
+  const box = document.createElement('dialog');
+  box.className = 'lightbox';
+  box.innerHTML = `<figure><img alt=""><figcaption></figcaption></figure>
+    <button class="lb-btn lb-close" aria-label="Close">✕</button>
+    <button class="lb-btn lb-prev" aria-label="Previous picture">‹</button>
+    <button class="lb-btn lb-next" aria-label="Next picture">›</button>`;
+  document.body.appendChild(box);
+  const big = box.querySelector('img'), cap = box.querySelector('figcaption');
+  let at = 0, opener = null;
+  const show = (i) => {
+    at = (i + shots.length) % shots.length;
+    big.src = shots[at].currentSrc || shots[at].src;
+    big.alt = shots[at].alt;
+    cap.textContent = shots[at].alt;
+  };
+  shots.forEach((img, i) => {
+    img.tabIndex = 0;
+    img.setAttribute('role', 'button');
+    img.setAttribute('aria-label', `Show larger: ${img.alt}`);
+    const open = () => { opener = img; show(i); box.showModal(); document.documentElement.classList.add('lb-open'); };
+    img.addEventListener('click', open);
+    img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
+  box.addEventListener('close', () => { document.documentElement.classList.remove('lb-open'); if (opener) opener.focus(); });
+  box.addEventListener('click', (e) => {
+    if (e.target.closest('.lb-prev')) show(at - 1);
+    else if (e.target.closest('.lb-next')) show(at + 1);
+    else box.close();   // the picture, the backdrop or ✕
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); show(at - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); show(at + 1); }
+  });
+}
