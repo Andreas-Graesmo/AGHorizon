@@ -836,6 +836,7 @@ function renderSettings() {
       <div class="set-row"><div><b>Recently viewed</b><p class="muted">${state.recent.length} items</p></div><button class="btn ghost" data-act="hist-clear">Clear</button></div>
       <div class="set-row"><div><b>Favorites</b><p class="muted">${state.favs.size} items</p></div><button class="btn ghost" data-act="favs-clear">Clear</button></div>
     </section>
+    ${syncSettingsCard()}
     <section class="set-card"><h3>Keyboard</h3>
       <div class="set-row"><div><b>Shortcuts</b><p class="muted">Press <kbd>?</kbd> anywhere to see them.</p></div><button class="btn ghost" data-act="show-help"><svg class="ic"><use href="#i-keyboard"/></svg>Show shortcuts</button></div>
     </section>
@@ -920,7 +921,7 @@ $('#views').addEventListener('click', (e) => {
     case 'hero-open': { const c = hero.items[hero.i % hero.items.length]; if (c) openItem(c.it); break; }
     case 'hero-pause': hero.paused = !hero.paused; renderHero(); break;
     case 'hero-go': hero.i = Number(a.dataset.k); renderHero(); break;
-    case 'hist-clear': state.recent = []; LS.set('tuner.recent', []); renderRoute(ui.route); toast('History cleared'); break;
+    case 'hist-clear': state.recent = []; LS.set('tuner.recent', []); syncHistoryCleared(); renderRoute(ui.route); toast('History cleared'); break;
     case 'favs-clear': askConfirm({ title: 'Remove all favorites?', text: 'This can’t be undone.', ok: 'Remove all', danger: true })
       .then((yes) => { if (yes) { state.favs.clear(); state.favdata = {}; persistFavs(); renderSettings(); toast('Favorites cleared'); } }); break;
     case 'show-help': openHelp(); break;
