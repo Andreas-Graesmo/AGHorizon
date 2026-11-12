@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AG Horizon – a calm desktop player for your IPTV playlists</title>
+  <meta name="description" content="Live TV with a real programme guide, movies and series with posters and resume, multi view and a second screen. Free for Windows, macOS and Linux. Works with your own Xtream Codes or M3U playlists.">
+  <meta name="theme-color" content="#0b1220">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="AG Horizon – a calm desktop player for your IPTV playlists">
+  <meta property="og:description" content="Live TV with a real guide, movies and series, multi view and a second screen. Free for Windows, macOS and Linux.">
+  <meta property="og:image" content="https://andreas-graesmo.github.io/AGHorizon/img/og.png">
+  <meta property="og:url" content="https://andreas-graesmo.github.io/AGHorizon/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="preload" href="fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav" id="top">
+    <div class="wrap nav-in">
+      <a class="brand" href="#top" aria-label="AG Horizon home"><img src="icon.svg" alt="" width="32" height="32"><span>AG Horizon</span></a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="#live">Live TV</a>
+        <a href="#library">Movies &amp; series</a>
+        <a href="#multiview">Multi view</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn-small" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- ───────────── hero ───────────── -->
+    <section class="hero">
+      <div class="wrap hero-copy">
+        <p class="eyebrow">Free for Windows, macOS &amp; Linux</p>
+        <h1>All your TV.<br><span>One calm place.</span></h1>
+        <p class="lede">AG Horizon turns your Xtream Codes or M3U playlist into a proper TV experience: live channels with a real programme guide, movies and series with posters and “Resume”, four pictures at once, and a second screen.</p>
+        <div class="cta">
+          <a class="btn btn-primary" id="dlMain" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
+            <svg class="i" aria-hidden="true"><use href="#i-download"/></svg><span id="dlMainLabel">Download AG Horizon</span>
+          </a>
+          <a class="btn btn-ghost" href="#download">All platforms</a>
+        </div>
+        <p class="fine" id="dlMeta">Free download · Updates itself</p>
+      </div>
+      <div class="hero-stage">
+        <div class="sun" aria-hidden="true"></div>
+        <div class="wrap">
+          <figure class="shot shot-hero">
+            <img src="img/dashboard.webp" width="2200" height="1375" alt="The AG Horizon dashboard: a large slideshow of a movie, with your favourite live channels and what you watched recently below it" fetchpriority="high">
+          </figure>
+        </div>
+        <div class="horizon" aria-hidden="true"></div>
+      </div>
+      <div class="wrap">
+        <ul class="works-with" aria-label="Works with">
+          <li>Xtream Codes</li><li>M3U &amp; M3U8</li><li>XMLTV guides</li><li>HLS &amp; MPEG-TS</li><li>HEVC, DTS &amp; AC-3</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ───────────── live tv ───────────── -->
+    <section class="feature" id="live">
+      <div class="wrap feature-in">
+        <div class="copy">
+          <p class="eyebrow">Live TV</p>
+          <h2>Zap like it’s television.</h2>
+          <p>Channel list on the left, the picture in the middle, and the guide for that channel right under it. What’s on now and what’s next is always one glance away.</p>
+          <ul class="ticks">
+            <li>Favorites, groups and channel numbers</li>
+            <li>Arrow keys to zap, <kbd>Ctrl</kbd> <kbd>K</kbd> to jump anywhere</li>
+            <li>A mini player that keeps playing while you browse</li>
+          </ul>
+        </div>
+        <figure class="shot"><img src="img/live.webp" width="2200" height="1375" loading="lazy" alt="Live TV: favourite channels with what’s on now, a news channel playing, and the programme guide for that channel below the picture"></figure>
+      </div>
+    </section>
+
+    <section class="feature flip" id="guide">
+      <div class="wrap feature-in">
+        <div class="copy">
+          <p class="eyebrow">TV guide</p>
+          <h2>A real programme guide.</h2>
+          <p>Every channel, hour by hour, with a line for right now. AG Horizon reads your provider’s XMLTV guide (even the huge, gzipped ones) and matches it to your channels by ID or by name.</p>
+          <ul class="ticks">
+            <li>Earlier, now and later at a click</li>
+            <li>Guides from the provider or any XMLTV link</li>
+            <li>Refreshed in the background every time you start</li>
+          </ul>
+        </div>
+        <figure class="shot"><img src="img/guide.webp" width="2200" height="1375" loading="lazy" alt="The TV guide: a grid of channels and their programmes through the evening, with a red line marking the current time"></figure>
+      </div>
+    </section>
+
+    <!-- ───────────── library ───────────── -->
+    <section class="feature library" id="library">
+      <div class="wrap">
+        <div class="copy center">
+          <p class="eyebrow">Movies &amp; series</p>
+          <h2>Your library, finally browsable.</h2>
+          <p>Posters, ratings and categories instead of an endless list of names. Sort by newest or top rated, open a title for the plot and cast, and pick up exactly where you left off.</p>
+        </div>
+        <figure class="shot shot-wide"><img src="img/movies.webp" width="2200" height="1375" loading="lazy" alt="The movie library: categories on the left and a grid of posters with ratings"></figure>
+        <div class="pair">
+          <figure class="shot"><img src="img/movie.webp" width="2200" height="978" loading="lazy" alt="A movie’s page with its poster, year, length, genres, plot and a Resume button"><figcaption><b>Resume</b> where you stopped, on every movie and episode.</figcaption></figure>
+          <figure class="shot"><img src="img/series.webp" width="2200" height="1161" loading="lazy" alt="A series page with seasons and a list of episodes, the watched ones ticked off"><figcaption><b>Seasons and episodes</b>, with what you’ve watched ticked off and the next one ready.</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── multi view & second screen ───────────── -->
+    <section class="feature" id="multiview">
+      <div class="wrap feature-in">
+        <div class="copy">
+          <p class="eyebrow">Multi view</p>
+          <h2>Four channels. One screen.</h2>
+          <p>The match, the news and the race at the same time. Choose a layout, click a picture to hear it, and swap channels without leaving the page.</p>
+          <ul class="ticks">
+            <li>Side by side, stacked, three or 2 × 2</li>
+            <li>Sound follows the picture you pick</li>
+            <li>Warns you about your provider’s connection limit</li>
+          </ul>
+        </div>
+        <figure class="shot"><img src="img/multiview.webp" width="2200" height="1375" loading="lazy" alt="Multi view with four live channels at once: news, football, a cycling race and a nature channel"></figure>
+      </div>
+    </section>
+
+    <!-- ───────────── more ───────────── -->
+    <section class="more">
+      <div class="wrap">
+        <div class="copy center">
+          <p class="eyebrow">And everything around it</p>
+          <h2>Small things that make it feel right.</h2>
+        </div>
+        <div class="cards">
+          <article class="card">
+            <svg class="ci" aria-hidden="true"><use href="#i-cast"/></svg>
+            <h3>Second screen</h3>
+            <p>Send the picture to a TV or another monitor. It mirrors the decoded picture, so it uses no extra connection and stays in sync.</p>
+          </article>
+          <article class="card">
+            <svg class="ci" aria-hidden="true"><use href="#i-chip"/></svg>
+            <h3>Plays the awkward ones</h3>
+            <p>HEVC video or DTS / AC-3 sound that won’t play? Compatibility mode converts it on the fly with the built-in ffmpeg.</p>
+            <p class="codec"><span>HEVC</span>→<span>H.264</span> <span>DTS</span>→<span>AAC</span></p>
+          </article>
+          <article class="card">
+            <svg class="ci" aria-hidden="true"><use href="#i-download"/></svg>
+            <h3>Download for later</h3>
+            <p>Save movies and whole seasons for the train or the cabin, with subtitles stored next to them.</p>
+          </article>
+          <article class="card">
+            <svg class="ci" aria-hidden="true"><use href="#i-cc"/></svg>
+            <h3>Subtitles</h3>
+            <p>Built-in subtitle tracks, or find them on OpenSubtitles.com right from the player.</p>
+          </article>
+          <article class="card">
+            <svg class="ci" aria-hidden="true"><use href="#i-list"/></svg>
+            <h3>All your playlists</h3>
+            <p>Several Xtream and M3U sources side by side, each with a live status. Drop an .m3u file on the window to add it.</p>
+          </article>
+          <article class="card">
+            <svg class="ci" aria-hidden="true"><use href="#i-search"/></svg>
+            <h3>Search everything</h3>
+            <p>One search across every playlist, and a command palette (<kbd>Ctrl</kbd> <kbd>K</kbd>) for when your hands are already on the keyboard.</p>
+          </article>
+          <article class="card card-theme">
+            <svg class="ci" aria-hidden="true"><use href="#i-palette"/></svg>
+            <h3>Make it yours</h3>
+            <p>Dark, light or OLED black, and eight accent colours. Try them on this page:</p>
+            <div class="swatches" role="radiogroup" aria-label="Accent colour">
+              <button role="radio" aria-checked="true" aria-label="Coral" style="--c:#ff7a59" data-ink="#2a0c04"></button>
+              <button role="radio" aria-checked="false" aria-label="Blue" style="--c:#6ea1ff" data-ink="#06142b"></button>
+              <button role="radio" aria-checked="false" aria-label="Violet" style="--c:#a78bfa" data-ink="#150a33"></button>
+              <button role="radio" aria-checked="false" aria-label="Green" style="--c:#3ecf8e" data-ink="#04170f"></button>
+              <button role="radio" aria-checked="false" aria-label="Pink" style="--c:#ff6b9d" data-ink="#2a0615"></button>
+              <button role="radio" aria-checked="false" aria-label="Amber" style="--c:#ffb347" data-ink="#1a1204"></button>
+              <button role="radio" aria-checked="false" aria-label="Teal" style="--c:#2dd4bf" data-ink="#03201c"></button>
+              <button role="radio" aria-checked="false" aria-label="Slate" style="--c:#94a3b8" data-ink="#0f1520"></button>
+            </div>
+          </article>
+          <article class="card card-light">
+            <img src="img/light.webp" width="2200" height="917" loading="lazy" alt="The movie library in the light theme with a blue accent">
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── bring your own ───────────── -->
+    <section class="byo">
+      <div class="wrap byo-in">
+        <svg class="byo-i" aria-hidden="true"><use href="#i-key"/></svg>
+        <div>
+          <h2>Bring your own playlist.</h2>
+          <p>AG Horizon is a player. It comes with no channels, movies or subscriptions. Add the Xtream Codes login or M3U link from a TV service you’re entitled to watch, and AG Horizon does the rest. Your logins stay on your own computer.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── download ───────────── -->
+    <section class="download" id="download">
+      <div class="sun sun-low" aria-hidden="true"></div>
+      <div class="wrap">
+        <div class="copy center">
+          <p class="eyebrow" id="dlVersion">Latest version</p>
+          <h2>Get AG Horizon.</h2>
+          <p>Free, for Windows, macOS and Linux. After installing, it keeps itself up to date.</p>
+        </div>
+        <div class="platforms">
+          <a class="platform" data-os="win" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
+            <svg class="pi" aria-hidden="true"><use href="#i-windows"/></svg>
+            <b>Windows</b><span class="file">AG-Horizon-Setup.exe</span>
+            <small>Windows 10 and 11. The installer isn’t code-signed yet: if SmartScreen appears, click <em>More info › Run anyway</em>.</small>
+          </a>
+          <a class="platform" data-os="mac" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
+            <svg class="pi" aria-hidden="true"><use href="#i-apple"/></svg>
+            <b>macOS</b><span class="file">AG-Horizon-arm64.dmg</span>
+            <small>Apple silicon (M1 and later). The first time, right-click the app and choose <em>Open</em>.</small>
+          </a>
+          <a class="platform" data-os="linux" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
+            <svg class="pi" aria-hidden="true"><use href="#i-linux"/></svg>
+            <b>Linux</b><span class="file">AG-Horizon.AppImage</span>
+            <small>Make it executable once (<code>chmod +x</code>), then run it.</small>
+          </a>
+        </div>
+        <p class="fine center"><a href="https://github.com/Andreas-Graesmo/AGHorizon/releases">All releases and release notes</a></p>
+      </div>
+    </section>
+
+    <!-- ───────────── faq ───────────── -->
+    <section class="faq" id="faq">
+      <div class="wrap narrow">
+        <h2 class="center">Questions</h2>
+        <details>
+          <summary>Does AG Horizon come with channels?</summary>
+          <p>No. It’s a player, like a TV without an antenna. You add a playlist from a service you subscribe to: an Xtream Codes login (server, username, password, or a pasted <code>get.php</code> link) or an M3U / M3U8 link or file.</p>
+        </details>
+        <details>
+          <summary>Is it free?</summary>
+          <p>Yes. No account and no ads. Download it and add your playlist.</p>
+        </details>
+        <details>
+          <summary>Where are my logins stored?</summary>
+          <p>Only on your own computer, inside the app’s local storage. AG Horizon talks to your provider directly; nothing goes through a third-party server.</p>
+        </details>
+        <details>
+          <summary>Why does Windows or macOS warn me the first time?</summary>
+          <p>The installers aren’t code-signed yet, which costs a yearly fee. On Windows choose <em>More info › Run anyway</em>; on a Mac right-click the app and choose <em>Open</em>. You only do this once.</p>
+        </details>
+        <details>
+          <summary>A channel plays with no picture or no sound.</summary>
+          <p>That’s usually HEVC video or DTS / AC-3 sound. AG Horizon notices and switches to compatibility mode by itself, converting the stream on the fly. You can also set it to <em>Always</em> or <em>Off</em> in Settings › Playback.</p>
+        </details>
+        <details>
+          <summary>How many channels can I watch at once?</summary>
+          <p>Up to four in Multi view, but each picture uses one connection, and many providers allow only one or two. The second screen doesn’t need an extra connection.</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <a class="brand" href="#top"><img src="icon.svg" alt="" width="26" height="26"><span>AG Horizon</span></a>
+      <p>Screenshots show a made-up demo catalogue. Use AG Horizon only with services you’re entitled to watch.</p>
+      <nav aria-label="Footer"><a href="https://github.com/Andreas-Graesmo/AGHorizon">GitHub</a><a href="https://github.com/Andreas-Graesmo/AGHorizon/releases">Releases</a><a href="https://github.com/Andreas-Graesmo/AGHorizon/issues">Report a problem</a></nav>
+    </div>
+  </footer>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cast" viewBox="0 0 24 24"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6M2 12a9 9 0 0 1 8 8m-8-4a5 5 0 0 1 4 4m-4 0h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><path d="M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Zm2 5h6v6H9zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cc" viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm6.5 5.5a2.5 2.5 0 1 0 0 3m7-3a2.5 2.5 0 1 0 0 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2.5a1.5 1.5 0 0 0-1 2.6c.6.6.5 1.6-.2 2.3-.6.6-1.4 1.1-2.3 1.1ZM7.5 11h.01M10.5 7h.01M15 7.5h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path d="M15.5 7.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM12.5 10.5 4 19v2h3v-2h2v-2h2l1.5-1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-windows" viewBox="0 0 24 24"><path d="M3 5.5 10.5 4.4v7.1H3Zm8.5-1.2L21 3v8.5h-9.5ZM3 12.5h7.5v7.1L3 18.5Zm8.5 0H21V21l-9.5-1.3Z" fill="currentColor"/></symbol>
+    <symbol id="i-apple" viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7a4.6 4.6 0 0 0-3.6-2c-1.5-.2-3 .9-3.7.9-.8 0-2-.9-3.2-.8a4.8 4.8 0 0 0-4.1 2.5c-1.8 3-.5 7.6 1.3 10.1.8 1.2 1.8 2.6 3.1 2.5 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4a10 10 0 0 0 1.4-2.8 4.3 4.3 0 0 1-2.7-4.3ZM14 5.4a4.3 4.3 0 0 0 1-3.2 4.5 4.5 0 0 0-2.9 1.5 4.2 4.2 0 0 0-1 3.1 3.7 3.7 0 0 0 2.9-1.4Z" fill="currentColor"/></symbol>
+    <symbol id="i-linux" viewBox="0 0 24 24"><path d="M12 2.5c-2.3 0-3.6 1.9-3.6 4.6 0 1.4.4 2.4.1 3.4-.5 1.5-2.6 3.2-3.2 5.7-.3 1.2.1 2 .7 2.4-.4.7-.4 1.6.6 2 1.2.5 2.7.2 3.6.8.8.5 2.5.5 3.4-.1.8-.6 2.3-.3 3.5-.7 1.1-.4 1.1-1.3.6-2 .7-.4 1-1.2.7-2.4-.6-2.5-2.7-4.2-3.2-5.7-.3-1 .1-2 .1-3.4 0-2.7-1.3-4.6-3.6-4.6Zm-1.4 4.2c.5 0 .8.5.8 1.1s-.3 1.1-.8 1.1-.8-.5-.8-1.1.3-1.1.8-1.1Zm2.8 0c.5 0 .8.5.8 1.1s-.3 1.1-.8 1.1-.8-.5-.8-1.1.3-1.1.8-1.1Zm-1.4 3c.9 0 1.9.5 1.9.9s-1 1.1-1.9 1.1-1.9-.7-1.9-1.1 1-.9 1.9-.9Z" fill="currentColor"/></symbol>
+  </svg>
+  <script src="site.js" defer></script>
+</body>
+</html>
