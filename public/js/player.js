@@ -1,5 +1,5 @@
 'use strict';
-/* AG Horizon – player: hls.js / mpegts.js / native, ffmpeg compatibility mode, custom seek bar, second-screen mirror. */
+/* AG Horizon – player: hls.js / mpegts.js / native, ffmpeg compatibility mode, custom seek bar, picture mirroring. */
 
 const video = $('#video');
 const overlay = $('#overlay');
@@ -507,15 +507,15 @@ function movePlayer(move, { later = false } = {}) {
 }
 const closePip = () => { if (pipWin) pipWin.close(); };
 
-/* ───────────────────────── second screen (mirror window) ───────────────────────── */
+/* ───────────────────────── mirror picture (mirror window) ───────────────────────── */
 /*
  * The mirror window shows exactly what this player shows. It doesn't open a second connection to
  * your provider: we hand it a live MediaStream captured from the main <video>, so the picture
  * is identical and in sync, and connection limits aren't affected.
- * Sound can play on this window, on the second screen, or on both (Settings › Second screen).
+ * Sound can play on this window, on the mirror window, or on both (Settings › Mirror picture).
  */
 let mirrorWin = null;
-let mirrorMuteSaved = null;          // our own mute state, restored when "sound on second screen only" ends
+let mirrorMuteSaved = null;          // our own mute state, restored when "sound on mirror window only" ends
 const mirrorOpen = () => !!mirrorWin && !mirrorWin.closed;
 const mirrorSound = () => LS.get('tuner.mirrorSound', 'main'); // 'main' | 'mirror' | 'both'
 
@@ -529,16 +529,35 @@ function applyMirrorSound() {
     video.muted = mirrorMuteSaved;
     mirrorMuteSaved = null;
   }
-  try { if (mirrorOpen() && mirrorWin.setMuted) mirrorWin.setMuted(mode === 'main'); } catch { /* window closing */ }
+  try { if (mirrorOpen() && mirrorWin.setSound) mirrorWin.setSound(mode); } catch { /* window closing */ }
 }
+
+// The floating mirror window has the player's controls too (mirror.js). They call togglePlay, seekBy, seekTo and
+// the three functions below through window.opener; mirrorCtl tells that window what its controls should show.
+function mirrorSetMuted(m) { video.muted = m; if (!m && video.volume === 0) video.volume = 0.5; }
+function mirrorSetVolume(vol) { video.volume = Math.max(0, Math.min(1, vol)); video.muted = false; }
+function mirrorClock(sec) { return fmtClock(sec); }
+function mirrorCtl() {
+  try {
+    if (!mirrorOpen() || !mirrorWin.setCtl) return;
+    const vod = !!(state.current && isVod(state.current));
+    const dur = durTime();
+    mirrorWin.setCtl({
+      on: !!state.current, paused: video.paused, vod, muted: video.muted || video.volume === 0, volume: video.volume,
+      cur: curTime() || 0, dur: vod && isFinite(dur) && dur > 0 ? dur : 0,
+    });
+  } catch { /* window closing */ }
+}
+['play', 'pause', 'volumechange', 'loadedmetadata', 'durationchange', 'timeupdate', 'emptied'].forEach((ev) => video.addEventListener(ev, mirrorCtl));
 
 function attachMirror() {
   if (!mirrorOpen()) return;
   try {
     // A fresh capture every time: after the source changes (new channel, seek in converted video) the old stream stops updating.
     const stream = video.captureStream ? video.captureStream() : null;
-    if (stream && mirrorWin.setStream) mirrorWin.setStream(stream, mirrorSound() === 'main');
+    if (stream && mirrorWin.setStream) mirrorWin.setStream(stream, mirrorSound());
     applyMirrorSound();
+    mirrorCtl();
   } catch (e) { console.warn('mirror attach failed', e); }
 }
 function mirrorTitle(text) { try { if (mirrorOpen() && mirrorWin.setTitleText) mirrorWin.setTitleText(text || ''); } catch { /* window closing */ } }
@@ -558,14 +577,15 @@ function closeMirror() { try { if (mirrorOpen()) mirrorWin.close(); } catch { /*
 window.addEventListener('beforeunload', () => { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } });
 setInterval(() => { if (mirrorWin && mirrorWin.closed) mirrorClosed(); }, 1000);
 
-// Button → with more than one monitor, offer a choice; otherwise just open the window.
+// Button → with more than one monitor, offer a choice; otherwise just open the floating window.
 async function mirrorButton(anchor) {
   if (mirrorOpen()) { closeMirror(); return; }
   let list = [];
   try { list = await window.tunerDesktop.displays(); } catch { /* fall through to a plain window */ }
   if (list.length > 1) {
     showMenu(anchor, [
-      { label: 'Show on…', heading: true },
+      { label: 'Mirror to…', heading: true },
+      { label: 'Floating window (stays on top)', run: () => openMirror() },
       ...list.map((d) => ({ label: `${d.label}${d.primary ? ' (main)' : ''} · ${d.width}×${d.height}`, run: () => openMirror(d.id) })),
     ]);
     return;

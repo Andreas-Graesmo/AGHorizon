@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AG Horizon – second screen</title>
+<title>AG Horizon – mirror picture</title>
+<!-- the app's stylesheet: the floating window dresses like the app's own player (.player, .p-top, .p-ctl …) -->
+<link rel="stylesheet" href="style.css">
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #cfd3dc; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
@@ -12,13 +14,46 @@
   #msg p { margin: 6px 0 0; color: #8b93a4; font-size: 13px; }
   #title { position: absolute; left: 24px; bottom: 22px; padding: 7px 14px; border-radius: 10px; background: rgba(0, 0, 0, .62); color: #fff; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #title.show { opacity: 1; }
-  body.idle { cursor: none; }
+  /* Full screen on a monitor: only the picture. The floating window: the player's top bar and controls, shown while
+     the mouse moves over it; it is dragged by the picture (mirror.js), so the top bar is no drag region here. */
+  body:not(.float) .p-top, body:not(.float) .p-ctl, body.float #title, .player.empty .p-ctl { display: none; }
+  body.float { user-select: none; }
+  #player .p-top { -webkit-app-region: no-drag; }
+  .m-side { flex: 1 1 0; display: flex; align-items: center; }
+  .m-side.end { justify-content: flex-end; }
+  /* the speaker brings up a slider that stands on end */
+  #vol { position: relative; display: inline-grid; }
+  .m-volpop { position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); display: grid; padding: 10px 0; border-radius: 10px; background: rgba(0, 0, 0, .7); visibility: hidden; }
+  #vol.open .m-volpop { visibility: visible; }
+  .player:not(.mini):not(.is-live) .m-volpop { bottom: calc(100% + 30px); }   /* clear of the seek bar's clock */
+  #mVolRange { writing-mode: vertical-lr; direction: rtl; box-sizing: content-box; width: 4px; height: 60px; padding: 0 12px; background: linear-gradient(to top, var(--accent) var(--fill, 100%), rgba(255, 255, 255, .3) var(--fill, 100%)) content-box; }
 </style>
 </head>
 <body>
-<video id="v" autoplay muted playsinline></video>
-<div id="msg"><div><strong>Waiting for the video…</strong><p>Play something in AG Horizon and it will appear here.<br>Press Esc to close this screen.</p></div></div>
-<div id="title"></div>
+<div id="player" class="player in-pip empty">
+  <video id="v" autoplay muted playsinline></video>
+  <div id="msg"><div><strong>Waiting for the video…</strong><p>Play something in AG Horizon and it will appear here.<br>Press Esc to close this screen.</p></div></div>
+  <div id="title"></div>
+  <div class="p-top">
+    <span id="pTitle" class="p-title"></span>
+    <button class="p-btn" id="close" title="Close (Esc)" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="p-ctl">
+    <div class="pc-seekrow" id="pcSeekRow"><span id="pcCur" class="pc-time">0:00</span><input id="pcSeek" type="range" min="0" max="0" step="1" value="0" aria-label="Seek"><span id="pcDur" class="pc-time">0:00</span></div>
+    <div class="pc-row">
+      <span class="m-side">
+        <span id="vol">
+          <span class="m-volpop"><input id="mVolRange" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume"></span>
+          <button class="p-btn" id="mVol" title="Volume (press again to mute)" aria-label="Volume" aria-expanded="false"><svg class="ic"><use href="#i-volume"/></svg></button>
+        </span>
+      </span>
+      <button class="p-btn pc-skip" id="pcBack" title="Back 15 seconds" aria-label="Back 15 seconds"><svg class="ic"><use href="#i-back15"/></svg></button>
+      <button class="pc-big" id="pcPlay" title="Play / pause" aria-label="Play / pause"><svg class="ic fill"><use href="#i-pause"/></svg></button>
+      <button class="p-btn pc-skip" id="pcFwd" title="Forward 15 seconds" aria-label="Forward 15 seconds"><svg class="ic"><use href="#i-fwd15"/></svg></button>
+      <span class="m-side end"><span class="live-badge"><i></i>LIVE</span></span>
+    </div>
+  </div>
+</div>
 <script src="mirror.js"></script>
 </body>
 </html>

@@ -825,10 +825,10 @@ function renderSettings() {
       <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
     </section>
-    <section class="set-card"><h3>Second screen</h3>
-      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider. It goes full screen on the display you pick (Esc closes it).</p></div>
-        <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close second screen' : 'Open second screen'}</button></div>
-      <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Second screen” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Second screen'], ['both', 'Both']])}</div>
+    <section class="set-card"><h3>Mirror picture</h3>
+      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider: a small one that stays on top, or full screen on the display you pick (Esc closes it).</p></div>
+        <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close mirror window' : 'Open mirror window'}</button></div>
+      <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>
     </section>
     ${dlSettingsCard()}
     ${subSettingsCard()}
@@ -948,7 +948,7 @@ function paletteCommands() {
     ['Open Settings', 'i-gear', () => go('settings')],
     ['Add a playlist', 'i-plus', () => openPlaylistDialog()],
     ['Switch light / dark theme', 'i-sun', () => $('#btnTheme').click()],
-    ['Show on a second screen', 'i-cast', () => mirrorButton($('#btnPalette'))],
+    ['Mirror picture', 'i-screens', () => mirrorButton($('#btnPalette'))],
     ['Keyboard shortcuts', 'i-keyboard', openHelp],
     ['Show / hide the categories', 'i-panel', () => { if (ui.route === 'ws') toggleWsSide(); }],
   ];
