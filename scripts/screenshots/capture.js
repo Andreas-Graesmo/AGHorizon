@@ -13,7 +13,7 @@ const { MOVIES, SERIES, CHANNELS } = require('./catalog');
 const OUT = process.env.SHOTS_OUT || path.join(__dirname, '.cache', 'shots');
 const SITE_IMG = path.join(__dirname, '..', '..', 'docs', 'img');
 // shot -> how many CSS pixels from the top to keep on the website (the rest is empty page)
-const CROP = { movie: 640, series: 760, light: 600 };
+const CROP = { movie: 640, light: 600 };
 const W = 1440, H = 900;
 const PID = 'demo';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -90,11 +90,11 @@ async function main(only) {
     await page.evaluate(() => Promise.all([...document.images].filter((i) => !i.complete && i.offsetParent).map((i) => new Promise((r) => { i.onload = i.onerror = r; setTimeout(r, 4000); }))));
     await wait(ms);
   };
-  const save = async (page, name) => {
+  const save = async (page, name, cropTo = CROP[name]) => {
     const png = path.join(OUT, name + '.png');
     await page.screenshot({ path: png });
     fs.mkdirSync(SITE_IMG, { recursive: true });
-    const keep = CROP[name] ? `crop=iw:ih*${CROP[name]}/${H}:0:0,` : '';
+    const keep = cropTo ? `crop=iw:ih*${cropTo}/${H}:0:0,` : '';
     execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', png, '-vf', `${keep}scale=2200:-1:flags=lanczos`, '-quality', '82', path.join(SITE_IMG, name + '.webp')]);
     console.log('  saved', name);
   };
@@ -158,7 +158,17 @@ async function main(only) {
       await page.evaluate(() => { const s = state.cache['demo:series'].channels.find((m) => m.id === '201'); state.season[s.uid] = 2; openDetail(s); });
       await page.waitForFunction(() => document.querySelectorAll('#wsDetail .ep').length, null, { timeout: 20000 });
       await settle(page, 1200);
-      await save(page, 'series');
+      // the episode list is the point here: scroll it up under the top bar, and keep the picture down to its last row
+      const bottom = await page.evaluate(() => {
+        const d = $('#wsDetail');
+        d.querySelector('.detail-in').style.paddingBottom = '900px';   // room to scroll the list all the way up
+        const head = [...d.querySelectorAll('.dt-sec h3')].find((h) => /Episodes/.test(h.textContent));
+        d.scrollTop += head.getBoundingClientRect().top - d.getBoundingClientRect().top - 28;
+        const eps = d.querySelectorAll('.ep');
+        return Math.ceil(eps[eps.length - 1].getBoundingClientRect().bottom + 28);
+      });
+      await settle(page, 600);
+      await save(page, 'series', Math.min(H, bottom));
       await ctx.close();
     },
     async multiview() {
