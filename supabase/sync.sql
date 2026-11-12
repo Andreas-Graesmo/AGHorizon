@@ -25,21 +25,56 @@ alter table public.sync_vault enable row level security;
 alter table public.sync_blob enable row level security;
 revoke all on public.sync_vault, public.sync_blob from anon, authenticated;
 
+-- Which networks made a vault in the last day: a SHA-256 of the address only, deleted after a day.
+create table if not exists public.sync_new_vault (
+  net_hash    bytea not null,
+  created_at  timestamptz not null default now()
+);
+alter table public.sync_new_vault enable row level security;
+revoke all on public.sync_new_vault from anon, authenticated;
+
+-- The caller's address as Supabase's proxy saw it. Not the first X-Forwarded-For entry: that's whatever the client
+-- sent, and the real address is added after it. An IPv6 address counts as its /64, which one household usually has.
+-- Null when called outside the API (the SQL editor) or the header can't be read.
+create or replace function public.sync_client_net()
+returns inet language plpgsql stable set search_path = public, pg_temp as $$
+declare
+  h json;
+  ip inet;
+begin
+  h := current_setting('request.headers', true)::json;
+  ip := coalesce(h->>'cf-connecting-ip', trim(split_part(h->>'x-forwarded-for', ',', -1)))::inet;
+  return case when family(ip) = 6 then network(set_masklen(ip, 64)) else ip end;
+exception when others then return null;
+end $$;
+
 -- Checks the token; creates the vault the first time its token is used. Returns nothing, raises 'denied'.
 create or replace function public.sync_check(p_vault text, p_token text, p_create boolean)
 returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   h bytea := sha256(convert_to(coalesce(p_token, ''), 'UTF8'));
+  net inet;
+  nh bytea;
 begin
   if p_vault !~ '^[0-9a-f]{64}$' or p_token !~ '^[0-9a-f]{64}$' then raise exception 'denied'; end if;
-  if p_create then
+  if p_create and not exists (select 1 from sync_vault where id = p_vault) then
+    -- The public key is in the app, so anyone can make vaults. At most 5 a day per network, and 10 an hour in all,
+    -- keeps a script from filling the database (10 × 10 computers × 256 KB = 25 MB an hour at worst).
+    net := sync_client_net();
+    if net is not null then
+      nh := sha256(convert_to(net::text, 'UTF8'));
+      delete from sync_new_vault where created_at < now() - interval '1 day';
+      if (select count(*) from sync_new_vault where net_hash = nh) >= 5 then raise exception 'too many new codes'; end if;
+      insert into sync_new_vault (net_hash) values (nh);
+    end if;
+    if (select count(*) from sync_vault where created_at > now() - interval '1 hour') >= 10 then raise exception 'busy'; end if;
     insert into sync_vault (id, token_hash) values (p_vault, h) on conflict (id) do nothing;
   end if;
   update sync_vault set last_seen = now() where id = p_vault and token_hash = h;
   if not found then raise exception 'denied'; end if;
 end $$;
 
--- Save this computer's blob (base64). At most 10 computers per vault and 1 MB per blob.
+-- Save this computer's blob (base64). At most 10 computers per vault and 256 KB per blob (a heavy user's is ~80 KB).
 create or replace function public.sync_put(p_vault text, p_token text, p_device text, p_blob text)
 returns timestamptz language plpgsql security definer set search_path = public, pg_temp as $$
 declare
@@ -48,7 +83,7 @@ declare
 begin
   perform sync_check(p_vault, p_token, true);
   if p_device !~ '^[0-9a-f]{16,32}$' then raise exception 'bad device'; end if;
-  if octet_length(b) > 1048576 then raise exception 'too large'; end if;
+  if octet_length(b) > 262144 then raise exception 'too large'; end if;
   if not exists (select 1 from sync_blob where vault_id = p_vault and device_id = p_device)
      and (select count(*) from sync_blob where vault_id = p_vault) >= 10 then
     raise exception 'too many devices';
@@ -81,7 +116,7 @@ begin
   end if;
 end $$;
 
-revoke all on function public.sync_check(text, text, boolean) from public, anon, authenticated;
+revoke all on function public.sync_check(text, text, boolean), public.sync_client_net() from public, anon, authenticated;
 revoke all on function public.sync_put(text, text, text, text), public.sync_get(text, text, timestamptz),
   public.sync_delete(text, text, text) from public;
 grant execute on function public.sync_put(text, text, text, text), public.sync_get(text, text, timestamptz),

@@ -15,11 +15,11 @@
 | Table | Columns | Readable by the project? |
 |---|---|---|
 | `sync_vault` | random vault id, SHA-256 of the access token, created, last used | Only the random ids and times |
-| `sync_blob` | vault id, random device id, updated, encrypted blob (≤ 1 MB) | No: AES-256-GCM with a key that never leaves the computers |
+| `sync_blob` | vault id, random device id, updated, encrypted blob (≤ 256 KB) | No: AES-256-GCM with a key that never leaves the computers |
 
-The public key can't read or write the tables (row level security, no policies). Everything goes through `sync_put`, `sync_get` and `sync_delete`, which check the token. A vault holds at most 10 computers.
+The public key can't read or write the tables (row level security, no policies). Everything goes through `sync_put`, `sync_get` and `sync_delete`, which check the token. A vault holds at most 10 computers. The public key is in the app, so to keep a script from filling the database, at most 10 new vaults are made an hour, and at most 5 a day from one network (its IP address, or the /64 for IPv6). For that, `sync_new_vault` keeps a SHA-256 of the address of whoever made a vault, for a day. A hash of an IPv4 address can be reversed by trying them all, so treat it as the address itself: it is personal data, kept briefly.
 
-Supabase still sees IP addresses in its logs, and when each vault was used. Say so in the privacy text, together with the 12-month clean-up.
+Supabase still sees IP addresses in its logs, and when each vault was used. The database keeps a hash of the address that made a vault for one day. Say so in the privacy text, together with the 12-month clean-up.
 
 ## Privacy (GDPR)
 
