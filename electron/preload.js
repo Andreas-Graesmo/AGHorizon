@@ -1,5 +1,5 @@
 'use strict';
-// What the page may ask the desktop shell: which monitors exist (second-screen picker), bringing the window forward,
+// What the page may ask the desktop shell: which monitors exist (mirror picture picker), bringing the window forward,
 // the app version, updates, downloads and sync.
 const { contextBridge, ipcRenderer } = require('electron');
 

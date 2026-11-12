@@ -87,12 +87,12 @@ function createWindow() {
         },
       };
     }
-    // The second-screen window is the one pop-up we allow (it needs a link back to this window to receive the video).
+    // The mirror window is the one pop-up we allow (it needs a link back to this window to receive the video).
     if (url.startsWith(origin + '/mirror.html')) {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
-          title: 'AG Horizon – second screen',
+          title: 'AG Horizon – mirror picture',
           backgroundColor: '#000000',
           autoHideMenuBar: true,
           frame: false,
@@ -105,7 +105,7 @@ function createWindow() {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  // Put the second-screen window full screen on the monitor that was picked (?d=<display id>);
+  // Put the mirror window full screen on the monitor that was picked (?d=<display id>);
   // with no monitor picked it floats on top like the picture-in-picture window.
   win.webContents.on('did-create-window', (child, details) => {
     const float = () => {   // bottom right of the screen the app is on, kept 16:9 when resized
@@ -118,7 +118,18 @@ function createWindow() {
     let id = null;
     try { id = new URL(details.url).searchParams.get('d'); } catch { /* no display chosen */ }
     const target = screen.getAllDisplays().find((d) => String(d.id) === id);
-    if (!target) { float(); return; }
+    if (!target) {
+      float();
+      // The page moves this window itself when the picture is dragged (window.moveTo in mirror.js). Electron would
+      // apply the rectangle it asks for as content bounds, but on Windows it includes the invisible resize border,
+      // so the window grew a little on every step. Move only, and take the border back off.
+      // shortcut: assumes that border is equal left and right and absent on top (true for frameless windows on Windows); revisit if dragging drifts on another platform.
+      child.webContents.on('content-bounds-updated', (e, rect) => {
+        e.preventDefault();
+        child.setPosition(rect.x + Math.round((rect.width - child.getBounds().width) / 2), rect.y);
+      });
+      return;
+    }
     child.setBounds(target.bounds);
     if (process.platform === 'darwin') child.setSimpleFullScreen(true); else child.setFullScreen(true);
   });
@@ -129,7 +140,7 @@ function createWindow() {
   win.on('close', saveWindowState);
   win.on('closed', () => {
     win = null;
-    for (const w of BrowserWindow.getAllWindows()) w.close(); // takes the second-screen window with it
+    for (const w of BrowserWindow.getAllWindows()) w.close(); // takes the mirror window with it
   });
 }
 
