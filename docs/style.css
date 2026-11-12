@@ -213,3 +213,16 @@ html.lb-open { overflow: hidden; }
 @keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 720px) { .lb-prev, .lb-next { top: auto; bottom: 16px; transform: none; } .lightbox img { max-width: calc(100vw - 32px); max-height: calc(100vh - 170px); } }
 @media (prefers-reduced-motion: reduce) { .lightbox[open] { animation: none; } }
+
+/* privacy page */
+.legal { padding: clamp(48px, 8vw, 88px) 0 64px; }
+.legal h1 { font-size: clamp(32px, 5vw, 48px); font-weight: 800; letter-spacing: -.03em; }
+.legal .lede-s { color: #c3cbdc; font-size: 19px; margin-top: 18px; }
+.legal .fine { margin-top: 12px; }
+.legal h2 { font-size: 22px; margin: 40px 0 10px; letter-spacing: -.015em; }
+.legal p, .legal li { color: #c3cbdc; }
+.legal p + p { margin-top: 12px; }
+.legal ul { padding-left: 20px; margin: 10px 0; display: grid; gap: 6px; }
+.legal b { color: var(--text); }
+.legal a:not(.btn) { color: var(--accent); }
+.legal .back { margin-top: 44px; }

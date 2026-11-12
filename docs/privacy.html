@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy – AG Horizon</title>
+  <meta name="description" content="What AG Horizon stores, where, and how to delete it.">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="./" aria-label="AG Horizon home"><img src="icon.svg" alt="" width="32" height="32"><span>AG Horizon</span></a>
+      <nav class="nav-links" aria-label="Main"><a href="./#faq">FAQ</a><a href="./#download">Download</a></nav>
+    </div>
+  </header>
+
+  <main class="legal wrap narrow">
+    <p class="eyebrow">Privacy</p>
+    <h1>What AG Horizon stores, and where.</h1>
+    <p class="lede-s">Short version: almost everything stays on your own computer. If you turn on sync, an encrypted copy of your history, progress and favorites is stored where you choose, and nobody but your own computers can read it.</p>
+    <p class="fine">Last updated 12 November 2026</p>
+
+    <h2>Who is responsible</h2>
+    <p>AG Horizon is made by the owner of the GitHub repository <a href="https://github.com/Andreas-Graesmo/AGHorizon">Andreas-Graesmo/AGHorizon</a>, who is the controller for the sync service described below. Questions or requests: <a href="https://github.com/Andreas-Graesmo/AGHorizon/issues">open an issue on GitHub</a>.</p>
+
+    <h2>On your computer</h2>
+    <p>The app keeps these only on the computer it runs on:</p>
+    <ul>
+      <li>your playlists, including Xtream Codes logins and playlist links,</li>
+      <li>what you’ve watched recently, where you stopped, and your favorites,</li>
+      <li>settings, downloads and, if you add one, your OpenSubtitles login.</li>
+    </ul>
+    <p>None of this is sent to the maker of AG Horizon. Logins are stored as plain text in the app’s own storage, so anyone who can use your computer account can read them.</p>
+
+    <h2>Who the app talks to</h2>
+    <ul>
+      <li><b>Your TV provider</b>, to load playlists, the guide and streams. What they collect is up to them.</li>
+      <li><b>TMDB</b> (themoviedb.org), for “Trending this week”, cast photos and lengths. It is asked about titles, not about you, but it sees your IP address.</li>
+      <li><b>OpenSubtitles.com</b>, only if you log in to it in Settings › Subtitles.</li>
+      <li><b>GitHub</b>, to check for and download updates.</li>
+      <li><b>jsDelivr</b>, a code CDN, the first time something plays, if the player libraries weren’t included in your copy.</li>
+    </ul>
+    <p>AG Horizon has no analytics, no tracking and no ads.</p>
+
+    <h2>Sync between computers</h2>
+    <p>Sync is off until you turn it on in Settings › Sync. It then shares your recently viewed list, where you stopped and your favorites with your other computers. Playlists and logins are never synced.</p>
+    <p>Before anything leaves your computer it is encrypted (AES-256-GCM) with a key made from your sync code. The code stays on your computers, in the system keychain where there is one. Whoever stores the data sees only random ids and unreadable data, and can’t tell what you watched or which services you use. Neither can the maker of AG Horizon.</p>
+    <p>You choose where it’s stored:</p>
+    <ul>
+      <li><b>A synced folder</b> (Dropbox, iCloud Drive, OneDrive, Google Drive, Syncthing…). The encrypted files go to that service under your own account and its terms. No AG Horizon server is involved.</li>
+      <li><b>AG Horizon cloud.</b> The encrypted data is stored with <a href="https://supabase.com/privacy">Supabase</a>, which runs the database for us as a data processor under a data processing agreement. Besides the encrypted data, it keeps a random id for your group of computers, a random id per computer, when each was last used, and, in its server logs, your IP address.</li>
+    </ul>
+
+    <h2>Why, and for how long</h2>
+    <p>Sync data is stored because you asked for it by turning sync on (GDPR article 6(1)(b), providing the service you requested). It is kept until you delete it, or deleted automatically when no computer has used it for 12 months.</p>
+
+    <h2>Deleting it</h2>
+    <ul>
+      <li><b>Settings › Sync › Turn off</b> removes this computer’s copy.</li>
+      <li><b>Settings › Sync › Delete synced data</b> removes everything stored for your sync code, for all your computers.</li>
+      <li><b>New code</b> makes a new one and deletes what was stored under the old code.</li>
+    </ul>
+    <p>What’s on each computer stays there until you clear it in the app (Settings › Library) or uninstall it.</p>
+
+    <h2>Your rights</h2>
+    <p>You can ask for access to, correction of or deletion of data about you, and object to its use. Because sync data is encrypted with a code only you have, the maker of AG Horizon can’t read it or link it to you: the delete buttons above are the quickest way. If you think your data is handled wrongly, you can complain to the Norwegian Data Protection Authority, <a href="https://www.datatilsynet.no/en/">Datatilsynet</a>, or the authority where you live.</p>
+
+    <h2>This website</h2>
+    <p>The site is hosted on GitHub Pages; GitHub may log visitors’ IP addresses. The download buttons ask GitHub for the latest version. The accent colour you try on the page is remembered in your browser. No cookies, analytics or trackers.</p>
+
+    <p class="back"><a class="btn btn-ghost" href="./">← Back to AG Horizon</a></p>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <a class="brand" href="./"><img src="icon.svg" alt="" width="26" height="26"><span>AG Horizon</span></a>
+      <p>Use AG Horizon only with services you’re entitled to watch.</p>
+      <nav aria-label="Footer"><a href="https://github.com/Andreas-Graesmo/AGHorizon">GitHub</a><a href="privacy.html">Privacy</a></nav>
+    </div>
+  </footer>
+</body>
+</html>
