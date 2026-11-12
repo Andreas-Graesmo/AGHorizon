@@ -226,3 +226,7 @@ html.lb-open { overflow: hidden; }
 .legal b { color: var(--text); }
 .legal a:not(.btn) { color: var(--accent); }
 .legal .back { margin-top: 44px; }
+
+/* sync */
+.ticks a { color: var(--accent); }
+#sync .shot { max-width: 600px; justify-self: center; }
