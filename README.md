@@ -8,6 +8,7 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 - **Several playlists** – Xtream Codes (server + login, or paste a `get.php?username=…&password=…` link), M3U/M3U8 by URL or file; drag an `.m3u` file onto the window to add it
 - **Second screen** – mirror the picture onto another monitor or TV (see below)
 - **Compatibility mode** – HEVC video and DTS / AC-3 audio are converted on the fly with ffmpeg
+- **Sync between computers** – Recently viewed, where you stopped and favorites, end-to-end encrypted with a sync code (see below)
 - Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, mini player that keeps playing while you browse
 - Keyboard: press **?** in the app for the full list
 
@@ -43,6 +44,16 @@ Click the **cast** button on the player (or the cast icon in the top bar).
 - It does **not** open a second connection to your provider: the main player hands the second window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
 - **Sound** (Settings › Second screen): play it on this window, on the second screen only (useful when the TV has the speakers), or on both.
 
+## Sync between computers
+
+**Settings › Sync** keeps Recently viewed, where you stopped and your favorites the same on all your computers.
+
+- Turn it on with **Create a sync code** on the first computer, then **I have a code** on the others. The code is 27 letters and digits; a typo is caught before anything happens.
+- Everything is encrypted on the computer with a key made from the code (AES-256-GCM) before it's stored. Where it's stored sees only random ids and noise, and the code is kept in the system keychain.
+- Store it in **a synced folder** (Dropbox, iCloud Drive, OneDrive, Google Drive, Syncthing: pick the same folder on each computer), or in **AG Horizon cloud** when the build has a sync server set up (see [`supabase/README.md`](supabase/README.md)).
+- Playlists and logins are not synced. Add the same playlist on each computer: the same Xtream account or playlist link is recognised everywhere, so its history lines up.
+- **New code** shuts out every computer that only knows the old one. **Delete synced data** removes the stored copy; what each computer has stays on it.
+
 ## Compatibility mode (codecs)
 
 The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
@@ -77,6 +88,11 @@ public/js/player.js     player, compatibility mode, second-screen mirror
 public/js/workspace.js  live TV, guide, movies and series
 public/js/dialogs.js    add / edit playlists
 public/js/ui.js         navigation, dashboard, settings, search, command palette
+public/js/sync-core.js  sync codes, encryption, merging history / progress / favorites
+public/js/sync.js       Settings › Sync, when to sync, the folder and cloud storage
+public/js/sync-config.js  the sync server's address (empty: folder only)
+electron/sync.js        the sync code in the keychain, reading and writing the sync folder
+supabase/sync.sql       tables and functions for the optional sync server
 public/js/boot.js       start-up, drag & drop
 public/mirror.html/js   the second-screen window
 scripts/get-vendor.js   optional: download player libraries locally

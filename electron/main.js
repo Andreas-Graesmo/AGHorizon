@@ -9,6 +9,7 @@ const path = require('path');
 const { start, server, setLocalFiles } = require('../server');
 const updater = require('./updater');
 const downloads = require('./downloads');
+const sync = require('./sync');
 
 // The UI stores playlists in localStorage, which is tied to the page's origin (including the port).
 // So the port must be the same on every launch, otherwise your playlists would "disappear".
@@ -135,6 +136,7 @@ app.on('second-instance', () => {
 });
 
 updater.init();
+sync.init();
 setLocalFiles(downloads.localFile);
 
 // "Go to this video" in the picture-in-picture window: bring the app forward, also from minimised or behind other programs.
