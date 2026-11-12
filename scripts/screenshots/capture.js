@@ -171,6 +171,26 @@ async function main(only) {
       await save(page, 'series', Math.min(H, bottom));
       await ctx.close();
     },
+    // Settings › Sync, turned on with three computers (drawn from made-up state: nothing is synced)
+    async sync() {
+      const now = Date.now();
+      const { codeFromSecret, newSyncSecret } = require('../../public/js/sync-core.js');
+      const { page, ctx } = await open({
+        'tuner.syncCode': codeFromSecret(newSyncSecret()),
+        'tuner.sync': { on: true, mode: 'cloud', device: 'aaaaaaaaaaaaaaaa', last: { at: now - 40e3, ok: true },
+          devices: { aaaaaaaaaaaaaaaa: { name: 'Living room PC', at: new Date(now - 40e3).toISOString() }, bbbbbbbbbbbbbbbb: { name: 'Laptop', at: new Date(now - 26 * 60e3).toISOString() }, cccccccccccccccc: { name: 'Office', at: new Date(now - 2 * 864e5).toISOString() } } },
+      });
+      await hideCursor(page);
+      await page.evaluate(() => { clearTimeout(sy.timer); sy.keys = null; sy.showCode = true; sy.info = { host: 'Living room PC' }; go('settings'); });
+      await settle(page, 400);
+      const box = await page.evaluate(() => { const c = document.getElementById('set-sync'); c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: r.x - 12, y: r.y - 12, width: r.width + 24, height: r.height + 24 }; });
+      await settle(page, 300);
+      const png = path.join(OUT, 'sync.png');
+      await page.screenshot({ path: png, clip: box });
+      execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', png, '-vf', 'scale=1600:-1:flags=lanczos', '-quality', '85', path.join(SITE_IMG, 'sync.webp')]);
+      console.log('  saved sync');
+      await ctx.close();
+    },
     async multiview() {
       const { page, ctx } = await open();
       await hideCursor(page);
