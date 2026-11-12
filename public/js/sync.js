@@ -64,7 +64,7 @@ function syncTransport(mode, keys) {
     const j = await r.json().catch(() => null);
     if (!r.ok) {
       const m = (j && j.message) || '';
-      const e = new Error({ denied: 'Nothing has been synced with this code yet.', 'too many devices': 'This sync code is already used on 10 computers. Remove one in Settings › Sync on another computer.', 'too large': 'There is too much to sync.', busy: 'The sync service is busy. Try again in an hour.' }[m] || `The sync service answered: ${m || 'HTTP ' + r.status}`);
+      const e = new Error({ denied: 'Nothing has been synced with this code yet.', 'too many devices': 'This sync code is already used on 10 computers. Remove one in Settings › Sync on another computer.', 'too large': 'There is too much to sync.', busy: 'The sync service is busy. Try again in an hour.', 'too many new codes': 'Too many new sync codes from this network today. Try again tomorrow.' }[m] || `The sync service answered: ${m || 'HTTP ' + r.status}`);
       e.denied = m === 'denied';
       throw e;
     }
