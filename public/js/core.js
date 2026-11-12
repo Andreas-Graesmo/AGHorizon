@@ -489,7 +489,7 @@ const snap = (it) => ({
 function persistFavs() { LS.set('tuner.favs', [...state.favs]); LS.set('tuner.favdata', state.favdata); }
 function toggleFavItem(it) {
   if (state.favs.has(it.uid)) { state.favs.delete(it.uid); delete state.favdata[it.uid]; }
-  else { state.favs.add(it.uid); state.favdata[it.uid] = snap(it); }
+  else { state.favs.add(it.uid); state.favdata[it.uid] = { ...snap(it), ts: Date.now() }; }   // ts: sync puts the newest change first
   persistFavs();
   uiFavChanged(it.uid);
 }

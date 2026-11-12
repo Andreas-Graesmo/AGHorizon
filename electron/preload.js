@@ -1,6 +1,6 @@
 'use strict';
 // What the page may ask the desktop shell: which monitors exist (second-screen picker), bringing the window forward,
-// the app version, updates and downloads.
+// the app version, updates, downloads and sync.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('tunerDesktop', {
@@ -31,5 +31,14 @@ contextBridge.exposeInMainWorld('tunerDesktop', {
     orphans: () => ipcRenderer.invoke('downloads:orphans'),
     adopt: (list) => ipcRenderer.invoke('downloads:adopt', list),
     onChange: (cb) => { ipcRenderer.on('downloads:changed', (_e, s) => cb(s)); },
+  },
+  sync: {
+    info: () => ipcRenderer.invoke('sync:info'),
+    getCode: () => ipcRenderer.invoke('sync:code:get'),
+    setCode: (code) => ipcRenderer.invoke('sync:code:set', code),
+    chooseFolder: () => ipcRenderer.invoke('sync:folder:choose'),
+    folderList: (vault) => ipcRenderer.invoke('sync:folder:list', vault),
+    folderPut: (vault, device, blob) => ipcRenderer.invoke('sync:folder:put', vault, device, blob),
+    folderRemove: (vault, device) => ipcRenderer.invoke('sync:folder:remove', vault, device),
   },
 });
