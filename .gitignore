@@ -5,3 +5,6 @@ public/vendor/*
 .DS_Store
 secrets.json
 .claude/
+
+# website screenshot tooling: rendered demo artwork and clips
+scripts/screenshots/.cache/
