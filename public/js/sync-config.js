@@ -4,6 +4,6 @@
    stores is encrypted with a code only the person's computers have. Leave them empty and the app offers only
    syncing through a folder. */
 const SYNC_CLOUD = {
-  url: '',   // https://<project>.supabase.co
-  key: '',   // the project's publishable (anon) key
+  url: 'https://trdvddncpfgyghekygoe.supabase.co',   // https://<project>.supabase.co
+  key: 'sb_publishable_cGCfXQJ0zH2DqlzXCdXDNQ_GUxNfw2Q',   // the project's publishable (anon) key
 };
