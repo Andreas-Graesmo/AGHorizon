@@ -6,7 +6,7 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
 - **Movies and series** – category list with poster grids, sorting, detail pages with plot, cast, seasons and episodes, "Resume", auto-play of the next episode
 - **Several playlists** – Xtream Codes (server + login, or paste a `get.php?username=…&password=…` link), M3U/M3U8 by URL or file; drag an `.m3u` file onto the window to add it
-- **Second screen** – mirror the picture onto another monitor or TV (see below)
+- **Mirror picture** – show the same picture onto another monitor or TV (see below)
 - **Compatibility mode** – HEVC video and DTS / AC-3 audio are converted on the fly with ffmpeg
 - **Sync between computers** – Recently viewed, where you stopped and favorites, end-to-end encrypted with a sync code (see below)
 - Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, mini player that keeps playing while you browse
@@ -36,13 +36,16 @@ Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 - **Sources** (list icon in the left rail) shows every playlist with type, date added, last update, server and user. Filter by type or status, sort, reload, edit, or use *Clean up inactive sources…*.
 - Click the playlist name in the top bar for a quick switcher (type to search, ↑ ↓ and Enter to open).
 
-## Second screen (show the video on two displays)
+## Mirror picture (show the video on two displays)
 
-Click the **cast** button on the player (or the cast icon in the top bar).
+Click the **Mirror picture** button on the player (the two-screens icon, also in the top bar).
 
-- Pick the monitor or TV. A borderless window opens full screen there, showing exactly what the main player shows. Press **Esc** in that window (or click the button again) to close it.
-- It does **not** open a second connection to your provider: the main player hands the second window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
-- **Sound** (Settings › Second screen): play it on this window, on the second screen only (useful when the TV has the speakers), or on both.
+- With one display, a small window opens that stays on top of other windows (drag it by the picture, resize it by the edges) while the player keeps playing in the app.
+- With more displays, pick that floating window or a monitor or TV. On a monitor, a borderless window opens full screen there, showing exactly what the main player shows.
+- Press **Esc** in that window (or click the button again) to close it. The floating window also shows a ✕ in its top right corner while the mouse is over it.
+- The floating window looks like the player and has its controls while the mouse is over it: the title, play / pause, back and forward 15 seconds and (when the window is wide enough) a seek bar for movies and series, a LIVE badge for live TV, and a speaker that brings up a volume slider (press it again to mute). They steer the player in the app.
+- It does **not** open a second connection to your provider: the main player hands the mirror window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
+- **Sound** (Settings › Mirror picture): play it on this window, on the mirror window only (useful when the TV has the speakers), or on both.
 
 ## Sync between computers
 
@@ -78,13 +81,13 @@ The window shows the UI from a small server (`server.js`) that runs inside the a
 ## Files
 
 ```
-electron/main.js        desktop window, second-screen window placement
+electron/main.js        desktop window, mirror window placement
 electron/preload.js     lets the page ask which monitors exist
 server.js               proxy + EPG parser + ffmpeg conversion + static files
 public/index.html       page structure
 public/style.css        styles (dark / light, accent colours)
 public/js/core.js       storage, Xtream / M3U loading, EPG lookups
-public/js/player.js     player, compatibility mode, second-screen mirror
+public/js/player.js     player, compatibility mode, picture mirroring
 public/js/workspace.js  live TV, guide, movies and series
 public/js/dialogs.js    add / edit playlists
 public/js/ui.js         navigation, dashboard, settings, search, command palette
@@ -94,7 +97,7 @@ public/js/sync-config.js  the sync server's address (empty: folder only)
 electron/sync.js        the sync code in the keychain, reading and writing the sync folder
 supabase/sync.sql       tables and functions for the optional sync server
 public/js/boot.js       start-up, drag & drop
-public/mirror.html/js   the second-screen window
+public/mirror.html/js   the mirror window
 scripts/get-vendor.js   optional: download player libraries locally
 ```
 

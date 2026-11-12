@@ -832,7 +832,7 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 /* ── the player in its picture-in-picture window (player.js) ── */
 .pip-body { margin: 0; background: #000; overflow: hidden; }
 .player.in-pip { position: fixed; inset: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; }
-.player.in-pip #pFull, .player.in-pip #pMirror, .player.in-pip #pMulti { display: none; }   /* no full screen / second screen from there */
+.player.in-pip #pFull, .player.in-pip #pMirror, .player.in-pip #pMulti { display: none; }   /* no full screen / mirror picture from there */
 .player.in-pip #pPip { color: var(--accent); }   /* pressing it again brings the player back */
 /* the desktop app's picture-in-picture window has no frame: drag it by the title bar (shown on hover) */
 .player.in-pip .p-top { -webkit-app-region: drag; }
