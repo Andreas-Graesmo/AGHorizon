@@ -824,6 +824,7 @@ function renderSettings() {
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
+      ${audSettingsRow()}
     </section>
     <section class="set-card"><h3>Mirror picture</h3>
       <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider: a small one that stays on top, or full screen on the display you pick (Esc closes it).</p></div>

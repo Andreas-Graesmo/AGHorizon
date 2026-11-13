@@ -48,6 +48,7 @@
     <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></symbol>
     <symbol id="i-back15" viewBox="0 0 24 24"><path d="M4.5 13A7.5 7.5 0 1 0 7 6.4"/><path d="M7.4 2.8 7 6.4l3.6.6"/><text x="12" y="11.7" text-anchor="middle" dominant-baseline="central" font-size="7.4" font-weight="700" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">15</text></symbol>
     <symbol id="i-fwd15" viewBox="0 0 24 24"><path d="M19.5 13A7.5 7.5 0 1 1 17 6.4"/><path d="M16.6 2.8l.4 3.6-3.6.6"/><text x="12" y="11.7" text-anchor="middle" dominant-baseline="central" font-size="7.4" font-weight="700" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">15</text></symbol>
+    <symbol id="i-audio" viewBox="0 0 24 24"><path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></symbol>
     <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10.5 10.2a2.3 2.3 0 1 0 0 3.6M17 10.2a2.3 2.3 0 1 0 0 3.6"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
@@ -284,13 +285,14 @@
         <span id="pcLiveTime" class="pc-time pc-livetime">0:00</span>
         <button class="p-btn" id="pcMute" title="Mute (M)" aria-label="Mute"><svg class="ic"><use href="#i-volume"/></svg></button>
         <input id="pcVol" class="pc-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+        <button class="p-btn" id="pAudio" title="Sound language" aria-label="Sound language" hidden><svg class="ic"><use href="#i-audio"/></svg></button>
+        <button class="p-btn" id="pSubs" title="Subtitles" aria-label="Subtitles" hidden><svg class="ic"><use href="#i-cc"/></svg></button>
         <span class="grow"></span>
         <button class="p-btn pc-skip" id="pcBack" title="Back 15 seconds" aria-label="Back 15 seconds"><svg class="ic"><use href="#i-back15"/></svg></button>
         <button class="pc-big" id="pcPlay" title="Play / pause (Space)" aria-label="Play / pause"><svg class="ic fill"><use href="#i-pause"/></svg></button>
         <button class="p-btn pc-skip" id="pcFwd" title="Forward 15 seconds" aria-label="Forward 15 seconds"><svg class="ic"><use href="#i-fwd15"/></svg></button>
         <span class="grow"></span>
         <span id="pcLive" class="live-badge"><i></i>LIVE</span>
-        <button class="p-btn" id="pSubs" title="Subtitles" aria-label="Subtitles" hidden><svg class="ic"><use href="#i-cc"/></svg></button>
         <button class="p-btn pc-speed" id="pcSpeed" title="Playback speed" aria-label="Playback speed">1×</button>
         <button class="p-btn" id="pMirror" title="Mirror picture" aria-label="Mirror picture"><svg class="ic"><use href="#i-screens"/></svg></button>
         <button class="p-btn" id="pMulti" title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>
@@ -428,6 +430,7 @@
 <script src="js/multiview.js"></script>
 <script src="js/downloads.js"></script>
 <script src="js/subtitles.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/sync-config.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/boot.js"></script>

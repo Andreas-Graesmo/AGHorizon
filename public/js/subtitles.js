@@ -1,7 +1,8 @@
 'use strict';
 /* AG Horizon – subtitles in the player: the CC button, the subtitles saved with a download (built-in ones are
    saved as .srt next to the file the first time), OpenSubtitles.com, and fetching subtitles for new downloads.
-   Subtitles never turn on by themselves. The server side is subtitles.js. */
+   They turn on by themselves only in the language set in Settings › Subtitles, or the one last picked for that
+   series or movie. The server side is subtitles.js. */
 
 const SUB_KEY = 'tuner.subs';   // { username, password, langs: "no, en" } – the OpenSubtitles API key is the app's own (server)
 const subCfg = () => LS.get(SUB_KEY, {});
@@ -26,7 +27,7 @@ function subLabel(code) {
 /* ─────────────────────────────── showing them ─────────────────────────────── */
 // One text track for everything. Cues are added by hand so they can be shifted: in compatibility mode the
 // video restarts at the seek point, so its clock starts at 0 there (tcState.offset).
-const sub = { track: null, cues: [], key: '', label: '', stream: null, seen: new Set() };
+const sub = { track: null, cues: [], key: '', label: '', stream: null, seen: new Set(), pending: null };
 
 function subParse(vtt) {
   const t = (s) => { const p = s.trim().split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; };
@@ -65,7 +66,7 @@ function subShow(vtt, key, label) {
   subApply();
   osd(sub.cues.length ? `Subtitles: ${label}` : 'These subtitles are empty');
 }
-function subOff() { subStopStream(); subHidePanel(); sub.cues = []; sub.key = ''; sub.label = ''; subApply(); }
+function subOff() { subStopStream(); subHidePanel(); sub.cues = []; sub.key = ''; sub.label = ''; sub.pending = null; subApply(); }
 
 // A track read from the running conversion arrives bit by bit: add the cues that are new since last time.
 function subAddCues(list) {
@@ -105,11 +106,57 @@ function subUseStream(c, n, key, label) {
   subApply();
   osd(`Subtitles: ${label}`);
   if (!tcState.on || !(tcState.subs || []).includes(n)) {
-    if (isFinite(curTime()) && curTime() > 0) state.progress[c.uid] = { t: curTime(), d: durTime() || 0, w: 0, ts: Date.now() };
+    if (isFinite(curTime()) && curTime() > 0) resumeAt = curTime();
     startPlayback(c, ['tc'], playToken);
   }
   subPollStream();
 }
+/* ─────────────────────────────── turning on by themselves ─────────────────────────────── */
+// Settings › Subtitles › "Turn on automatically", or what was picked for this series / movie before ('off' too).
+const SUB_PICKS = 'tuner.subPick';
+const subPickKey = (c) => (c.kind === 'episode' && c.seriesUid) || c.uid;
+function subRemember(c, lang) {
+  const m = LS.get(SUB_PICKS, {});
+  delete m[subPickKey(c)];
+  m[subPickKey(c)] = lang === 'off' ? 'off' : subNorm(lang) || String(lang || '');
+  const keys = Object.keys(m);
+  if (keys.length > 400) keys.slice(0, keys.length - 400).forEach((k) => delete m[k]);
+  LS.set(SUB_PICKS, m);
+}
+const subBest = (list) => list.find((s) => !s.forced && !s.sdh) || list.find((s) => !s.forced) || null;   // whole subtitles, not just the foreign bits
+// Once per video, as it starts: subtitles saved with a download go on at once; a track of the stream itself is
+// read from compatibility mode, so this returns true and startPlayback starts that (subAfterTc picks it up).
+// The wish from Settings is skipped when the sound already is in that language.
+let subAutoToken = -1;
+async function subAutoPlan(c, info) {
+  if (subAutoToken === playToken || !isVod(c)) return false;
+  subAutoToken = playToken;
+  if (sub.key || sub.stream) return false;
+  const picked = LS.get(SUB_PICKS, {})[subPickKey(c)] || '';
+  if (picked === 'off') return false;
+  const want = picked || subNorm(LS.get('tuner.subLang', ''));
+  if (!want || (!picked && (subNorm(audLangNow()) || audLangNow()) === want)) return false;
+  const is = (x) => (subNorm(x.lang) || x.lang) === want;
+  const d = subLocalOf(c);
+  const saved = d ? await subLocalList(d.id).catch(() => []) : [];
+  if (state.current !== c) return false;
+  const s = subBest(saved.filter((x) => !x.os && is(x))) || subBest(saved.filter((x) => x.os && is(x)));
+  if (s) { subSavedItem(d, s, () => '', (n) => n).run(); return false; }
+  const t = subBest(((info && info.subs) || []).filter(is));
+  if (!t || !state.ffmpeg || compatMode() === 'off') return false;
+  sub.pending = { n: t.index, key: `stream:${t.index}`, label: subName(t) };
+  return true;
+}
+function subAfterTc(c) {
+  const p = sub.pending;
+  if (!p || state.current !== c) return;
+  sub.pending = null;
+  subUseStream(c, p.n, p.key, p.label);
+}
+function subAutoRow() {
+  return `<div class="set-row"><div><b>Turn on subtitles automatically</b><p class="muted">When a movie or episode has subtitles in this language – in the video, or saved with a download – they go on by themselves, unless it is already spoken in that language. What you pick with the CC button is remembered for that series or movie.</p></div>${langSelect('subLang', 'Off')}</div>`;
+}
+
 // a new video, or compatibility mode restarted at another point: re-time the cues
 video.addEventListener('loadedmetadata', () => { if (sub.cues.length && sub.offset !== (tcState.on && tcState.vod ? tcState.offset : 0)) subApply(); });
 
@@ -238,7 +285,7 @@ async function subSearchMenu(anchor, c) {
     { heading: true, label: 'OpenSubtitles' },
     ...res.slice(0, 15).map((s) => ({
       label: `${subLabel(s.lang)} · ${s.release.slice(0, 48)}${s.sdh ? ' · SDH' : ''}${s.ai ? ' · machine-translated' : ''}`,
-      run: () => subFetchOs(c, s),
+      run: () => { subRemember(c, s.lang); subFetchOs(c, s); },
     })),
   ]);
 }
@@ -249,7 +296,7 @@ async function subMenu(anchor) {
   const c = state.current;
   if (!c || !isVod(c)) return;
   const mark = (on) => (on ? '✓  ' : '      ');
-  const items = [{ label: mark(!sub.cues.length && !sub.stream) + 'Off', run: subOff }];
+  const items = [{ label: mark(!sub.cues.length && !sub.stream) + 'Off', run: () => { subRemember(c, 'off'); subOff(); } }];
   const counts = {};
   const numbered = (name) => { counts[name] = (counts[name] || 0) + 1; return name + (counts[name] > 1 ? ` ${counts[name]}` : ''); };
   const d = subLocalOf(c);
@@ -260,25 +307,26 @@ async function subMenu(anchor) {
   const builtInSaved = saved.some((s) => !s.os);
   if (builtInSaved) {
     items.push({ heading: true, label: 'In the video' });
-    for (const s of saved.filter((x) => !x.os)) items.push(subSavedItem(d, s, mark, numbered));
+    for (const s of saved.filter((x) => !x.os)) items.push(subRemembering(c, s.lang, subSavedItem(d, s, mark, numbered)));
   } else if ((info.subs || []).length) {
     items.push({ heading: true, label: 'In the video' });
     for (const t of [...info.subs].sort((a, b) => subName(a).localeCompare(subName(b)))) {   // A–Z, like the saved ones
       const key = `stream:${t.index}`;
       const name = numbered(subName(t));
-      items.push({ label: mark(sub.key === key) + name, run: () => subUseStream(c, t.index, key, name) });
+      items.push({ label: mark(sub.key === key) + name, run: () => { subRemember(c, t.lang); subUseStream(c, t.index, key, name); } });
     }
   }
   const fromOs = saved.filter((s) => s.os);
   if (fromOs.length) {
     items.push({ heading: true, label: 'Saved from OpenSubtitles' });
-    for (const s of fromOs) items.push(subSavedItem(d, s, mark, numbered));
+    for (const s of fromOs) items.push(subRemembering(c, s.lang, subSavedItem(d, s, mark, numbered)));
   }
   if (sub.key.startsWith('os:')) items.push({ label: mark(true) + `${sub.label} (OpenSubtitles)`, run: () => {} });
   items.push({ label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
   items.push({ label: 'Appearance…', run: subShowPanel });
   showMenu(anchor, items);
 }
+const subRemembering = (c, lang, item) => ({ ...item, run: () => { subRemember(c, lang); return item.run(); } });
 function subSavedItem(d, s, mark, numbered) {
   const key = `local:${d.id}:${s.n}`;
   const name = numbered(subName(s));
@@ -326,6 +374,7 @@ function subSettingsCard() {
       <div class="sub-test"><button class="btn ghost" data-act="sub-test">Test login</button><span class="muted" id="subTest"></span></div></div>`
     : '<p class="muted sub-na">OpenSubtitles isn’t available in this build of AG Horizon. Subtitles inside downloaded files still work.</p>';
   return `<section class="set-card"><h3>Subtitles</h3>
+    ${subAutoRow()}
     ${subLookRows()}
     <div class="set-row"><div><b>OpenSubtitles account</b><p class="muted">Finds subtitles for streams, and for downloads that don't include your language. Create a free account on opensubtitles.com and log in with it here. Free accounts can download a limited number of subtitles per day. Stored only on this computer.</p></div></div>
     ${os}

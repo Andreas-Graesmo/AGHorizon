@@ -8,6 +8,7 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 - **Several playlists** – Xtream Codes (server + login, or paste a `get.php?username=…&password=…` link), M3U/M3U8 by URL or file; drag an `.m3u` file onto the window to add it
 - **Mirror picture** – show the same picture onto another monitor or TV (see below)
 - **Compatibility mode** – HEVC video and DTS / AC-3 audio are converted on the fly with ffmpeg
+- **Sound language and subtitles** – switch between a video's languages, with a preferred language for each (see below)
 - **Sync between computers** – Recently viewed, where you stopped and favorites, end-to-end encrypted with a sync code (see below)
 - Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, mini player that keeps playing while you browse
 - Keyboard: press **?** in the app for the full list
@@ -57,6 +58,15 @@ Click the **Mirror picture** button on the player (the two-screens icon, also in
 - Playlists and logins are not synced. Add the same playlist on each computer: the same Xtream account or playlist link is recognised everywhere, so its history lines up.
 - **New code** shuts out every computer that only knows the old one. **Delete synced data** removes the stored copy; what each computer has stays on it.
 
+## Sound language and subtitles
+
+The language button (next to the CC button, right of the volume) lists the sound tracks of what's playing.
+
+- **Movies and episodes** are checked before they start, so the button only shows when there's more than one language. A track the player decodes itself switches at once; AC-3 / DTS tracks play through compatibility mode, from where you were.
+- **Live channels**: HLS streams with an audio playlist per language get the button by themselves. Channels marked *MULTI-AUDIO*, *Dual Audio* or *[MULTI]* get it too: the first click hangs up, checks the stream's languages (many providers allow only one connection) and opens the menu. Another language than the stream's own plays through compatibility mode.
+- **Settings › Playback › Preferred sound language** picks that language when it's there. **Settings › Subtitles › Turn on subtitles automatically** turns on subtitles in a language (from the video, or saved with a download), unless it's already spoken in it.
+- What you pick with either button is remembered for that series, movie or channel, including *Off* for subtitles.
+
 ## Compatibility mode (codecs)
 
 The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
@@ -91,6 +101,7 @@ public/js/player.js     player, compatibility mode, picture mirroring
 public/js/workspace.js  live TV, guide, movies and series
 public/js/dialogs.js    add / edit playlists
 public/js/ui.js         navigation, dashboard, settings, search, command palette
+public/js/audio.js      the sound-language button, preferred sound language
 public/js/sync-core.js  sync codes, encryption, merging history / progress / favorites
 public/js/sync.js       Settings › Sync, when to sync, the folder and cloud storage
 public/js/sync-config.js  the sync server's address (empty: folder only)

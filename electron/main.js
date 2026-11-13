@@ -21,6 +21,8 @@ app.setPath('userData', path.join(app.getPath('appData'), 'Tuner IPTV'));
 
 // Best effort: let Chromium use the OS decoder for HEVC where the machine supports it.
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport');
+// video.audioTracks: switch between the sound tracks of a file without converting it (the player's language button)
+app.commandLine.appendSwitch('enable-blink-features', 'AudioVideoTracks');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit(); // a second copy would fight over the port
