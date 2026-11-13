@@ -8,15 +8,19 @@ let tsPlayer = null;
 let playToken = 0;
 
 /* Compatibility mode: the server converts the stream with ffmpeg (H.264 + AAC, fragmented MP4). */
-const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '' };
+const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '', audio: null };   // audio: which sound track (audio.js)
 let checkTimer = 0;
 let tcSeeking = false;
+// A restart of the same video (another sound track, subtitles read from the stream): go on exactly here, not at the
+// saved progress (which skips the first 10 s and isn't saved every second).
+let resumeAt = null;
 const compatMode = () => LS.get('tuner.compat', 'auto'); // 'auto' | 'always' | 'off'
 // Each conversion also writes the stream's text subtitles (tcState.subs) under a new id, read by subtitles.js.
 function tcUrl(ch, p, start) {
   tcState.sid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const subs = tcState.subs && tcState.subs.length ? `&subs=${tcState.subs.join(',')}&sid=${tcState.sid}` : '';
-  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${subs}`;
+  const audio = tcState.audio != null ? `&audio=${tcState.audio}` : '';
+  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
 }
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
@@ -33,11 +37,13 @@ async function tcStartAt(ch, p, t) {
 }
 
 // Codecs per URL, so a video that is checked before playing isn't probed again when it's converted.
+// quick: a live channel's sound tracks (audio.js), which a codec check made while playing doesn't have.
 const probeCache = new Map();
-async function probeOf(ch, p) {
-  if (probeCache.has(ch.url)) return probeCache.get(ch.url);
+async function probeOf(ch, p, { quick = false } = {}) {
+  const hit = probeCache.get(ch.url);
+  if (hit && (!quick || hit.audios)) return hit;
   let info = {};
-  try { const r = await fetch(`/api/probe?url=${enc(ch.url)}${uaParam(p)}`); if (r.ok) info = await r.json(); } catch { /* unknown */ }
+  try { const r = await fetch(`/api/probe?url=${enc(ch.url)}${uaParam(p)}${quick ? '&quick=1' : ''}`); if (r.ok) info = await r.json(); } catch { /* unknown */ }
   if (info.video) probeCache.set(ch.url, info);
   return info;
 }
@@ -45,9 +51,10 @@ const NATIVE_VIDEO = ['h264', 'vp8', 'vp9', 'av1'];
 const NATIVE_AUDIO = ['aac', 'mp3', 'opus', 'vorbis', 'flac'];
 const playsNatively = (info) => (NATIVE_VIDEO.includes(info.video) || (info.video === 'hevc' && hevcOk))
   && (!info.audio || NATIVE_AUDIO.includes(info.audio) || info.audio.startsWith('pcm_'));
-// Downloads and .mkv / .avi links usually carry AC-3 / E-AC-3 / DTS sound: check before playing them, so they
-// don't first play a few seconds without sound. Other links play straight away and are checked while playing.
-const checkFirst = (ch) => isVod(ch) && (ch.local || /\.(mkv|avi)$/i.test(ch.url.split('?')[0]));
+// …with the sound track audio.js wants (its codec, not just the first track's)
+const playsNativelyWith = (ch, info) => (info.audios && info.audios.length
+  ? (NATIVE_VIDEO.includes(info.video) || (info.video === 'hevc' && hevcOk)) && audNativeOk(ch)
+  : playsNatively(info));
 
 // Live streams can't be checked before playing without a second connection, but mpegts.js / hls.js know the
 // codecs as soon as the first data arrives (codec strings like "ec-3", "hvc1.2.4.L150"). Convert right then
@@ -164,6 +171,8 @@ async function startPlayback(ch, kinds, token, lastError) {
       if (lv && lv.audioCodec) earlyCodecCheck(ch, token, lv.videoCodec, lv.audioCodec);   // from the playlist's CODECS, when it lists them
       if (token === playToken && !tcState.on) video.play().catch(() => {});
     });
+    h.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => audFromHls(ch, h));   // a playlist per language: the sound button
+    h.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_e, d) => { if (state.current === ch && aud.source === 'hls') { aud.cur = d.id; audRender(); } });
     h.on(Hls.Events.BUFFER_CODECS, (_e, d) => {
       // hls.js leaves out sound it can't play (AC-3 / E-AC-3 in MPEG-TS) instead of reporting it: picture but no
       // sound, with no separate audio playlist, means it was dropped. (A truly silent channel just gets its sound converted.)
@@ -193,8 +202,11 @@ async function startPlayback(ch, kinds, token, lastError) {
     const vod = isVod(ch);
     const resume = progressOf(ch.uid);
     const dur = vod ? info.duration || 0 : 0;
-    const start = vod && resume && !resume.w && resume.t > 10 && (!dur || dur - resume.t > 20) ? resume.t : 0;
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [] });
+    const start = vod && resumeAt != null ? resumeAt : vod && resume && !resume.w && resume.t > 10 && (!dur || dur - resume.t > 20) ? resume.t : 0;
+    resumeAt = null;
+    if (vod) await subAutoPlan(ch, info);   // Settings › Subtitles › turn on automatically (once per video)
+    if (token !== playToken) return;
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: audTcTrack(ch, info) });
     const at = await tcStartAt(ch, p, start);
     if (token !== playToken) return;
     tcState.offset = at;
@@ -209,18 +221,29 @@ async function startPlayback(ch, kinds, token, lastError) {
     };
     video.src = tcUrl(ch, p, start);
     video.play().catch(() => {});
+    subAfterTc(ch);   // a subtitle track of the stream picked automatically: read it from this conversion
     syncCtl();
   } else {
-    if (checkFirst(ch) && rest.includes('tc')) {
+    // Movies and episodes: check first which sound (and subtitle) tracks they have, and whether they play as they
+    // are with the sound wanted. Other links play straight away and are checked while playing.
+    if (isVod(ch) && state.ffmpeg) {
       const info = await probeOf(ch, p);
       if (token !== playToken) return;
-      if (info.video && !playsNatively(info)) return startPlayback(ch, ['tc'], token);
+      audSetTracks(ch, info);
+      const subNeedsTc = await subAutoPlan(ch, info);
+      if (token !== playToken) return;
+      if (rest.includes('tc') && info.video && (!playsNativelyWith(ch, info) || subNeedsTc || sub.stream)) return startPlayback(ch, ['tc'], token);
+    } else if (isVod(ch)) {
+      await subAutoPlan(ch, {});   // no ffmpeg: subtitles saved with a download can still go on
+      if (token !== playToken) return;
     }
     video.src = src;
     video.onerror = () => fail(video.error && video.error.message ? video.error.message : 'The browser could not play this stream');
     const resume = progressOf(ch.uid);
-    if (isVod(ch) && resume && !resume.w && resume.t > 10) {
-      video.addEventListener('loadedmetadata', () => { if (token === playToken && video.duration - resume.t > 20) video.currentTime = resume.t; }, { once: true });
+    const at = resumeAt != null ? resumeAt : resume && !resume.w && resume.t > 10 ? resume.t : null;
+    resumeAt = null;
+    if (isVod(ch) && at != null) {
+      video.addEventListener('loadedmetadata', () => { if (token === playToken && video.duration - at > (resume && at === resume.t ? 20 : 1)) video.currentTime = at; }, { once: true });
     }
     video.play().catch(() => {});
   }
@@ -358,10 +381,12 @@ function playChannel(ch) {
   ch = dlLocal(ch);   // a downloaded copy plays from disk
   subOff();   // subtitles are picked per video
   state.current = ch;
+  resumeAt = null;
+  audReset(ch);   // and the sound track
   const token = ++playToken;
   pushRecent(ch);
   if (!isVod(ch)) loadShortEpg(ch);
-  startPlayback(ch, playPlan(ch), token);
+  audStart(ch, token);   // startPlayback, after checking a marked live channel's languages when there's a wish
   mirrorTitle(ch.name);
   uiPlayback(true);
   dlSyncWatching();
@@ -374,6 +399,7 @@ function stopPlayback() {
   hideOverlay();
   subOff();
   state.current = null;
+  audReset(null);
   closePip();   // after state.current is gone, so the closing window doesn't start the video again
   mirrorTitle('');
   uiPlayback(true);

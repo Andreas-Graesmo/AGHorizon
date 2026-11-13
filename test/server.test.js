@@ -91,3 +91,34 @@ test('every page script parses', () => {
   assert.ok(files.length > 5);
   for (const f of files) assert.doesNotThrow(() => new vm.Script(fs.readFileSync(f, 'utf8'), { filename: f }), f);
 });
+
+test('sound tracks are read from ffmpeg’s stream list', () => {
+  const { parseAudioStreams } = require('../server');
+  const out = parseAudioStreams(`Input #0, mpegts, from 'http://x/live.ts':
+  Duration: N/A, start: 1.400000, bitrate: N/A
+  Program 1
+    Metadata:
+      service_name    : News
+    Stream #0:0[0x100]: Video: h264 (High) ([27][0][0][0] / 0x001B), yuv420p, 1920x1080, 25 fps
+    Stream #0:1[0x101](nor): Audio: aac (LC) ([15][0][0][0] / 0x000F), 48000 Hz, stereo, fltp, 125 kb/s
+    Stream #0:2[0x102](eng): Audio: ac3 ([129][0][0][0] / 0x0081), 48000 Hz, 5.1(side), fltp, 384 kb/s (default)
+  Program 2
+    Stream #0:1[0x101](nor): Audio: aac (LC) ([15][0][0][0] / 0x000F), 48000 Hz, stereo, fltp, 125 kb/s
+  Stream #0:3(swe): Audio: eac3, 48000 Hz, 6 channels, fltp, 640 kb/s (comment)
+    Metadata:
+      title           : Director's commentary
+  Stream #0:4: Audio: mp2, 48000 Hz, mono, s16p, 64 kb/s (visual impaired)
+  Stream #0:5(nor): Subtitle: dvb_subtitle ([6][0][0][0] / 0x0006)
+    Metadata:
+      title           : Not a sound track
+`);
+  assert.deepStrictEqual(out.map((a) => [a.index, a.lang, a.codec, a.channels, a.default, a.comment, a.descr, a.title]), [
+    [0, 'nor', 'aac', 'Stereo', false, false, false, ''],
+    [1, 'eng', 'ac3', '5.1', true, false, false, ''],
+    [2, 'swe', 'eac3', '5.1', false, true, false, "Director's commentary"],
+    [3, 'und', 'mp2', 'Mono', false, false, true, ''],
+  ]);
+  assert.deepStrictEqual(parseAudioStreams('Stream #0:0: Video: h264, yuv420p, 320x180'), []);
+  // Windows line ends
+  assert.strictEqual(parseAudioStreams('  Stream #0:1(fin): Audio: aac, 44100 Hz, stereo, fltp\r\n')[0].lang, 'fin');
+});

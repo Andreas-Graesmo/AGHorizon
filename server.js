@@ -351,12 +351,50 @@ function handleCapabilities(req, res) {
   sendJson(res, 200, { ffmpeg: !!ffmpeg(), opensubtitles: subs.osAvailable, tmdb: !!TMDB_KEY });
 }
 
-// Reports duration and codecs so the UI can choose between "copy video" and "re-encode video".
+// The sound tracks ffmpeg lists for an input, in the order "-map 0:a:N" counts them: [{ index (that N), lang,
+// codec, channels ("Stereo", "5.1"…), title, default, comment, descr }]. HLS inputs list a stream once per
+// program it belongs to: each stream is counted once.
+const LAYOUTS = { mono: 'Mono', stereo: 'Stereo', '1 channels': 'Mono', '2 channels': 'Stereo', '6 channels': '5.1', '8 channels': '7.1' };
+function parseAudioStreams(stderr) {
+  const byNum = new Map();
+  let cur = null;
+  for (const line of String(stderr).split(/\r?\n/)) {
+    const st = /^\s*Stream #\d+:(\d+)(?:\[\w+\])?(?:\((\w+)\))?: (\w+): (.*)$/.exec(line);
+    if (st) {
+      const num = Number(st[1]);
+      if (st[3] !== 'Audio') { cur = null; continue; }
+      if (byNum.has(num)) { cur = null; continue; }   // the same stream again, under another program
+      const rest = st[4];
+      const layout = (/\d+ Hz, ([^,]+)/.exec(rest) || [])[1] || '';
+      const lay = layout.trim().toLowerCase().replace(/\(.*\)$/, '');
+      cur = {
+        num,
+        lang: (st[2] || 'und').toLowerCase(),
+        codec: (/^(\w+)/.exec(rest) || [])[1].toLowerCase(),
+        channels: LAYOUTS[lay] || (/^\d\.\d$/.test(lay) ? lay : ''),
+        title: '',
+        default: /\(default\)/.test(rest),
+        comment: /\(comment\)/.test(rest),
+        descr: /\(visual impaired\)/.test(rest),
+      };
+      byNum.set(num, cur);
+      continue;
+    }
+    if (/^\s*(Stream #|Program |Input #|Output #)/.test(line)) { cur = null; continue; }
+    const t = cur && !cur.title && /^\s+title\s*:\s*(.+?)\s*$/.exec(line);
+    if (t) cur.title = t[1];
+  }
+  return [...byNum.values()].sort((a, b) => a.num - b.num).map(({ num, ...a }, index) => ({ index, ...a }));
+}
+
+// Reports duration and codecs so the UI can choose between "copy video" and "re-encode video", and the sound and
+// subtitle tracks for their menus. ?quick=1: just the track list, for a live channel (less to read, sooner).
 function handleProbe(req, res, q) {
   const bin = ffmpeg();
   if (!bin) throw httpError(501, 'ffmpeg is not installed');
   const url = checkUrl(q.get('url'));
-  const proc = spawn(bin, ffmpegInput(url, q.get('ua'), ['-analyzeduration', '4000000', '-probesize', '4000000']), { stdio: ['ignore', 'ignore', 'pipe'] });
+  const size = q.get('quick') ? '1500000' : '4000000';
+  const proc = spawn(bin, ffmpegInput(url, q.get('ua'), ['-analyzeduration', size, '-probesize', size]), { stdio: ['ignore', 'ignore', 'pipe'] });
   let err = '';
   let finished = false;
   const finish = (status, body) => { if (finished) return; finished = true; clearTimeout(timer); sendJson(res, status, body); };
@@ -371,6 +409,7 @@ function handleProbe(req, res, q) {
       duration: dur ? +dur[1] * 3600 + +dur[2] * 60 + +dur[3] : 0,
       video: v ? v[1].toLowerCase() : '',
       audio: a ? a[1].toLowerCase() : '',
+      audios: parseAudioStreams(err),
       // text subtitles in the stream: the CC menu lists them, the conversion writes them (subs + sid below)
       subs: subs.parseSubStreams(err).filter((t) => t.text).map(({ index, lang, forced, sdh }) => ({ index, lang, forced, sdh })),
     });
@@ -418,12 +457,13 @@ function handleTranscode(req, res, q) {
   const keepHevc = q.get('video') === 'hevc';   // the player decodes HEVC itself
   const copyVideo = q.get('video') === 'copy' || keepHevc;
   const maxH = Math.min(1080, Math.max(240, Number(q.get('maxh')) || 1080));   // Multi view asks for less: smaller pictures, less CPU
+  const audio = /^\d{1,2}$/.test(q.get('audio') || '') ? Number(q.get('audio')) : 0;   // which sound track (the language menu)
 
   const args = [
     ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000',
       // copied video starts on the keyframe before ?start: start the sound there too (the player asks /api/keyframe where that is)
       ...(start ? [...(copyVideo ? ['-noaccurate_seek'] : []), '-ss', start.toFixed(3)] : [])]),
-    '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
+    '-map', '0:v:0', '-map', `0:a:${audio}?`, '-sn', '-dn',
     ...(copyVideo
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
@@ -679,4 +719,4 @@ function start(port) {
   });
 }
 
-module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8 };   // the last three for test/
+module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8, parseAudioStreams };   // the last four for test/

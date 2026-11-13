@@ -484,7 +484,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .p-ctl .live-badge i { background: #fff; }
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
-.player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
+.player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini #pAudio, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
 /* Subtitles (Settings › Subtitles › Appearance, set by subtitles.js). The size goes on the container, not on ::cue:
    Chromium sizes the lines from the container, so a different text size on ::cue leaves gaps between lines. */
 :root { --sub-font: system-ui, sans-serif; --sub-color: #fff; --sub-bg: rgba(0, 0, 0, .6); --sub-shadow: none; --sub-scale: 1; }
