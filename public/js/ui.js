@@ -38,7 +38,7 @@ function askConfirm({ title, text = '', list = [], ok = 'OK', danger = false }) 
 function toast(msg, kind = '') {
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
-  el.textContent = msg;
+  el.innerHTML = setLinks(esc(msg));   // "Settings › Playback" in a message opens that page
   $('#toasts').appendChild(el);
   setTimeout(() => el.classList.add('out'), 3800);
   setTimeout(() => el.remove(), 4300);
@@ -97,6 +97,9 @@ function applyTheme() {
   root.style.setProperty('--accent', a);
   root.style.setProperty('--accent-ink', ink);
   $('#btnTheme use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  // the system's window buttons sit on the top bar: give them its colours
+  const bar = getComputedStyle($('#topbar'));
+  if (window.tunerDesktop.titleBar) window.tunerDesktop.titleBar({ color: bar.backgroundColor, symbolColor: bar.color, height: $('#topbar').offsetHeight });
 }
 prefersDark.addEventListener('change', applyTheme);
 $('#btnTheme').addEventListener('click', () => {
@@ -157,7 +160,6 @@ $('#nav').addEventListener('click', (e) => {
 $('#btnBrand').addEventListener('click', () => go('dashboard'));
 $('#btnAdd').addEventListener('click', () => openPlaylistDialog());
 $('#btnKeys').addEventListener('click', openHelp);
-$('#btnMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 
 function curPid() {
   if (ws.pid && playlistById(ws.pid)) return ws.pid;
@@ -234,7 +236,6 @@ function playerTitle(c) {
 function updatePlayerChrome() {
   const c = state.current;
   const open = mirrorOpen();
-  $('#btnMirror').classList.toggle('on', open);
   $('#pMirror').classList.toggle('on', open);
   if (!c) { document.title = 'AG Horizon'; return; }
   $('#pMulti').hidden = isVod(c);
@@ -245,7 +246,7 @@ function updatePlayerChrome() {
   $('#pFav use').setAttribute('href', fav ? '#i-heart-fill' : '#i-heart');
   document.title = playerTitle(c) + ' – AG Horizon';
 }
-function uiMirrorChanged() { updatePlayerChrome(); if (ui.route === 'settings') renderSettings(); }
+function uiMirrorChanged() { updatePlayerChrome(); }
 function uiCaps() { if (ui.route === 'settings') renderSettings(); }
 
 $('#pFav').addEventListener('click', () => { const c = state.current; if (c) toggleFavItem(c.kind === 'episode' && ws.detail ? ws.detail : c); });
@@ -665,7 +666,8 @@ function renderFavorites() {
   const live = all.filter((s) => s.kind === 'live');
   const movies = all.filter((s) => s.kind === 'movie');
   const series = all.filter((s) => s.kind === 'series' || s.kind === 'episode');
-  el.innerHTML = `<div class="page">${pageHead('Favorites', `${all.length} items from ${new Set(all.map((s) => s.pid)).size} playlist(s)`)}${sec('Live TV', live)}${sec('Movies', movies)}${sec('Series', series)}</div>`;
+  el.innerHTML = `<div class="page">${pageHead('Favorites', `${all.length} items from ${new Set(all.map((s) => s.pid)).size} playlist(s)`,
+    '<button class="btn ghost" data-act="favs-clear">Clear favorites</button>')}${sec('Live TV', live)}${sec('Movies', movies)}${sec('Series', series)}</div>`;
 }
 
 // Recently viewed in three parts, each newest first: live channels, series (one card per show: the episode
@@ -776,7 +778,8 @@ async function indexForSearch() {
 /* ───────────────────────────────── updates (desktop app) ───────────────────────────────── */
 const upd = { info: null, st: { state: 'idle' } };
 // TMDB's terms ask apps that use its API to say so
-const tmdbCredit = () => (state.tmdb ? '<div class="set-row"><div><b>Cast photos</b><p class="muted">From TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div></div>' : '');
+const whatsNewBtn = '<button class="btn ghost" data-act="whats-new"><svg class="ic"><use href="#i-article"/></svg>What’s new?</button>';   // on the About page and in the update banner
+const tmdbCredit = () => (state.tmdb ? '<p class="muted center">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>' : '');
 function updatesCard() {
   const info = upd.info || {};
   const st = upd.st || { state: 'idle' };
@@ -791,10 +794,9 @@ function updatesCard() {
   else if (st.state === 'ready') { line = `Version <b>${esc(st.version || '')}</b> is ready. It also installs automatically when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
   else if (st.state === 'error') { line = `Couldn’t update: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-check">Try again</button>' + (info.releasesUrl ? ' <button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   const auto = LS.get('tuner.autoUpdate', true);
-  return `<section class="set-card"><h3>About &amp; updates</h3>
-    <div class="set-row"><div><b>AG Horizon ${info.version ? 'v' + esc(info.version) : ''}</b><p class="muted">${line}</p></div><div class="upd-btns">${btn}</div></div>
+  return `<section class="set-card">
+    <div class="set-row"><div><b>AG Horizon ${info.version ? 'v' + esc(info.version) : ''}</b><p class="muted">${line}</p></div><div class="upd-btns">${whatsNewBtn} ${btn}</div></div>
     <div class="set-row"><div><b>Check for updates when the app starts</b></div><label class="switch"><input type="checkbox" data-set="autoUpdate"${auto ? ' checked' : ''}><span></span></label></div>
-    ${tmdbCredit()}
   </section>`;
 }
 /* banner above the views: shown for a newer version until dismissed (remembered per version and step, so a dismissed "available" doesn't return on every start) */
@@ -809,6 +811,7 @@ function renderUpdBanner() {
   else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready. It also installs when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
   else if (st.state === 'error' && st.version) { line = `Couldn’t download ${v}: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-download">Try again</button>' + (upd.info && upd.info.releasesUrl ? '<button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   if (!line || LS.get('tuner.updDismissed', '') === st.state + ':' + st.version) { el.hidden = true; return; }
+  if (st.version) btn = whatsNewBtn + btn;
   el.innerHTML = `<svg class="ic"><use href="#i-download"/></svg><div class="ub-text">${line}</div>${btn}<button class="icon-btn" data-act="upd-dismiss" title="Dismiss" aria-label="Dismiss"><svg class="ic"><use href="#i-x"/></svg></button>`;
   el.hidden = false;
 }
@@ -821,9 +824,39 @@ $('#updBanner').addEventListener('click', (e) => {
     case 'upd-install': u.install(); break;
     case 'upd-open': u.openReleases(); break;
     case 'upd-dismiss': LS.set('tuner.updDismissed', upd.st.state + ':' + upd.st.version); renderUpdBanner(); break;
+    case 'whats-new': whatsNew(); break;
     default: break;
   }
 });
+// Release notes are simple Markdown: "## heading", "- item", **bold** and *italic*. Anything else shows as written.
+function notesHtml(md) {
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>');
+  let html = '';
+  let list = false;
+  for (const line of String(md).split(/\r?\n/)) {
+    const item = /^\s*[-*]\s+(.*)$/.exec(line);
+    const head = /^#{1,6}\s+(.*)$/.exec(line);
+    if (list && !item) { html += '</ul>'; list = false; }
+    if (item) { if (!list) { html += '<ul>'; list = true; } html += `<li>${inline(item[1])}</li>`; }
+    else if (head) html += `<h3>${inline(head[1])}</h3>`;
+    else if (line.trim()) html += `<p>${inline(line.trim())}</p>`;
+  }
+  return html + (list ? '</ul>' : '');
+}
+// What's new: the release notes of the newest version the app knows of (the one on offer, else the one running).
+async function whatsNew() {
+  const st = upd.st || {};
+  const version = (['available', 'downloading', 'ready'].includes(st.state) && st.version) || (upd.info && upd.info.version) || '';
+  $('#newsTitle').textContent = `What’s new in ${version}`;
+  $('#newsBody').innerHTML = '<p class="muted">Fetching the release notes…</p>';
+  if (!$('#newsDlg').open) $('#newsDlg').showModal();
+  const r = await window.tunerDesktop.updater.notes(version).catch(() => null);
+  $('#newsBody').innerHTML = r && r.body ? notesHtml(r.body)
+    : `<p class="muted">${esc((r && r.error) || 'No release notes were found for this version.')}</p><p><button class="btn ghost" data-act="upd-open">Open the releases page</button></p>`;
+}
+$('#newsClose').addEventListener('click', () => $('#newsDlg').close());
+$('#newsDlg').addEventListener('mousedown', (e) => { if (e.target === $('#newsDlg')) $('#newsDlg').close(); });
+$('#newsDlg').addEventListener('click', (e) => { if (e.target.closest('[data-act="upd-open"]')) window.tunerDesktop.updater.openReleases(); });
 function updStatus(s) {
   upd.st = s || { state: 'idle' };
   renderUpdBanner();
@@ -850,81 +883,67 @@ function renderSettings() {
   const seg = (key, cur, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-set="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const palSeg = (mode) => seg(mode + 'Palette', LS.get(`tuner.${mode}Palette`, mode === 'dark' ? 'midnight' : 'soft'),
     Object.entries(PALETTES[mode]).map(([k, [l, a, b]]) => [k, `<i class="pal-dot" style="--a:${a};--b:${b}"></i>${l}`]));
-  const open = mirrorOpen();
-  $('#v-settings').innerHTML = `<div class="page set-page"><nav class="set-index" id="setIndex" aria-label="Settings sections"></nav><div class="set-main">${pageHead('Settings')}
-    <section class="set-card"><h3>Appearance</h3>
+  // One sub-page of Settings: its name and icon in the menu, the line under its title, and its cards.
+  const pane = (title, icon, sub, body) => `<div class="set-pane" data-title="${esc(title)}" data-icon="${icon}" data-sub="${esc(sub)}" hidden>${body}</div>`;
+  $('#v-settings').innerHTML = `<div class="page set-page"><nav class="set-index" id="setIndex" aria-label="Settings pages"></nav><div class="set-main"><div id="setHead"></div>
+    ${pane('Appearance', 'i-sun', 'Theme, palettes and accent colour.', `<section class="set-card">
       <div class="set-row"><div><b>Theme</b><p class="muted">Dark, light, or follow your system.</p></div>${seg('theme', theme, [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']])}</div>
       <div class="set-row"><div><b>Dark palette</b><p class="muted">Used when the app is dark. OLED black suits OLED screens and dark rooms.</p></div>${palSeg('dark')}</div>
       <div class="set-row"><div><b>Light palette</b><p class="muted">Used when the app is light. Channel logos get a dark backdrop so white logos stay visible.</p></div>${palSeg('light')}</div>
       <div class="set-row"><div><b>Accent colour</b></div><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch${accent === k ? ' on' : ''}" data-set="accent" data-val="${k}" style="--c:${c}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
-    </section>
-    <section class="set-card"><h3>Playback</h3>
+    </section>`)}
+    ${pane('Playback', 'i-play', 'Compatibility mode, the next episode, Multi view and mirroring.', `<section class="set-card">
       <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted.'}</p></div>
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
       <div class="set-row"><div><b>Share one connection in Multi view (experimental)</b><p class="muted">Pictures from the same Xtream playlist take turns on one provider connection instead of using one each, and play about 20 seconds behind. It needs a provider that sends a burst of video on every new connection. Switch it off if pictures freeze or skip.</p></div><label class="switch"><input type="checkbox" data-set="mvShare"${LS.get('tuner.mvShare', false) ? ' checked' : ''}><span></span></label></div>
-      ${audSettingsRow()}
-    </section>
-    <section class="set-card"><h3>Mirror picture</h3>
-      <div class="set-row"><div><b>Show the picture on another monitor or TV</b><p class="muted">Opens a window that mirrors the player without a second connection to your provider: a small one that stays on top, or full screen on the display you pick (Esc closes it).</p></div>
-        <button class="btn${open ? ' ghost' : ''}" data-act="mirror-toggle">${open ? 'Close mirror window' : 'Open mirror window'}</button></div>
-      <div class="set-row"><div><b>Sound plays on</b><p class="muted">Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>
-    </section>
-    ${dlSettingsCard()}
-    ${subSettingsCard()}
-    <section class="set-card"><h3>Library</h3>
-      <div class="set-row"><div><b>Recently viewed</b><p class="muted">${state.recent.length} items</p></div><button class="btn ghost" data-act="hist-clear">Clear</button></div>
-      <div class="set-row"><div><b>Favorites</b><p class="muted">${state.favs.size} items</p></div><button class="btn ghost" data-act="favs-clear">Clear</button></div>
-    </section>
-    ${syncSettingsCard()}
-    <section class="set-card"><h3>Keyboard</h3>
-      <div class="set-row"><div><b>Shortcuts</b><p class="muted">Press <kbd>?</kbd> anywhere to see them.</p></div><button class="btn ghost" data-act="show-help"><svg class="ic"><use href="#i-keyboard"/></svg>Show shortcuts</button></div>
-    </section>
-    ${updatesCard()}
+      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>
+    </section>`)}
+    ${pane('Languages', 'i-audio', 'Audio and subtitle languages, and how subtitles look.', `<h3 class="set-sec">Preferred languages</h3>
+      <section class="set-card">${audSettingsRow()}${subAutoRow()}</section>
+      <h3 class="set-sec">Subtitles</h3>
+      ${subSettingsCard()}`)}
+    ${pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
+    ${pane('Sync', 'i-cloud', 'The same history, progress and favorites on all your computers.', syncSettingsCard())}
+    ${pane('About & updates', 'i-info', 'Your version, and what is new.', updatesCard() + tmdbCredit())}
     <p class="muted center">AG Horizon · use only with services you’re entitled to watch.</p></div></div>`;
-  buildSettingsIndex();
+  showSettingsPane();
 }
 
-// The index beside Settings: one link per section, made from the sections' titles (also those other files add),
-// with the one you're in lit up.
-function buildSettingsIndex() {
-  const cards = $$('#v-settings .set-card');
-  $('#setIndex').innerHTML = cards.map((c, i) => {
-    const h = c.querySelector('h3');
-    c.id = 'set-' + h.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    return `<button class="set-link" data-set-go="${c.id}"${i === 0 ? ' aria-current="true"' : ''}>${esc(h.textContent.trim())}</button>`;
-  }).join('');
-  syncSettingsIndex();
+// Settings is a menu of sub-pages (panes): the menu has one entry per pane, and only the pane you picked shows.
+// Which one is remembered while the app runs, since renderSettings() runs again whenever something on the page
+// changes. A pane is hidden as a whole, so a card that redraws itself inside it (Sync does) stays hidden with it.
+let settingsTab = '';   // the open pane's title
+function showSettingsPane() {
+  const panes = $$('#v-settings .set-pane');
+  const cur = panes.find((p) => p.dataset.title === settingsTab) || panes[0];
+  settingsTab = cur.dataset.title;
+  $('#setIndex').innerHTML = '<p class="set-title">Settings</p>' + panes.map((p) =>
+    `<button class="set-link" data-set-go="${esc(p.dataset.title)}"${p === cur ? ' aria-current="page"' : ''}><svg class="ic"><use href="#${p.dataset.icon}"/></svg>${esc(p.dataset.title)}</button>`).join('');
+  for (const p of panes) p.hidden = p !== cur;
+  $('#setHead').innerHTML = pageHead(cur.dataset.title, esc(cur.dataset.sub));
 }
-function syncSettingsIndex() {
-  const view = $('#v-settings');
-  const top = view.getBoundingClientRect().top + 90;
-  const cards = $$('#v-settings .set-card');
-  if (!cards.length) return;
-  let cur = cards[0];
-  for (const c of cards) if (c.getBoundingClientRect().top <= top) cur = c;
-  if (view.scrollTop + view.clientHeight >= view.scrollHeight - 4) cur = cards[cards.length - 1];   // the last ones can't reach the top
-  const picked = settingsIndexPick && document.getElementById(settingsIndexPick);
-  if (picked) cur = picked;   // clicked in the index: that one, until you scroll yourself
-  $$('#setIndex .set-link').forEach((b) => { if (b.dataset.setGo === cur.id) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
-  // chips on a narrow window: keep the lit one in view by scrolling just the row (scrollIntoView would also stop the
-  // page's own smooth scroll after a click)
-  const row = $('#setIndex');
-  const lit = $('#setIndex [aria-current]');
-  if (lit && row.scrollWidth > row.clientWidth && (lit.offsetLeft < row.scrollLeft || lit.offsetLeft + lit.offsetWidth > row.scrollLeft + row.clientWidth)) {
-    row.scrollTo({ left: lit.offsetLeft - 12, behavior: 'smooth' });
-  }
+function openSettings(title) {
+  settingsTab = title;
+  if (ui.route === 'settings') showSettingsPane(); else go('settings');
 }
-let settingsIndexPick = '';
-$('#v-settings').addEventListener('scroll', () => { cancelAnimationFrame(syncSettingsIndex.f); syncSettingsIndex.f = requestAnimationFrame(syncSettingsIndex); });
-for (const ev of ['wheel', 'keydown', 'touchstart']) $('#v-settings').addEventListener(ev, () => { settingsIndexPick = ''; }, { passive: true });
 $('#v-settings').addEventListener('click', (e) => {
   const b = e.target.closest('[data-set-go]');
   if (!b) return;
-  settingsIndexPick = b.dataset.setGo;
-  document.getElementById(b.dataset.setGo).scrollIntoView({ behavior: 'smooth', block: 'start' });
-  syncSettingsIndex();
+  openSettings(b.dataset.setGo);
+  $('#v-settings').scrollTop = 0;
+});
+// "Settings › Playback" in a message becomes a link that opens that page. For text that is already HTML-safe.
+function setLinks(html) {
+  return html.replace(/Settings › (Appearance|Playback|Languages|Downloads|Sync|About &amp; updates)/g,
+    (text, page) => `<button class="link set-open" data-set-open="${page}">${text}</button>`);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-set-open]');
+  if (!b) return;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});   // the page is behind a full-screen player
+  openSettings(b.dataset.setOpen);
 });
 $('#v-settings').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-set]');
@@ -978,13 +997,12 @@ $('#views').addEventListener('click', (e) => {
     case 'hero-go': hero.i = Number(a.dataset.k); renderHero(); break;
     case 'hist-clear': state.recent = []; LS.set('tuner.recent', []); syncHistoryCleared(); renderRoute(ui.route); toast('History cleared'); break;
     case 'favs-clear': askConfirm({ title: 'Remove all favorites?', text: 'This can’t be undone.', ok: 'Remove all', danger: true })
-      .then((yes) => { if (yes) { state.favs.clear(); state.favdata = {}; persistFavs(); renderSettings(); toast('Favorites cleared'); } }); break;
-    case 'show-help': openHelp(); break;
+      .then((yes) => { if (yes) { state.favs.clear(); state.favdata = {}; persistFavs(); renderRoute(ui.route); toast('Favorites cleared'); } }); break;
+    case 'whats-new': whatsNew(); break;
     case 'upd-check': window.tunerDesktop.updater.check(); break;
     case 'upd-download': window.tunerDesktop.updater.download(); break;
     case 'upd-install': window.tunerDesktop.updater.install(); break;
     case 'upd-open': window.tunerDesktop.updater.openReleases(); break;
-    case 'mirror-toggle': mirrorButton(a); break;
     default: break;
   }
 });

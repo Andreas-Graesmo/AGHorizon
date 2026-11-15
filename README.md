@@ -8,7 +8,7 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 - **Several playlists** – Xtream Codes (server + login, or paste a `get.php?username=…&password=…` link), M3U/M3U8 by URL or file; drag an `.m3u` file onto the window to add it
 - **Mirror picture** – show the same picture onto another monitor or TV (see below)
 - **Compatibility mode** – HEVC video and DTS / AC-3 audio are converted on the fly with ffmpeg
-- **Sound language and subtitles** – switch between a video's languages, with a preferred language for each (see below)
+- **Audio language and subtitles** – switch between a video's languages, with a preferred language for each (see below)
 - **Sync between computers** – Recently viewed, where you stopped and favorites, end-to-end encrypted with a sync code (see below)
 - Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, mini player that keeps playing while you browse
 - Keyboard: press **?** in the app for the full list
@@ -39,14 +39,14 @@ Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 
 ## Mirror picture (show the video on two displays)
 
-Click the **Mirror picture** button on the player (the two-screens icon, also in the top bar).
+Click the **Mirror picture** button on the player (the two-screens icon).
 
 - With one display, a small window opens that stays on top of other windows (drag it by the picture, resize it by the edges) while the player keeps playing in the app.
 - With more displays, pick that floating window or a monitor or TV. On a monitor, a borderless window opens full screen there, showing exactly what the main player shows.
 - Press **Esc** in that window (or click the button again) to close it. The floating window also shows a ✕ in its top right corner while the mouse is over it.
 - The floating window looks like the player and has its controls while the mouse is over it: the title, play / pause, back and forward 15 seconds and (when the window is wide enough) a seek bar for movies and series, a LIVE badge for live TV, and a speaker that brings up a volume slider (press it again to mute). They steer the player in the app.
 - It does **not** open a second connection to your provider: the main player hands the mirror window its decoded picture, so it stays in sync and your connection limit isn't affected. It follows when you change channel or title.
-- **Sound** (Settings › Mirror picture): play it on this window, on the mirror window only (useful when the TV has the speakers), or on both.
+- **Sound** (Settings › Playback › Mirror picture: sound plays on): play it on this window, on the mirror window only (useful when the TV has the speakers), or on both.
 
 ## Sync between computers
 
@@ -58,13 +58,13 @@ Click the **Mirror picture** button on the player (the two-screens icon, also in
 - Playlists and logins are not synced. Add the same playlist on each computer: the same Xtream account or playlist link is recognised everywhere, so its history lines up.
 - **New code** shuts out every computer that only knows the old one. **Delete synced data** removes the stored copy; what each computer has stays on it.
 
-## Sound language and subtitles
+## Audio language and subtitles
 
 The language button (next to the CC button, right of the volume) lists the sound tracks of what's playing.
 
 - **Movies and episodes** are checked before they start, so the button only shows when there's more than one language. A track the player decodes itself switches at once; AC-3 / DTS tracks play through compatibility mode, from where you were.
 - **Live channels**: the app's own server reads the list of sound tracks from the stream as it passes through to the player (the MPEG-TS programme map, also inside HLS segments), so the button shows as soon as a channel with several languages plays, and the menu opens at once: no second connection to the provider, nothing to wait for. HLS streams with an audio playlist per language switch directly. Another language than the stream's own plays through compatibility mode (a short restart, like changing channel). Only for streams that aren't MPEG-TS does a click on a channel marked *MULTI-AUDIO*, *Dual Audio* or *[MULTI]* hang up and check the stream with ffmpeg.
-- **Settings › Playback › Preferred sound language** picks that language when it's there. **Settings › Subtitles › Turn on subtitles automatically** turns on subtitles in a language (from the video, or saved with a download), unless it's already spoken in it.
+- **Settings › Languages › Preferred audio language** picks that language when it's there. **Settings › Languages › Turn on subtitles automatically** turns on subtitles in a language (from the video, or saved with a download), unless it's already spoken in it.
 - What you pick with either button is remembered for that series, movie or channel, including *Off* for subtitles.
 
 ## Compatibility mode (codecs)
@@ -101,7 +101,7 @@ public/js/player.js     player, compatibility mode, picture mirroring
 public/js/workspace.js  live TV, guide, movies and series
 public/js/dialogs.js    add / edit playlists
 public/js/ui.js         navigation, dashboard, settings, search, command palette
-public/js/audio.js      the sound-language button, preferred sound language
+public/js/audio.js      the audio-language button, preferred audio language
 public/js/sync-core.js  sync codes, encryption, merging history / progress / favorites
 public/js/sync.js       Settings › Sync, when to sync, the folder and cloud storage
 public/js/sync-config.js  the sync server's address (empty: folder only)

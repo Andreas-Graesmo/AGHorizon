@@ -1,6 +1,6 @@
 'use strict';
-/* AG Horizon – the sound language: the button next to the subtitles in the player, the language remembered per
-   series / movie / channel, and Settings › Playback › Preferred sound language.
+/* AG Horizon – the audio language: the button next to the subtitles in the player, the language remembered per
+   series / movie / channel, and Settings › Languages › Preferred audio language.
 
    Where the tracks come from:
    - movies and episodes: the check made before playing (/api/probe) lists them;
@@ -198,7 +198,7 @@ function audRender() {
   b.hidden = !c || !(many || (audTagged(c) && !aud.checked));
   b.classList.toggle('on', many && aud.cur != null && aud.cur !== audDefault());
   const t = audTrack(aud.cur);
-  b.title = many && t ? `Sound: ${audName(t)}` : 'Sound language';
+  b.title = many && t ? `Audio: ${audName(t)}` : 'Audio language';
 }
 
 function audSelect(n) {
@@ -207,7 +207,7 @@ function audSelect(n) {
   if (!c || !t) return;
   aud.want = n;
   audRemember(c, t.lang);
-  osd(`Sound: ${audName(t)}`);
+  osd(`Audio: ${audName(t)}`);
   if (aud.source === 'hls' && hlsPlayer) { hlsPlayer.audioTrack = n; aud.cur = n; audRender(); return; }
   const list = video.audioTracks;
   const i = aud.nativeMap ? aud.nativeMap.indexOf(n) : -1;
@@ -220,7 +220,7 @@ function audSelect(n) {
   }
   if (aud.source === 'native') return;   // can't happen: every track the player listed has a place in nativeMap
   if (!state.ffmpeg || compatMode() === 'off') {
-    toast(!state.ffmpeg ? 'This sound track needs ffmpeg, which wasn’t found' : 'This sound track needs compatibility mode, which is off in Settings › Playback', 'err');
+    toast(!state.ffmpeg ? 'This audio track needs ffmpeg, which wasn’t found' : 'This audio track needs compatibility mode, which is off in Settings › Playback', 'err');
     return;
   }
   // into compatibility mode (or back out of it, when this track plays directly), where the picture is
@@ -256,7 +256,7 @@ async function audMenu(anchor) {
   }
   if (aud.tracks.length < 2) { if (audTagged(c) && !aud.checked) audCheck(anchor); return; }   // not MPEG-TS: ask ffmpeg
   const mark = (on) => (on ? '✓  ' : '      ');
-  showMenu(anchor, [{ heading: true, label: 'Sound' }, ...aud.tracks.map((t) => ({ label: mark(t.n === aud.cur) + audName(t), run: () => audSelect(t.n) }))]);
+  showMenu(anchor, [{ heading: true, label: 'Audio' }, ...aud.tracks.map((t) => ({ label: mark(t.n === aud.cur) + audName(t), run: () => audSelect(t.n) }))]);
 }
 $('#pAudio').addEventListener('click', (e) => audMenu(e.currentTarget));
 
@@ -267,5 +267,5 @@ function langSelect(key, offLabel) {
   const opts = LANG_CHOICES.map((c) => [c, subLabel(c)]).sort((a, b) => a[1].localeCompare(b[1]));
   return `<select data-langpref="${key}"><option value="">${offLabel}</option>${opts.map(([c, l]) => `<option value="${c}"${c === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
 }
-const audSettingsRow = () => `<div class="set-row"><div><b>Preferred sound language</b><p class="muted">When a movie, episode or channel has several sound tracks, this language is picked. What you pick in the player is remembered for that series, movie or channel.</p></div>${langSelect('audioLang', 'The video’s own default')}</div>`;
+const audSettingsRow = () => `<div class="set-row"><div><b>Preferred audio language</b><p class="muted">When a movie, episode or channel has several audio tracks, this language is picked. What you pick in the player is remembered for that series, movie or channel.</p></div>${langSelect('audioLang', 'The video’s own default')}</div>`;
 $('#v-settings').addEventListener('change', (e) => { const k = e.target.dataset.langpref; if (k) LS.set('tuner.' + k, e.target.value); });

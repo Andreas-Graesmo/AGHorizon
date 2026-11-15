@@ -56,6 +56,11 @@ function createWindow() {
     backgroundColor: '#0c0e12',
     title: 'AG Horizon',
     autoHideMenuBar: true,
+    // No system title bar: the app's own top bar is the title bar (it is the drag region, see #topbar in style.css),
+    // and the system draws only its minimise / maximise / close buttons over its end. The page sends the colours
+    // that match its theme (app:titlebar below).
+    titleBarStyle: 'hidden',
+    titleBarOverlay: process.platform === 'darwin' ? true : { color: '#0a0d14', symbolColor: '#e8eaf0', height: 42 },
     show: false,   // shown by reveal() below
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -161,6 +166,13 @@ ipcMain.handle('tuner:focus', () => {
   win.show();
   win.focus();
   win.moveTop();
+});
+
+// The window buttons take the colours of the app's top bar, in whatever theme it has now (macOS draws its own).
+const cssColor = (c) => /^(#[0-9a-f]{3,8}|rgba?\([\d\s,.%/]+\))$/i.test(String(c));
+ipcMain.on('app:titlebar', (e, c) => {
+  if (!win || e.sender !== win.webContents || process.platform === 'darwin' || !c || !cssColor(c.color) || !cssColor(c.symbolColor)) return;
+  try { win.setTitleBarOverlay({ color: c.color, symbolColor: c.symbolColor, height: Math.min(80, Math.max(24, Math.round(c.height) || 42)) }); } catch { /* no overlay on this system */ }
 });
 
 ipcMain.handle('tuner:displays', () => {

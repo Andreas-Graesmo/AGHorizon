@@ -98,6 +98,12 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 /* ── app shell ────────────────────────────────────── */
 #app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: var(--topbar) minmax(0, 1fr); height: 100vh; height: 100dvh; }
 #topbar { grid-column: 1 / -1; position: relative; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 8px; background: var(--nav); }
+/* The top bar is the window's title bar (electron/main.js hides the system's): drag it to move the window, and leave
+   room for the system's window buttons, which sit over its right end (left on a Mac). In a browser both add nothing. */
+#topbar { -webkit-app-region: drag; padding-left: calc(8px + env(titlebar-area-x, 0px)); padding-right: calc(10px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)); }
+#topbar button, #topbar .top-search { -webkit-app-region: no-drag; }
+/* a drag region takes the mouse even under a dialog's backdrop: switch it off while one is open */
+body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .tb-btn { appearance: none; border: 0; background: none; color: var(--text); cursor: pointer; width: 32px; height: 30px; border-radius: 8px; display: inline-grid; place-items: center; flex: none; opacity: .92; }
 .tb-btn:hover { background: var(--panel-2); }
 .tb-btn.on { color: var(--accent); background: var(--sel); }
@@ -486,7 +492,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
 .player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini #pAudio, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
-/* Subtitles (Settings › Subtitles › Appearance, set by subtitles.js). The size goes on the container, not on ::cue:
+/* Subtitles (Settings › Languages › Subtitles › Appearance, set by subtitles.js). The size goes on the container, not on ::cue:
    Chromium sizes the lines from the container, so a different text size on ::cue leaves gaps between lines. */
 :root { --sub-font: system-ui, sans-serif; --sub-color: #fff; --sub-bg: rgba(0, 0, 0, .6); --sub-shadow: none; --sub-scale: 1; }
 .player { --sub-px: 24px; --sub-raise: 0px; }
@@ -503,7 +509,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 
 /* ── settings ─────────────────────────────────────── */
 .set-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px 20px; margin-bottom: 16px; }
-.set-card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 14px 0 4px; }
+.set-sec { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 22px 4px 8px; }   /* a heading over a card, on a page with several */
+.set-pane > .set-sec:first-child { margin-top: 0; }
 .set-row { display: flex; align-items: center; gap: 18px; padding: 14px 0; border-top: 1px solid var(--line); }
 .set-row:first-of-type { border-top: 0; }
 .set-row > div:first-child { flex: 1; min-width: 0; }
@@ -527,6 +534,9 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 #toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 200; display: grid; gap: 8px; justify-items: center; pointer-events: none; }
 .toast { background: var(--panel-3); color: var(--text); border: 1px solid var(--line); padding: 10px 18px; border-radius: 12px; box-shadow: var(--shadow); max-width: min(560px, 92vw); transition: opacity .4s, transform .4s; }
 .toast.err { border-color: var(--red); }
+.toast { pointer-events: auto; }   /* a toast can hold a link to a Settings page */
+/* "Settings › Playback" inside a sentence: reads as part of it, opens that page */
+.set-open { padding: 0; font: inherit; color: inherit; text-decoration: underline; }
 .toast.out { opacity: 0; transform: translateY(8px); }
 .flash { position: fixed; top: 76px; right: 24px; z-index: 200; background: rgba(0, 0, 0, .78); color: #fff; font-size: 22px; font-weight: 700; padding: 10px 20px; border-radius: 12px; font-variant-numeric: tabular-nums; }
 .menu { position: fixed; z-index: 300; min-width: 220px; max-width: min(560px, calc(100vw - 16px)); max-height: min(70vh, 560px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; }
@@ -571,6 +581,10 @@ dialog.palette { top: 11vh; margin: 0 auto auto; width: min(620px, 94vw); }
 .help-body dl { display: grid; grid-template-columns: 150px 1fr; gap: 8px 12px; margin: 0; align-items: center; }
 .help-body dt { display: flex; gap: 4px; flex-wrap: wrap; }
 .help-body dd { margin: 0; }
+.news-body { padding: 4px 22px 22px; overflow-y: auto; line-height: 1.5; }
+.news-body h3 { font-size: 15px; margin: 18px 0 8px; }
+.news-body ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.news-body p { margin: 10px 0; }
 
 /* ── smaller windows ──────────────────────────────── */
 @media (max-width: 1150px) {
@@ -845,18 +859,20 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 /* ── Settings: the index beside the sections ── */
 .set-page { max-width: 1060px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; }
 .set-main { min-width: 0; max-width: 780px; }
-.set-index { position: sticky; top: 24px; display: grid; gap: 2px; padding-top: 52px; }
-.set-link { appearance: none; border: 0; background: none; text-align: left; padding: 8px 12px; border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 13.5px; cursor: pointer; border-left: 3px solid transparent; }
+.set-index { position: sticky; top: 24px; display: grid; gap: 2px; }
+.set-title { font-size: 22px; font-weight: 700; padding: 0 12px 14px; }
+.set-link { appearance: none; border: 0; background: none; text-align: left; padding: 8px 12px; border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 10px; }
 .set-link:hover { color: var(--text); background: var(--panel); }
-.set-link[aria-current] { color: var(--text); background: var(--panel); border-left-color: var(--accent); }
-.set-card { scroll-margin-top: 20px; }
-/* narrow window: the index becomes a row of chips that stays at the top */
+/* the open page: tinted and outlined in the accent colour, like the selected item in the side bar */
+.set-link[aria-current] { color: var(--accent); background: var(--sel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+/* narrow window: the menu becomes chips that stay at the top, on as many lines as they need (a single scrolling
+   row hid the last ones outside the window) */
 @media (max-width: 900px) {
   .set-page { display: block; max-width: 780px; }
-  .set-index { top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; margin-bottom: 8px; background: var(--bg); scrollbar-width: none; }
-  .set-link { flex: none; border-left: 0; border-radius: 99px; padding: 6px 12px; background: var(--panel); white-space: nowrap; }
-  .set-link[aria-current] { background: var(--accent); color: var(--accent-ink); }
-  .set-card { scroll-margin-top: 64px; }
+  .set-index { top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0; margin-bottom: 8px; background: var(--bg); }
+  .set-link { flex: none; border-radius: 99px; padding: 6px 12px; background: var(--panel); white-space: nowrap; }
+  .set-link[aria-current] { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+  .set-title { display: none; }
 }
 
 /* ── Downloads: dragging the Downloading list into a new order ── */
