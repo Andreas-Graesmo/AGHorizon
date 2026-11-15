@@ -75,7 +75,7 @@ document.documentElement.addEventListener('mouseleave', () => { clearTimeout(ctl
 /* ───────────────────────── controls on the floating window ───────────────────────── */
 /*
  * Play, pause, skipping and seeking act on the player in the main window. Sound acts on whichever picture is
- * audible: the main window's, this one's, or both (Settings › Mirror picture › Sound plays on).
+ * audible: the main window's, this one's, or both (Settings › Playback › Mirror picture: sound plays on).
  */
 const volBox = $('vol');
 const volRange = $('mVolRange');

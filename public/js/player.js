@@ -112,7 +112,7 @@ function showOverlay(kind, title, text) {
   overlay.className = 'overlay' + (kind === 'error' ? ' error' : '');
   overlay.innerHTML = kind === 'loading'
     ? `<div><div class="spinner"></div><p>${esc(title)}</p></div>`
-    : `<div><strong>${esc(title)}</strong><p>${esc(text || '')}</p><button class="btn small" data-copy>Copy stream link</button></div>`;
+    : `<div><strong>${esc(title)}</strong><p>${setLinks(esc(text || ''))}</p><button class="btn small" data-copy>Copy stream link</button></div>`;
 }
 const hideOverlay = () => { overlay.hidden = true; };
 
@@ -204,7 +204,7 @@ async function startPlayback(ch, kinds, token, lastError) {
     const dur = vod ? info.duration || 0 : 0;
     const start = vod && resumeAt != null ? resumeAt : vod && resume && !resume.w && resume.t > 10 && (!dur || dur - resume.t > 20) ? resume.t : 0;
     resumeAt = null;
-    if (vod) await subAutoPlan(ch, info);   // Settings › Subtitles › turn on automatically (once per video)
+    if (vod) await subAutoPlan(ch, info);   // Settings › Languages › turn on subtitles automatically (once per video)
     if (token !== playToken) return;
     const track = audTcTrack(ch, info);
     Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: track ? track.n : null, apid: track ? track.pid : null });
@@ -539,7 +539,7 @@ const closePip = () => { if (pipWin) pipWin.close(); };
  * The mirror window shows exactly what this player shows. It doesn't open a second connection to
  * your provider: we hand it a live MediaStream captured from the main <video>, so the picture
  * is identical and in sync, and connection limits aren't affected.
- * Sound can play on this window, on the mirror window, or on both (Settings › Mirror picture).
+ * Sound can play on this window, on the mirror window, or on both (Settings › Playback › Mirror picture: sound plays on).
  */
 let mirrorWin = null;
 let mirrorMuteSaved = null;          // our own mute state, restored when "sound on mirror window only" ends
