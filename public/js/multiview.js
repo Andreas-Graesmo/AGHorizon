@@ -4,6 +4,8 @@
  * Layouts: two side by side, two stacked, three (one big + two), or 2 × 2.
  * Only one picture plays sound at a time (click a picture, or press 1–4).
  * Each picture has its own small player (hls.js / mpegts.js / native, with the ffmpeg fallback), separate from the single player.
+ * Normally every picture uses a provider connection of its own; with the experimental sharing switched on, pictures
+ * from the same Xtream playlist take turns on one (server.js, "one connection, several pictures").
  */
 
 const MV_LAYOUTS = {
@@ -31,6 +33,17 @@ const mv = {
   if (Number.isInteger(s.focus) && s.focus >= 0 && s.focus < MV_MAX) mv.focus = s.focus;
   if (Array.isArray(s.slots)) s.slots.slice(0, MV_MAX).forEach((x, i) => { if (x && x.uid && x.pid) mv.pending[i] = x; });
 })();
+
+// Experimental (Settings › Playback): pictures from one Xtream playlist take turns on a single provider connection
+// (/api/shared). That needs the channel as MPEG-TS, which Xtream serves beside the HLS address playlists normally use.
+function mvShareUrl(ch) {
+  if (!LS.get('tuner.mvShare', false) || !ch.xtream) return '';
+  const url = ch.url.replace(/\.m3u8$/i, '.ts');
+  return /\.ts$/i.test(url) ? url : '';
+}
+// The picture's address on the shared connection. A whole address: mpegts.js fetches from a worker, which can't
+// resolve "/api/shared…", and ffmpeg (a picture that needs converting) reads it from outside the page.
+const mvSharedSrc = (ch, p) => new URL(`/api/shared?url=${enc(mvShareUrl(ch))}${uaParam(p)}&group=${enc(ch.pid)}`, location.href).href;
 
 const mvCount = () => MV_LAYOUTS[mv.layout].n;
 const mvFilled = () => mv.slots.filter(Boolean).length + mv.pending.filter(Boolean).length;
@@ -68,6 +81,7 @@ class MvTile {
     this.timer = 0;
     this.ch = null;
     this.converted = false;
+    this.shared = false;   // playing through /api/shared
     const v = this.video;
     v.addEventListener('playing', () => { this.hideOv(); this.armCheck(); applyMvSound(); });
     v.addEventListener('canplay', () => this.hideOv());
@@ -89,6 +103,7 @@ class MvTile {
     if (this.hls) { try { this.hls.destroy(); } catch { /* ignore */ } this.hls = null; }
     if (this.ts) { try { this.ts.pause(); this.ts.unload(); this.ts.detachMediaElement(); this.ts.destroy(); } catch { /* ignore */ } this.ts = null; }
     this.converted = false;
+    this.shared = false;
     this.tcEl.hidden = true;
     const v = this.video;
     v.onerror = null;
@@ -109,7 +124,16 @@ class MvTile {
     const token = ++this.token;
     pushRecent(ch);
     loadShortEpg(ch);
-    this.start(ch, playPlan(ch), token);
+    const plan = playPlan(ch);
+    // sharing first; if the provider won't play along the picture falls back to a connection of its own
+    this.start(ch, mvShareUrl(ch) && plan[0] !== 'tc' ? ['share', ...plan] : plan, token);
+  }
+
+  // A shared picture can miss a few seconds when its turn came late: jump the hole instead of waiting at its edge for ever.
+  skipGap() {
+    const v = this.video, b = v.buffered;
+    if (!this.shared || v.paused || v.readyState > 2) return;
+    for (let i = 0; i < b.length; i++) if (b.start(i) > v.currentTime + 0.1) { v.currentTime = b.start(i) + 0.05; return; }
   }
 
   async start(ch, kinds, token, lastError) {
@@ -149,25 +173,31 @@ class MvTile {
         else if (d.type === Hls.ErrorTypes.MEDIA_ERROR && ++media <= 2) h.recoverMediaError();
         else fail(`HLS error: ${d.details}`);
       });
-    } else if (kind === 'ts') {
+    } else if (kind === 'ts' || kind === 'share') {
       if (!(await loadMpegts()) || !mpegts.isSupported()) { fail('The MPEG-TS player is not available in this browser'); return; }
       if (token !== this.token) return;
-      this.ts = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: src }, { enableWorker: true, liveBufferLatencyChasing: true, lazyLoadMaxDuration: 30 });
+      const share = (this.shared = kind === 'share');
+      const url = share ? mvSharedSrc(ch, p) : src;
+      // a shared picture lives on what it was given during its turn: chasing the live edge would throw that away
+      this.ts = mpegts.createPlayer({ type: 'mpegts', isLive: true, url }, { enableWorker: true, liveBufferLatencyChasing: !share, lazyLoadMaxDuration: 30 });
       this.ts.attachMediaElement(v);
       this.ts.on(mpegts.Events.ERROR, (_t, detail) => fail(`Stream error: ${detail}`));
       this.ts.load();
       this.ts.play().catch(() => {});
     } else if (kind === 'tc') {
       this.ov('loading', 'Converting for playback…');
+      // with sharing on, ffmpeg takes its turn on the shared connection like any other picture: reading the provider
+      // itself would be one more connection per converted picture
+      const from = mvShareUrl(ch) ? mvSharedSrc(ch, p) : ch.url;
       let info = {};
-      try { const r = await fetch(`/api/probe?url=${enc(ch.url)}${uaParam(p)}`); if (r.ok) info = await r.json(); } catch { /* convert everything */ }
+      try { const r = await fetch(`/api/probe?url=${enc(from)}${uaParam(p)}`); if (r.ok) info = await r.json(); } catch { /* convert everything */ }
       if (token !== this.token) return;
       const n = mvCount();
       const maxh = n >= 3 ? 540 : n === 2 ? 720 : 1080;   // smaller pictures need less CPU
       this.converted = true;
       this.tcEl.hidden = false;
       v.onerror = () => fail('The converted stream could not be played');
-      v.src = `/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${info.video === 'h264' ? 'copy' : 'h264'}&maxh=${maxh}`;
+      v.src = `/api/transcode?url=${enc(from)}${uaParam(p)}&video=${info.video === 'h264' ? 'copy' : 'h264'}&maxh=${maxh}`;
       v.play().catch(() => {});
     } else {
       v.src = src;
@@ -363,7 +393,10 @@ function mvLeave() {
 /* ── provider connection limits ── */
 function mvCounts() {
   const c = {};
-  for (let i = 0; i < mvCount(); i++) if (mv.slots[i]) c[mv.slots[i].pid] = (c[mv.slots[i].pid] || 0) + 1;
+  for (let i = 0; i < mvCount(); i++) {
+    const ch = mv.slots[i];
+    if (ch) c[ch.pid] = mvShareUrl(ch) ? c[ch.pid] || 1 : (c[ch.pid] || 0) + 1;   // pictures that share count as one
+  }
   return c;
 }
 async function mvCheckLimits() {
@@ -392,9 +425,12 @@ function mvWarn() {
   }
   if (msgs.length) { el.hidden = false; el.className = 'mv-note warn'; el.textContent = msgs.join(' ') + ' Some pictures may fail to start.'; return; }
   const many = Object.values(counts).some((c) => c >= 2);
-  el.hidden = !many;
+  const sharing = mv.slots.slice(0, mvCount()).filter((c) => c && mvShareUrl(c)).length >= 2;
+  el.hidden = !many && !sharing;
   el.className = 'mv-note';
-  el.textContent = 'Every picture uses one connection from your provider, and many providers allow only 1–2. If a picture won’t start, remove one.';
+  el.textContent = many
+    ? 'Every picture uses one connection from your provider, and many providers allow only 1–2. If a picture won’t start, remove one.'
+    : 'Pictures from the same playlist take turns on one provider connection (experimental, Settings › Playback), so they play about 20 seconds behind.';
 }
 
 /* ── names that follow the guide ── */
@@ -406,6 +442,7 @@ function mvRefreshNames() {
   });
 }
 setInterval(mvRefreshNames, 30000);
+setInterval(() => mv.tiles.forEach((t) => t.skipGap()), 1000);
 
 /* ── clicks ── */
 $('#mvLayouts').addEventListener('click', (e) => { const b = e.target.closest('[data-l]'); if (b) mvSetLayout(b.dataset.l); });
