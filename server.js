@@ -248,11 +248,13 @@ async function handleEpg(req, res) {
 
 /* ----------------------------------------------------------------- stream */
 
-function rewriteM3u8(text, baseUrl, ua) {
+// src: the channel's own address, passed on to its playlists and segments, so what tsSniffer reads from a segment
+// is kept under the channel (the player asks /api/tracks for it by that address).
+function rewriteM3u8(text, baseUrl, ua, src) {
   const prox = (u) => {
     if (/^data:/i.test(u)) return u;
     const abs = new URL(u, baseUrl).href;
-    return `/api/stream?url=${encodeURIComponent(abs)}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
+    return `/api/stream?url=${encodeURIComponent(abs)}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}${src ? `&src=${encodeURIComponent(src)}` : ''}`;
   };
   return text
     .split(/\r?\n/)
@@ -262,6 +264,105 @@ function rewriteM3u8(text, baseUrl, ua) {
       return prox(line.trim());
     })
     .join('\n');
+}
+
+/* ---------------------------------------------- what's in an MPEG-TS stream */
+// The sound tracks of a live channel, read from the first bytes of the stream on their way to the player: the
+// programme map (PAT -> PMT) lists every track with its language. Costs nothing: no second connection to the
+// provider (many allow only one), nothing to wait for. GET /api/tracks?url=<channel> answers from what was read.
+const TS_VIDEO = { 0x01: 'mpeg1video', 0x02: 'mpeg2video', 0x10: 'mpeg4', 0x1b: 'h264', 0x24: 'hevc' };
+const TS_AUDIO = { 0x03: 'mp2', 0x04: 'mp2', 0x0f: 'aac', 0x11: 'aac_latm', 0x81: 'ac3', 0x87: 'eac3', 0x82: 'dts', 0x85: 'dts', 0x8a: 'dts' };
+const TS_PRIVATE_AUDIO = { 0x6a: 'ac3', 0x7a: 'eac3', 0x7b: 'dts', 0x7c: 'aac' };   // stream type 6 + one of these descriptors
+const TS_REG_AUDIO = { 'AC-3': 'ac3', EAC3: 'eac3', DTS1: 'dts', DTS2: 'dts', DTS3: 'dts', Opus: 'opus' };   // …or a registration descriptor
+
+function parsePmt(sec) {
+  const end = 3 + (((sec[1] & 0x0f) << 8) | sec[2]) - 4;   // the CRC isn't needed
+  let i = 12 + (((sec[10] & 0x0f) << 8) | sec[11]);
+  let video = '';
+  const audios = [];
+  while (i + 5 <= end) {
+    const type = sec[i];
+    const pid = ((sec[i + 1] & 0x1f) << 8) | sec[i + 2];
+    const len = ((sec[i + 3] & 0x0f) << 8) | sec[i + 4];
+    let codec = TS_AUDIO[type] || '';
+    let lang = 'und';
+    let descr = false;
+    for (let d = i + 5; d + 2 <= i + 5 + len && d + 2 + sec[d + 1] <= sec.length;) {
+      const tag = sec[d], dl = sec[d + 1], body = sec.subarray(d + 2, d + 2 + dl);
+      if (tag === 0x0a && dl >= 4) {   // ISO 639 language (+ audio type: 3 = for the visually impaired)
+        lang = body.subarray(0, 3).toString('latin1').toLowerCase().replace(/[^a-z]/g, '') || 'und';
+        descr = body[3] === 3;
+      } else if (type === 0x06 && TS_PRIVATE_AUDIO[tag]) codec = TS_PRIVATE_AUDIO[tag];
+      else if (type === 0x06 && tag === 0x05 && dl >= 4 && TS_REG_AUDIO[body.subarray(0, 4).toString('latin1')]) codec = TS_REG_AUDIO[body.subarray(0, 4).toString('latin1')];
+      d += 2 + dl;
+    }
+    if (TS_VIDEO[type] && !video) video = TS_VIDEO[type];
+    if (codec) audios.push({ index: audios.length, pid, lang, codec, channels: '', title: '', default: false, comment: false, descr });
+    i += 5 + len;
+  }
+  return { video, audios };
+}
+
+// Feed it the stream's bytes; it returns the tracks once the PMT has come by, null while it hasn't, false when
+// this isn't MPEG-TS (or nothing came in the first 2 MB).
+function tsSniffer() {
+  let buf = Buffer.alloc(0);
+  let seen = 0;
+  let synced = false;
+  let pmtPid = -1;
+  const parts = new Map();   // pid -> the section being put together
+  const section = (pid, payload, start) => {
+    let part = parts.get(pid);
+    if (start) {
+      const pointer = payload[0];
+      part = Buffer.from(payload.subarray(1 + pointer));
+    } else if (part) part = Buffer.concat([part, payload]);
+    else return null;
+    if (part.length >= 3 && part.length >= 3 + (((part[1] & 0x0f) << 8) | part[2])) { parts.delete(pid); return part; }
+    parts.set(pid, part);
+    return null;
+  };
+  return (chunk) => {
+    seen += chunk.length;
+    buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
+    if (!synced) {   // first byte of a packet: 0x47, and again 188 bytes on
+      let i = 0;
+      while (i + 188 < buf.length && !(buf[i] === 0x47 && buf[i + 188] === 0x47)) i++;
+      if (i + 188 >= buf.length) { if (seen > 65536) return false; buf = buf.subarray(i); return null; }
+      buf = buf.subarray(i);
+      synced = true;
+    }
+    let o = 0;
+    for (; o + 188 <= buf.length; o += 188) {
+      if (buf[o] !== 0x47) return false;
+      const pid = ((buf[o + 1] & 0x1f) << 8) | buf[o + 2];
+      if (pid !== 0 && pid !== pmtPid) continue;
+      const afc = (buf[o + 3] >> 4) & 3;
+      if (!(afc & 1)) continue;
+      const start = o + 4 + (afc & 2 ? 1 + buf[o + 4] : 0);
+      if (start >= o + 188) continue;
+      const sec = section(pid, buf.subarray(start, o + 188), !!(buf[o + 1] & 0x40));
+      if (!sec) continue;
+      if (pid === 0 && sec[0] === 0x00) {   // PAT: the first programme's PMT
+        for (let i = 8; i + 4 <= 3 + (((sec[1] & 0x0f) << 8) | sec[2]) - 4; i += 4) {
+          if (((sec[i] << 8) | sec[i + 1]) !== 0) { pmtPid = ((sec[i + 2] & 0x1f) << 8) | sec[i + 3]; break; }
+        }
+      } else if (pid === pmtPid && sec[0] === 0x02) return parsePmt(sec);
+    }
+    buf = buf.subarray(o);
+    return seen > 2 * 1024 * 1024 ? false : null;
+  };
+}
+
+const tsTracks = new Map();   // channel address -> { video, audios, hls, t }
+function rememberTracks(key, info) {
+  tsTracks.delete(key);
+  tsTracks.set(key, info);
+  if (tsTracks.size > 300) tsTracks.delete(tsTracks.keys().next().value);
+}
+function handleTracks(req, res, q) {
+  const i = tsTracks.get(q.get('url') || '');
+  sendJson(res, 200, i ? { video: i.video, audios: i.audios, hls: i.hls } : {});
 }
 
 async function handleStream(req, res, q) {
@@ -282,7 +383,7 @@ async function handleStream(req, res, q) {
   if (looksM3u8 || /^text\//i.test(ct)) {
     const text = await r.text();
     if (looksM3u8 || /^#EXTM3U/.test(text)) {
-      return send(res, 200, rewriteM3u8(text, r.url, ua), { 'Content-Type': 'application/vnd.apple.mpegurl' });
+      return send(res, 200, rewriteM3u8(text, r.url, ua, q.get('src') || q.get('url')), { 'Content-Type': 'application/vnd.apple.mpegurl' });
     }
     return send(res, 200, text, { 'Content-Type': ct });
   }
@@ -295,7 +396,21 @@ async function handleStream(req, res, q) {
   if (!r.headers.get('content-encoding') && r.headers.get('content-length')) headers['content-length'] = r.headers.get('content-length');
   res.writeHead(r.status, headers);
   if (!r.body) return res.end();
-  Readable.fromWeb(r.body).on('error', () => res.destroy()).pipe(res);
+  const body = Readable.fromWeb(r.body);
+  // a live stream (or an HLS segment of one, src = its channel): note its sound tracks as they pass
+  const key = q.get('src') || q.get('url');
+  const known = tsTracks.get(key);
+  if (!req.headers.range && (!q.get('src') || !known || Date.now() - known.t > 10 * 60e3)) {
+    const sniff = tsSniffer();
+    const onData = (chunk) => {
+      const info = sniff(chunk);
+      if (info === null) return;
+      body.off('data', onData);
+      if (info) rememberTracks(key, { ...info, hls: !!q.get('src'), t: Date.now() });
+    };
+    body.on('data', onData);
+  }
+  body.on('error', () => res.destroy()).pipe(res);
 }
 
 /* ------------------------------------------------- ffmpeg compatibility mode */
@@ -351,12 +466,50 @@ function handleCapabilities(req, res) {
   sendJson(res, 200, { ffmpeg: !!ffmpeg(), opensubtitles: subs.osAvailable, tmdb: !!TMDB_KEY });
 }
 
-// Reports duration and codecs so the UI can choose between "copy video" and "re-encode video".
+// The sound tracks ffmpeg lists for an input, in the order "-map 0:a:N" counts them: [{ index (that N), lang,
+// codec, channels ("Stereo", "5.1"…), title, default, comment, descr }]. HLS inputs list a stream once per
+// program it belongs to: each stream is counted once.
+const LAYOUTS = { mono: 'Mono', stereo: 'Stereo', '1 channels': 'Mono', '2 channels': 'Stereo', '6 channels': '5.1', '8 channels': '7.1' };
+function parseAudioStreams(stderr) {
+  const byNum = new Map();
+  let cur = null;
+  for (const line of String(stderr).split(/\r?\n/)) {
+    const st = /^\s*Stream #\d+:(\d+)(?:\[\w+\])?(?:\((\w+)\))?: (\w+): (.*)$/.exec(line);
+    if (st) {
+      const num = Number(st[1]);
+      if (st[3] !== 'Audio') { cur = null; continue; }
+      if (byNum.has(num)) { cur = null; continue; }   // the same stream again, under another program
+      const rest = st[4];
+      const layout = (/\d+ Hz, ([^,]+)/.exec(rest) || [])[1] || '';
+      const lay = layout.trim().toLowerCase().replace(/\(.*\)$/, '');
+      cur = {
+        num,
+        lang: (st[2] || 'und').toLowerCase(),
+        codec: (/^(\w+)/.exec(rest) || [])[1].toLowerCase(),
+        channels: LAYOUTS[lay] || (/^\d\.\d$/.test(lay) ? lay : ''),
+        title: '',
+        default: /\(default\)/.test(rest),
+        comment: /\(comment\)/.test(rest),
+        descr: /\(visual impaired\)/.test(rest),
+      };
+      byNum.set(num, cur);
+      continue;
+    }
+    if (/^\s*(Stream #|Program |Input #|Output #)/.test(line)) { cur = null; continue; }
+    const t = cur && !cur.title && /^\s+title\s*:\s*(.+?)\s*$/.exec(line);
+    if (t) cur.title = t[1];
+  }
+  return [...byNum.values()].sort((a, b) => a.num - b.num).map(({ num, ...a }, index) => ({ index, ...a }));
+}
+
+// Reports duration and codecs so the UI can choose between "copy video" and "re-encode video", and the sound and
+// subtitle tracks for their menus. ?quick=1: just the track list, for a live channel (less to read, sooner).
 function handleProbe(req, res, q) {
   const bin = ffmpeg();
   if (!bin) throw httpError(501, 'ffmpeg is not installed');
   const url = checkUrl(q.get('url'));
-  const proc = spawn(bin, ffmpegInput(url, q.get('ua'), ['-analyzeduration', '4000000', '-probesize', '4000000']), { stdio: ['ignore', 'ignore', 'pipe'] });
+  const size = q.get('quick') ? '1500000' : '4000000';
+  const proc = spawn(bin, ffmpegInput(url, q.get('ua'), ['-analyzeduration', size, '-probesize', size]), { stdio: ['ignore', 'ignore', 'pipe'] });
   let err = '';
   let finished = false;
   const finish = (status, body) => { if (finished) return; finished = true; clearTimeout(timer); sendJson(res, status, body); };
@@ -371,6 +524,7 @@ function handleProbe(req, res, q) {
       duration: dur ? +dur[1] * 3600 + +dur[2] * 60 + +dur[3] : 0,
       video: v ? v[1].toLowerCase() : '',
       audio: a ? a[1].toLowerCase() : '',
+      audios: parseAudioStreams(err),
       // text subtitles in the stream: the CC menu lists them, the conversion writes them (subs + sid below)
       subs: subs.parseSubStreams(err).filter((t) => t.text).map(({ index, lang, forced, sdh }) => ({ index, lang, forced, sdh })),
     });
@@ -418,12 +572,15 @@ function handleTranscode(req, res, q) {
   const keepHevc = q.get('video') === 'hevc';   // the player decodes HEVC itself
   const copyVideo = q.get('video') === 'copy' || keepHevc;
   const maxH = Math.min(1080, Math.max(240, Number(q.get('maxh')) || 1080));   // Multi view asks for less: smaller pictures, less CPU
+  // which sound track (the language menu): by its MPEG-TS id when the player knows it (exact), else by its place
+  const apid = /^\d{1,4}$/.test(q.get('apid') || '') ? Number(q.get('apid')) : null;
+  const audio = /^\d{1,2}$/.test(q.get('audio') || '') ? Number(q.get('audio')) : 0;
 
   const args = [
     ...ffmpegInput(url, q.get('ua'), ['-analyzeduration', '5000000', '-probesize', '10000000',
       // copied video starts on the keyframe before ?start: start the sound there too (the player asks /api/keyframe where that is)
       ...(start ? [...(copyVideo ? ['-noaccurate_seek'] : []), '-ss', start.toFixed(3)] : [])]),
-    '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
+    '-map', '0:v:0', '-map', apid != null ? `0:i:${apid}` : `0:a:${audio}?`, '-sn', '-dn',
     ...(copyVideo
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
@@ -649,6 +806,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/fetch' && req.method === 'GET') await handleFetch(req, res, url.searchParams);
     else if (url.pathname === '/api/epg' && req.method === 'POST') await handleEpg(req, res);
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
+    else if (url.pathname === '/api/tracks' && req.method === 'GET') handleTracks(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/tmdb' && req.method === 'GET') await handleTmdb(req, res, url.searchParams);
     else if (url.pathname === '/api/trending' && req.method === 'GET') await handleTrending(req, res);
@@ -679,4 +837,4 @@ function start(port) {
   });
 }
 
-module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8 };   // the last three for test/
+module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8, parseAudioStreams, tsSniffer };   // the last five for test/
