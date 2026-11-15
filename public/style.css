@@ -98,6 +98,12 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 /* ── app shell ────────────────────────────────────── */
 #app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: var(--topbar) minmax(0, 1fr); height: 100vh; height: 100dvh; }
 #topbar { grid-column: 1 / -1; position: relative; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 8px; background: var(--nav); }
+/* The top bar is the window's title bar (electron/main.js hides the system's): drag it to move the window, and leave
+   room for the system's window buttons, which sit over its right end (left on a Mac). In a browser both add nothing. */
+#topbar { -webkit-app-region: drag; padding-left: calc(8px + env(titlebar-area-x, 0px)); padding-right: calc(10px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)); }
+#topbar button, #topbar .top-search { -webkit-app-region: no-drag; }
+/* a drag region takes the mouse even under a dialog's backdrop: switch it off while one is open */
+body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .tb-btn { appearance: none; border: 0; background: none; color: var(--text); cursor: pointer; width: 32px; height: 30px; border-radius: 8px; display: inline-grid; place-items: center; flex: none; opacity: .92; }
 .tb-btn:hover { background: var(--panel-2); }
 .tb-btn.on { color: var(--accent); background: var(--sel); }
@@ -859,10 +865,11 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .set-link:hover { color: var(--text); background: var(--panel); }
 /* the open page: tinted and outlined in the accent colour, like the selected item in the side bar */
 .set-link[aria-current] { color: var(--accent); background: var(--sel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
-/* narrow window: the index becomes a row of chips that stays at the top */
+/* narrow window: the menu becomes chips that stay at the top, on as many lines as they need (a single scrolling
+   row hid the last ones outside the window) */
 @media (max-width: 900px) {
   .set-page { display: block; max-width: 780px; }
-  .set-index { top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; margin-bottom: 8px; background: var(--bg); scrollbar-width: none; }
+  .set-index { top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0; margin-bottom: 8px; background: var(--bg); }
   .set-link { flex: none; border-radius: 99px; padding: 6px 12px; background: var(--panel); white-space: nowrap; }
   .set-link[aria-current] { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
   .set-title { display: none; }
