@@ -7,6 +7,7 @@
  *  - /api/fetch   fetches playlists / Xtream API responses (avoids browser CORS limits)
  *  - /api/epg     downloads + parses an XMLTV guide (plain or .gz) into compact JSON
  *  - /api/stream  proxies live streams; HLS manifests are rewritten so segments also pass through
+ *  - /api/shared  several Multi view pictures take turns on one provider connection (experimental)
  *  - /api/local   plays finished downloads (desktop app only), and their subtitles
  *  - /api/subs    OpenSubtitles.com search / download (subtitles.js)
  */
@@ -413,6 +414,214 @@ async function handleStream(req, res, q) {
   body.on('error', () => res.destroy()).pipe(res);
 }
 
+/* ------------------------------------------ one connection, several pictures */
+/*
+ * Experimental (Settings › Playback). Multi view pictures from the same playlist take turns on ONE provider
+ * connection. A fresh connection to a live MPEG-TS channel opens with a burst: what the provider has buffered,
+ * often 10–25 s, sent as fast as the line allows. A picture takes its burst, hands the connection to the next
+ * picture and plays what it got meanwhile. Every new connection sends part of what the picture already has
+ * once more; that overlap is dropped, so the browser gets one unbroken stream per picture.
+ * The rules were tried against a real provider with scripts/burst-probe.js first.
+ */
+const shareTuning = {
+  revisit: 3,    // seconds before a picture is worth another visit: it can only gain what was broadcast meanwhile
+  visitMax: 4,   // seconds a visit may last while another picture waits
+};
+const shareNow = () => performance.now() / 1000;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The clock (PCR) of the 188-byte packet at o, in 27 MHz ticks; null when the packet carries none.
+function tsPcr(b, o) {
+  if (!(b[o + 3] & 0x20) || b[o + 4] < 7 || !(b[o + 5] & 0x10)) return null;
+  return (b.readUInt32BE(o + 6) * 2 + (b[o + 10] >> 7)) * 300 + (((b[o + 10] & 1) << 8) | b[o + 11]);
+}
+
+// Joins what a picture gets from one connection after another. Forwarding always stops just before a packet
+// that carries a PCR, and picks up at the packet with that very PCR in the next connection: the provider sends
+// the same bytes again, so the join is exact.
+// shortcut: a provider that builds the stream anew for every connection (other PCR values, or a clock that
+// starts over) is joined at the first PCR past the old end, and the picture may stumble there. Join at a key
+// frame and renumber the timestamps if such a provider turns up ("rough" in /api/shared/stats counts these).
+function tsStitcher(write) {
+  const HZ = 27e6;
+  let carry = Buffer.alloc(0);
+  let pid = -1;         // the PID that carries the clock
+  let held = [];        // packets since the last PCR packet (or the connection's opening ones): not forwarded yet
+  let heldPcr = null;   // the PCR held[0] carries, when forwarding
+  let resume = null;    // the PCR where forwarding stopped; null while forwarding
+  let fresh = true;     // no PCR seen in this connection yet
+  // first … end: what has been forwarded (seconds on the stream's clock). from … to: what this connection has sent.
+  const st = { first: null, end: null, from: null, to: null, joins: 0, rough: 0, missing: 0 };
+  return {
+    st,
+    push(chunk) {
+      const b = carry.length ? Buffer.concat([carry, chunk]) : chunk;
+      const out = [];
+      let o = 0;
+      while (o + 188 <= b.length) {
+        if (b[o] !== 0x47 || (o + 188 < b.length && b[o + 188] !== 0x47)) { o++; continue; }   // not on a packet edge
+        const at = o;
+        o += 188;
+        const id = ((b[at + 1] & 0x1f) << 8) | b[at + 2];
+        const pcr = pid < 0 || id === pid ? tsPcr(b, at) : null;
+        if (pcr === null) {
+          if (resume === null || fresh) held.push(b.subarray(at, o));
+          continue;
+        }
+        pid = id;
+        const opening = fresh;
+        fresh = false;
+        if (opening) st.from = pcr / HZ;
+        st.to = pcr / HZ;
+        if (resume !== null) {
+          const ahead = pcr - resume;
+          if (ahead < 0 && ahead > -120 * HZ) { held = []; continue; }   // still what the picture already has
+          if (ahead === 0) { st.joins++; held = []; }                    // the very packet forwarding stopped before
+          else if (opening && ahead > 0 && ahead < 120 * HZ) st.missing += ahead / HZ;   // the provider no longer reaches back that far: keep its opening packets
+          else { st.rough++; if (!opening) held = []; }
+          resume = null;
+        }
+        for (const p of held) out.push(p);
+        held = [b.subarray(at, o)];
+        heldPcr = pcr;
+        st.end = pcr / HZ;
+        if (st.first === null) st.first = st.end;
+      }
+      carry = b.subarray(o);
+      if (out.length) write(Buffer.concat(out));
+    },
+    // The connection is closing. What is held was not forwarded; the next connection brings it again.
+    cut() {
+      if (heldPcr !== null) resume = heldPcr;
+      held = [];
+      heldPcr = null;
+      carry = Buffer.alloc(0);
+      fresh = true;
+      st.from = st.to = null;
+    },
+  };
+}
+
+const shareGroups = new Map();   // playlist id -> { members, ac, cur, connects }: the pictures on one connection
+
+// Seconds of stream the picture has been given, and how much of that it has not played yet.
+const shareAvail = (m) => { const s = m.stitch.st; return s.first === null ? 0 : s.end - s.first - s.missing; };
+function shareReserve(m) {   // the picture plays in real time from its first data on, as far as what it has reaches
+  if (m.t === null) return 0;
+  const now = shareNow();
+  m.played = Math.min(shareAvail(m), m.played + now - m.t);
+  m.t = now;
+  return shareAvail(m) - m.played;
+}
+// Seconds until the picture is in trouble: it runs dry, or the provider's buffer no longer reaches back to what it
+// holds (0.6: a burst often stops short of live, so the real reach is shorter than the burst). A picture that has
+// not started goes first, unless it keeps failing.
+const shareNeed = (m) => (m.t === null ? m.errors - 1 : Math.min(shareReserve(m), 0.6 * m.depth - (shareNow() - m.last)));
+
+// One turn on the connection for picture m. Resolves with an error when the provider gave nothing.
+async function shareVisit(g, m) {
+  const ac = (g.ac = new AbortController());
+  g.cur = m;
+  g.connects++;
+  m.visits++;
+  const s = m.stitch.st;
+  const t0 = shareNow();
+  let firstData = null, lastData = null, begun = false, slow = false, depthKnown = false, dead = null;
+  let mark = { wall: 0, video: 0 };
+  const sent = () => (s.to === null ? 0 : s.to - s.from);   // seconds of stream this connection has sent, overlap included
+  const watch = setInterval(() => {
+    const now = shareNow();
+    if (lastData === null ? now - t0 > 8 : now - lastData > 10) { dead = httpError(504, 'The provider took too long to respond'); ac.abort(); return; }
+    if (lastData === null) return;
+    const over = begun && (slow || now - lastData > 0.3);   // the burst is spent: from here on it is real time
+    if (over && !depthKnown) { depthKnown = true; m.depth = sent(); }
+    const waiting = [...g.members].some((x) => x !== m && now - x.last >= shareTuning.revisit);
+    if (waiting && (over || now - t0 > shareTuning.visitMax)) ac.abort();   // nobody waiting: staying costs nothing
+  }, 100);
+  try {
+    const r = await upstream(m.url, { ua: m.ua, signal: ac.signal });
+    if (!r.ok) throw httpError(r.status === 404 ? 404 : 502, `Stream answered HTTP ${r.status}`);
+    if (!r.body || /mpegurl|^text\//i.test(r.headers.get('content-type') || '')) throw Object.assign(httpError(415, 'This channel has no MPEG-TS stream to share'), { final: true });
+    for await (const chunk of r.body) {
+      lastData = shareNow();
+      m.stitch.push(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+      if (firstData === null) { firstData = lastData; mark = { wall: 0, video: sent() }; }
+      const wall = lastData - firstData;
+      begun = sent() >= 2 || wall >= 1.5;   // a high-bitrate burst starts slowly: don't mistake that for its end
+      if (wall - mark.wall >= 0.3) { slow = sent() - mark.video < 2 * (wall - mark.wall); mark = { wall, video: sent() }; }
+    }
+    if (lastData === null) throw httpError(502, 'The stream ended without sending anything');
+  } catch (e) {
+    if (dead || !ac.signal.aborted) return dead || e;
+  } finally {
+    clearInterval(watch);
+    ac.abort();
+    if (!depthKnown && s.to !== null) m.depth = sent();
+    m.stitch.cut();
+    m.last = shareNow();
+    g.cur = null;
+  }
+  return null;
+}
+
+async function shareRun(key, g) {
+  try {
+    while (g.members.size) {
+      const now = shareNow();
+      const ready = [...g.members].filter((m) => now - m.last >= shareTuning.revisit);
+      if (!ready.length) { await wait(100); continue; }
+      const m = ready.reduce((a, b) => (shareNeed(b) < shareNeed(a) ? b : a));
+      const err = await shareVisit(g, m);
+      await wait(100);   // let the provider notice the connection is gone before the next one opens: it allows only one
+      if (!err) { m.errors = 0; continue; }
+      if (!g.members.has(m)) continue;   // the picture was closed meanwhile
+      if (!err.final && ++m.errors < 3) { await wait(1000); continue; }   // don't hammer a provider that says no
+      g.members.delete(m);   // give up: the picture falls back to a connection of its own
+      if (m.res.headersSent) m.res.destroy();
+      else { const { status, message } = friendlyError(err); sendJson(m.res, status, { error: message }); }
+    }
+  } finally {
+    if (shareGroups.get(key) === g) shareGroups.delete(key);
+    for (const m of g.members) m.res.destroy();
+  }
+}
+
+function handleShared(req, res, q) {
+  const url = checkUrl(q.get('url'));
+  const key = q.get('group') || new URL(url).host;
+  let g = shareGroups.get(key);
+  const isNew = !g;
+  if (isNew) shareGroups.set(key, (g = { members: new Set(), ac: null, cur: null, connects: 0 }));
+  const write = (buf) => {
+    if (res.destroyed || res.writableEnded) return;
+    if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-store' });
+    if (m.t === null) m.t = shareNow();   // the picture starts playing
+    res.write(buf);
+    // The reader (the player, or ffmpeg for a converted picture) takes a burst in its own time, so nothing is held
+    // back here. But one that has stopped reading altogether must not fill the memory.
+    if (res.writableLength > 256 * 1024 * 1024) res.destroy();
+  };
+  // last: when its latest visit ended. t / played: the playback clock (see shareReserve; t is null until the first data).
+  // depth: seconds its last burst held.
+  const m = { url, ua: q.get('ua') || '', res, last: -Infinity, t: null, played: 0, depth: 0, errors: 0, visits: 0, stitch: tsStitcher(write) };
+  g.members.add(m);
+  res.on('error', () => {});
+  res.on('close', () => { g.members.delete(m); if (g.cur === m && g.ac) g.ac.abort(); });
+  if (isNew) shareRun(key, g);
+}
+
+// How the sharing is going (no addresses): for the tests, and for finding out why a picture freezes or skips.
+function handleSharedStats(req, res) {
+  sendJson(res, 200, [...shareGroups].map(([group, g]) => ({
+    group,
+    connects: g.connects,
+    pictures: [...g.members].map((m) => {
+      const s = m.stitch.st;
+      return { reserve: shareReserve(m), burst: m.depth, visits: m.visits, errors: m.errors, joins: s.joins, rough: s.rough, missing: s.missing };
+    }),
+  })));
+}
+
 /* ------------------------------------------------- ffmpeg compatibility mode */
 /*
  * Browsers can't decode everything (HEVC video, DTS / AC-3 audio, odd containers).
@@ -806,6 +1015,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/fetch' && req.method === 'GET') await handleFetch(req, res, url.searchParams);
     else if (url.pathname === '/api/epg' && req.method === 'POST') await handleEpg(req, res);
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
+    else if (url.pathname === '/api/shared' && req.method === 'GET') handleShared(req, res, url.searchParams);
+    else if (url.pathname === '/api/shared/stats' && req.method === 'GET') handleSharedStats(req, res);
     else if (url.pathname === '/api/tracks' && req.method === 'GET') handleTracks(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/tmdb' && req.method === 'GET') await handleTmdb(req, res, url.searchParams);
@@ -837,4 +1048,4 @@ function start(port) {
   });
 }
 
-module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8, parseAudioStreams, tsSniffer };   // the last five for test/
+module.exports = { start, server, setLocalFiles, DEFAULT_UA, parseXmltvTime, xmltvParser, rewriteM3u8, parseAudioStreams, tsSniffer, tsStitcher, shareTuning };   // the last seven for test/
