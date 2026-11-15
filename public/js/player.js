@@ -8,7 +8,7 @@ let tsPlayer = null;
 let playToken = 0;
 
 /* Compatibility mode: the server converts the stream with ffmpeg (H.264 + AAC, fragmented MP4). */
-const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '', audio: null };   // audio: which sound track (audio.js)
+const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '', audio: null, apid: null };   // audio / apid: which sound track (audio.js)
 let checkTimer = 0;
 let tcSeeking = false;
 // A restart of the same video (another sound track, subtitles read from the stream): go on exactly here, not at the
@@ -19,7 +19,7 @@ const compatMode = () => LS.get('tuner.compat', 'auto'); // 'auto' | 'always' | 
 function tcUrl(ch, p, start) {
   tcState.sid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const subs = tcState.subs && tcState.subs.length ? `&subs=${tcState.subs.join(',')}&sid=${tcState.sid}` : '';
-  const audio = tcState.audio != null ? `&audio=${tcState.audio}` : '';
+  const audio = tcState.apid != null ? `&apid=${tcState.apid}` : tcState.audio != null ? `&audio=${tcState.audio}` : '';
   return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
 }
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
@@ -206,7 +206,8 @@ async function startPlayback(ch, kinds, token, lastError) {
     resumeAt = null;
     if (vod) await subAutoPlan(ch, info);   // Settings › Subtitles › turn on automatically (once per video)
     if (token !== playToken) return;
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: audTcTrack(ch, info) });
+    const track = audTcTrack(ch, info);
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: track ? track.n : null, apid: track ? track.pid : null });
     const at = await tcStartAt(ch, p, start);
     if (token !== playToken) return;
     tcState.offset = at;

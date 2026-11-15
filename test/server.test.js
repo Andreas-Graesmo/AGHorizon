@@ -122,3 +122,52 @@ test('sound tracks are read from ffmpeg’s stream list', () => {
   // Windows line ends
   assert.strictEqual(parseAudioStreams('  Stream #0:1(fin): Audio: aac, 44100 Hz, stereo, fltp\r\n')[0].lang, 'fin');
 });
+
+// an MPEG-TS packet carrying one PSI section (the parser doesn't check CRCs: zeros will do)
+function tsPacket(pid, section) {
+  const p = Buffer.alloc(188, 0xff);
+  p[0] = 0x47; p[1] = 0x40 | (pid >> 8); p[2] = pid & 0xff; p[3] = 0x10; p[4] = 0;
+  Buffer.from(section).copy(p, 5);
+  return p;
+}
+function psiSection(tableId, body) {   // body: everything after section_length, without the CRC
+  const len = body.length + 4;
+  return [tableId, 0xb0 | (len >> 8), len & 0xff, ...body, 0, 0, 0, 0];
+}
+const es = (type, pid, descriptors = []) => [type, 0xe0 | (pid >> 8), pid & 0xff, 0xf0 | (descriptors.length >> 8), descriptors.length & 0xff, ...descriptors];
+const lang = (code, audioType = 0) => [0x0a, 4, ...Buffer.from(code), audioType];
+
+test('the sound tracks of a live MPEG-TS stream are read as it passes through', () => {
+  const { tsSniffer } = require('../server');
+  const pat = psiSection(0x00, [0, 1, 0xc1, 0, 0, /* program 1 -> PMT 0x1000 */ 0, 1, 0xf0, 0x00]);
+  const pmt = psiSection(0x02, [0, 1, 0xc1, 0, 0, 0xe1, 0x00, 0xf0, 0x00,
+    ...es(0x24, 0x100),                                         // HEVC video
+    ...es(0x0f, 0x101, lang('nor')),                            // AAC, Norwegian
+    ...es(0x06, 0x102, [...lang('eng'), 0x6a, 1, 0]),           // AC-3 (private data + AC-3 descriptor)
+    ...es(0x06, 0x103, [...lang('swe', 3), 0x05, 4, ...Buffer.from('EAC3')]),   // E-AC-3, audio description
+    ...es(0x06, 0x104, [...lang('nor'), 0x59, 8, 0, 0, 0, 0, 0, 0, 0, 0]),      // DVB subtitles: not sound
+    ...es(0x81, 0x105),                                         // ATSC AC-3, no language
+  ]);
+  // starts in the middle of a packet, and arrives in small pieces
+  const stream = Buffer.concat([Buffer.from([1, 2, 3, 0x47, 9]), tsPacket(0x11, []), tsPacket(0, pat), tsPacket(0x100, []), tsPacket(0x1000, pmt), tsPacket(0x100, [])]);
+  const sniff = tsSniffer();
+  let out = null;
+  for (let i = 0; i < stream.length && out === null; i += 50) out = sniff(stream.subarray(i, i + 50));
+  assert.strictEqual(out.video, 'hevc');
+  assert.deepStrictEqual(out.audios.map((a) => [a.index, a.pid, a.lang, a.codec, a.descr]), [
+    [0, 0x101, 'nor', 'aac', false],
+    [1, 0x102, 'eng', 'ac3', false],
+    [2, 0x103, 'swe', 'eac3', true],
+    [3, 0x105, 'und', 'ac3', false],
+  ]);
+  // not MPEG-TS (an MP4, say): gives up after a little
+  const mp4 = tsSniffer();
+  let r = null;
+  for (let i = 0; i < 100 && r === null; i++) r = mp4(Buffer.alloc(4096, 0x20));
+  assert.strictEqual(r, false);
+});
+
+test('HLS playlists pass the channel’s address on to their segments', () => {
+  const out = rewriteM3u8('#EXTM3U\nseg1.ts\n', 'http://x/live/a.m3u8', '', 'http://x/live/a.m3u8');
+  assert.match(out, /\/api\/stream\?url=http%3A%2F%2Fx%2Flive%2Fseg1\.ts&src=http%3A%2F%2Fx%2Flive%2Fa\.m3u8/);
+});

@@ -4,8 +4,10 @@
 
    Where the tracks come from:
    - movies and episodes: the check made before playing (/api/probe) lists them;
-   - live channels: hls.js, when the stream has a playlist per language; otherwise, for channels marked MULTI-AUDIO
-     and the like, the first click checks the stream (hanging up for that: many providers allow one connection).
+   - live channels: hls.js, when the stream has a playlist per language; otherwise the app's own server, which reads
+     the track list (MPEG-TS programme map) as the stream passes through it to the player (/api/tracks): known before
+     the picture shows, without a second connection. Only when that finds nothing (not MPEG-TS) does a click on a
+     channel marked MULTI-AUDIO and the like check the stream with ffmpeg, hanging up for that.
    How it switches:
    - a track the player decodes, in a file it plays itself: Chromium switches (the AudioVideoTracks feature);
    - hls.js: its own audio playlists;
@@ -72,9 +74,35 @@ function audReset(c) {
 function audSetTracks(c, info) {
   if (!c || aud.uid !== c.uid || !info || !Array.isArray(info.audios) || !info.audios.length) return;
   if (aud.source === 'hls') return;
-  aud.tracks = info.audios.map((a) => ({ n: a.index, lang: a.lang, codec: a.codec, channels: a.channels, title: a.title, def: a.default, comment: a.comment, descr: a.descr }));
+  // pid: the track's MPEG-TS id, which compatibility mode picks it by (exact); not for HLS, where ffmpeg has no ids
+  aud.tracks = info.audios.map((a) => ({ n: a.index, pid: info.hls ? null : a.pid != null ? a.pid : null, lang: a.lang, codec: a.codec, channels: a.channels, title: a.title, def: a.default, comment: a.comment, descr: a.descr }));
   aud.source = 'probe';
   audRender();
+}
+// A live channel's tracks, as the app's server read them from the stream (this time, or earlier this session).
+// They also tell compatibility mode the video codec, so it needn't check the stream itself before starting.
+async function audFromProxy(c) {
+  let j = null;
+  try { const r = await fetch(`/api/tracks?url=${enc(c.url)}`); if (r.ok) j = await r.json(); } catch { /* not known */ }
+  if (!j || !Array.isArray(j.audios) || state.current !== c || aud.uid !== c.uid) return false;
+  const hit = probeCache.get(c.url);
+  if (!hit || !hit.audios) probeCache.set(c.url, { video: j.video || (hit && hit.video) || '', audio: (j.audios[0] || {}).codec || '', audios: j.audios, hls: !!j.hls, duration: 0, subs: [] });
+  aud.checked = true;
+  audSetTracks(c, probeCache.get(c.url));
+  if (aud.source === 'probe' && aud.cur == null) {   // what plays now: the stream's first, or what compatibility mode took
+    const t = tcState.on ? aud.tracks.find((x) => (tcState.apid != null ? x.pid === tcState.apid : x.n === (tcState.audio || 0))) : null;
+    aud.cur = t ? t.n : audDefault();
+  }
+  audRender();
+  return true;
+}
+// a wish (Settings, or picked before) that the stream's own track isn't: switch, once per channel change
+function audAutoSwitch(c) {
+  if (aud.want != null || aud.source !== 'probe' || aud.tracks.length < 2 || !state.ffmpeg || compatMode() === 'off') return;
+  const n = audPick(c);
+  if (n == null || n === aud.cur) return;
+  aud.want = n;
+  startPlayback(c, audPlan(c, playPlan(c)), playToken);
 }
 
 /* ── playing ── */
@@ -85,32 +113,38 @@ function audPlan(c, plan) {
   const n = audPick(c);
   return n != null && n !== audDefault() ? ['tc'] : plan;
 }
-// Called by playChannel: for a marked channel with a wish (Settings, or picked before), know its tracks first
-// (a quick check that hangs up again), so it starts in the right language.
+// Called by playChannel. A live channel with a wish (Settings, or picked before) whose tracks the server already
+// read this session starts in that language at once; otherwise it starts as it is, and audAutoSwitch follows as
+// soon as the tracks are read (a second or so in).
 async function audStart(c, token) {
   let plan = playPlan(c);
-  if (audTagged(c) && state.ffmpeg && compatMode() !== 'off' && (audRemembered(c) || audPrefLang())) {
-    let info = probeCache.get(c.url);
-    if (!info || !info.audios) {
-      teardown();   // the previous channel's connection first
-      showOverlay('loading', 'Tuning in…');
-      info = await probeOf(c, playlistById(c.pid), { quick: true });
-      if (token !== playToken) return;
-    }
-    aud.checked = true;
-    audSetTracks(c, info);
+  if (!isVod(c) && (audRemembered(c) || audPrefLang()) && await audFromProxy(c)) {
+    if (token !== playToken) return;
     plan = audPlan(c, plan);
-    if (aud.source === 'probe') aud.cur = audPick(c);   // what it starts with (compatibility mode sets it again)
+    if (plan.length === 1 && plan[0] === 'tc') aud.want = audPick(c);
   }
-  startPlayback(c, plan, token);
+  if (token === playToken) startPlayback(c, plan, token);
 }
-// compatibility mode is starting: the track it should take (null: the stream's first)
+// compatibility mode is starting: the track it should take ({ n, pid }, or null: the stream's first)
 function audTcTrack(c, info) {
   audSetTracks(c, info);
   aud.cur = aud.source === 'probe' ? audPick(c) : null;
   audRender();
-  return aud.source === 'probe' ? aud.cur : null;
+  const t = audTrack(aud.cur);
+  return t ? { n: t.n, pid: t.pid != null ? t.pid : null } : null;
 }
+// a live channel started playing: its tracks have just passed through the server (HLS: maybe a segment later)
+video.addEventListener('playing', () => {
+  const c = state.current;
+  if (!c || isVod(c) || aud.source || aud.uid !== c.uid) return;
+  const token = playToken;
+  const look = async (left) => {
+    if (token !== playToken || aud.source) return;
+    if (await audFromProxy(c)) { if (token === playToken) audAutoSwitch(c); return; }
+    if (left) setTimeout(() => look(left - 1), 1500);
+  };
+  look(2);
+});
 // Can a file play directly with the track wanted? (Its video is checked by the caller.)
 const audNativeOk = (c) => { const t = audTrack(audPick(c)); return !t || audNativeCodec(t.codec); };
 
@@ -213,10 +247,14 @@ async function audCheck(anchor) {
   else toast(aud.tracks.length ? 'This channel has one language' : 'Couldn’t find the languages in this channel');
 }
 
-function audMenu(anchor) {
+async function audMenu(anchor) {
   const c = state.current;
   if (!c) return;
-  if (aud.tracks.length < 2) { if (audTagged(c) && !aud.checked) audCheck(anchor); return; }
+  if (aud.tracks.length < 2 && !isVod(c) && !aud.checked && await audFromProxy(c) && aud.tracks.length < 2) {
+    toast('This channel has one language');
+    return;
+  }
+  if (aud.tracks.length < 2) { if (audTagged(c) && !aud.checked) audCheck(anchor); return; }   // not MPEG-TS: ask ffmpeg
   const mark = (on) => (on ? '✓  ' : '      ');
   showMenu(anchor, [{ heading: true, label: 'Sound' }, ...aud.tracks.map((t) => ({ label: mark(t.n === aud.cur) + audName(t), run: () => audSelect(t.n) }))]);
 }
