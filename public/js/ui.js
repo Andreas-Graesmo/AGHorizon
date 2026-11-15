@@ -323,7 +323,6 @@ function rail(title, items, { route, tagFn, subFn } = {}) {
   return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3>${route ? `<button class="link" data-act="goto" data-route="${route}">See all</button>` : ''}</div>
     <div class="rail-row">${items.map((it) => cardHtml(it, { tag: tagFn && tagFn(it), sub: subFn && subFn(it) })).join('')}</div></section>`;
 }
-const KIND_TAG = { live: 'Live', movie: 'Movie', series: 'Series', episode: 'Series' };
 
 /* ─────────────────────────────────── dashboard ─────────────────────────────────── */
 const hero = { i: 0, items: [], paused: false, timer: 0, settled: false };   // settled: the first real hero has been shown
@@ -341,10 +340,11 @@ function chanCard(it) {
 }
 const RAIL_MAX = 20;
 // list: everything that belongs in the rail; it shows the first RAIL_MAX, and "See all" only when there are more
-function dashRail(title, list, toHtml, route) {
+// sec: the section of that page "See all" scrolls to
+function dashRail(title, list, toHtml, route, sec = '') {
   if (!list.length) return '';
   const more = route && list.length > RAIL_MAX;
-  return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}">See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
+  return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}"${sec ? ` data-sec="${sec}"` : ''}>See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
 }
 // TMDB's trending titles: asked once per session and again when 6 hours old (the server keeps them that long).
 // null until they arrive, or when this build has no TMDB key: the dashboard then shows "Recently added".
@@ -478,9 +478,9 @@ function renderDashboard() {
   const added = [...allCachedItems().movie].sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, RAIL_MAX);
   const card = (s) => cardHtml(s, { tag: '' });
   const body = dashRail('Live now on your favorites', favLive, chanCard, 'favorites')
-    + dashRail('Recently watched live TV', recLive, chanCard, 'recent')
-    + dashRail('Recently watched series', recSeries, card, 'recent')
-    + dashRail('Recently watched movies', recMovies, card, 'recent')
+    + dashRail('Recently watched live TV', recLive, chanCard, 'recent', 'recent-live')
+    + dashRail('Recently watched series', recSeries, card, 'recent', 'recent-series')
+    + dashRail('Recently watched movies', recMovies, card, 'recent', 'recent-movies')
     + (trending.length >= 5 ? dashRail('Trending this week', trending.map((x) => x.it), (s) => cardHtml(s))   // too few found: the newest instead
       : dashRail('Recently added', added, (s) => cardHtml(s)));
   el.innerHTML = `<div class="dash">
@@ -668,15 +668,36 @@ function renderFavorites() {
   el.innerHTML = `<div class="page">${pageHead('Favorites', `${all.length} items from ${new Set(all.map((s) => s.pid)).size} playlist(s)`)}${sec('Live TV', live)}${sec('Movies', movies)}${sec('Series', series)}</div>`;
 }
 
+// Recently viewed in three parts, each newest first: live channels, series (one card per show: the episode
+// watched last) and movies – like the dashboard's rails.
+const showKey = (r) => r.seriesUid || r.uid;
+function recentParts() {
+  const list = state.recent.filter((r) => playlistById(r.pid));
+  const shows = new Set();
+  return {
+    live: list.filter((r) => kindOf(r) === 'live'),
+    series: list.filter((r) => (r.kind === 'episode' || r.kind === 'series') && !shows.has(showKey(r)) && shows.add(showKey(r))),
+    movies: list.filter((r) => r.kind === 'movie'),
+  };
+}
 function renderRecent() {
   const el = $('#v-recent');
-  const list = state.recent.filter((r) => playlistById(r.pid));
-  if (!list.length) { el.innerHTML = `<div class="page">${pageHead('Recently viewed')}${emptyState('i-clock', 'Nothing here yet', 'What you watch shows up here, newest first.')}</div>`; return; }
-  el.innerHTML = `<div class="page">${pageHead('Recently viewed', `${list.length} items`, '<button class="btn ghost" data-act="hist-clear">Clear history</button>')}
-    <div class="grid">${list.map((s) => cardHtml(s, { tag: KIND_TAG[s.kind], sub: ago(s.ts), remove: 'Remove from history' })).join('')}</div></div>`;
+  const { live, series, movies } = recentParts();
+  if (!live.length && !series.length && !movies.length) { el.innerHTML = `<div class="page">${pageHead('Recently viewed')}${emptyState('i-clock', 'Nothing here yet', 'What you watch shows up here, newest first.')}</div>`; return; }
+  const count = (n, one, many) => (n ? `${n} ${n === 1 ? one : many}` : '');
+  const pad = (n) => String(n || 0).padStart(2, '0');
+  const sub = (s) => (s.kind === 'episode' ? `S${pad(s.season || 1)}E${pad(s.num)} · ${ago(s.ts)}` : ago(s.ts));
+  const sec = (id, title, list, remove) => (list.length ? `<section class="sec" id="recent-${id}"><h3>${title} <span class="muted">${list.length}</span></h3>
+    <div class="grid">${list.map((s) => cardHtml(s, { sub: sub(s), remove })).join('')}</div></section>` : '');
+  el.innerHTML = `<div class="page">${pageHead('Recently viewed', [count(live.length, 'channel', 'channels'), count(series.length, 'series', 'series'), count(movies.length, 'movie', 'movies')].filter(Boolean).join(' · '),
+    '<button class="btn ghost" data-act="hist-clear">Clear history</button>')}
+    ${sec('live', 'Live TV', live, 'Remove from history')}${sec('series', 'Series', series, 'Remove this series from history')}${sec('movies', 'Movies', movies, 'Remove from history')}</div>`;
 }
+// a series card stands for all the episodes of that show
 function removeRecent(uid) {
-  state.recent = state.recent.filter((r) => r.uid !== uid);
+  const r = state.recent.find((x) => x.uid === uid);
+  const show = r && (r.kind === 'episode' || r.kind === 'series') ? showKey(r) : null;
+  state.recent = state.recent.filter((x) => (show ? showKey(x) !== show : x.uid !== uid));
   LS.set('tuner.recent', state.recent);
   renderRoute(ui.route);
 }
@@ -918,7 +939,12 @@ $('#views').addEventListener('click', (e) => {
     case 'src-status': src.status = a.dataset.val; renderPlaylists(); break;
     case 'src-cleanup': cleanupSources(); break;
     case 'src-sort': showMenu(a, SRC_SORTS.map(([k, l]) => ({ label: (k === src.sort ? '✓  ' : '      ') + l, run: () => { src.sort = k; LS.set('tuner.srcSort', k); renderPlaylists(); } }))); break;
-    case 'goto': go(a.dataset.route); break;
+    case 'goto': {
+      go(a.dataset.route);
+      const to = a.dataset.sec && document.getElementById(a.dataset.sec);
+      if (to) to.scrollIntoView({ block: 'start' });
+      break;
+    }
     case 'hero-open': { const c = hero.items[hero.i % hero.items.length]; if (c) openItem(c.it); break; }
     case 'hero-pause': hero.paused = !hero.paused; renderHero(); break;
     case 'hero-go': hero.i = Number(a.dataset.k); renderHero(); break;
