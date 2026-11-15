@@ -687,12 +687,30 @@ function renderRecent() {
   const count = (n, one, many) => (n ? `${n} ${n === 1 ? one : many}` : '');
   const pad = (n) => String(n || 0).padStart(2, '0');
   const sub = (s) => (s.kind === 'episode' ? `S${pad(s.season || 1)}E${pad(s.num)} · ${ago(s.ts)}` : ago(s.ts));
-  const sec = (id, title, list, remove) => (list.length ? `<section class="sec" id="recent-${id}"><h3>${title} <span class="muted">${list.length}</span></h3>
+  const sec = (id, title, list, remove) => (list.length ? `<section class="sec" id="recent-${id}"><div class="sec-head"><h3>${title} <span class="muted">${list.length}</span></h3>
+    <button class="link" data-act="recent-more" data-sec="${id}" hidden></button></div>
     <div class="grid">${list.map((s) => cardHtml(s, { sub: sub(s), remove })).join('')}</div></section>` : '');
   el.innerHTML = `<div class="page">${pageHead('Recently viewed', [count(live.length, 'channel', 'channels'), count(series.length, 'series', 'series'), count(movies.length, 'movie', 'movies')].filter(Boolean).join(' · '),
     '<button class="btn ghost" data-act="hist-clear">Clear history</button>')}
     ${sec('live', 'Live TV', live, 'Remove from history')}${sec('series', 'Series', series, 'Remove this series from history')}${sec('movies', 'Movies', movies, 'Remove from history')}</div>`;
+  recentClamp();
 }
+// Two rows per part, with Show all / Show less. How many cards make two rows depends on the window's width.
+const recentOpen = new Set();   // parts shown in full
+function recentClamp() {
+  for (const sec of $$('#v-recent .sec')) {
+    const id = sec.id.replace('recent-', '');
+    const grid = sec.querySelector('.grid');
+    const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+    const cards = [...grid.children];
+    const open = recentOpen.has(id);
+    cards.forEach((c, i) => { c.hidden = !open && i >= cols * 2; });
+    const b = sec.querySelector('[data-act="recent-more"]');
+    b.hidden = cards.length <= cols * 2;
+    b.textContent = open ? 'Show less' : `Show all ${cards.length}`;
+  }
+}
+new ResizeObserver(() => { if (ui.route === 'recent') recentClamp(); }).observe($('#v-recent'));
 // a series card stands for all the episodes of that show
 function removeRecent(uid) {
   const r = state.recent.find((x) => x.uid === uid);
@@ -939,7 +957,15 @@ $('#views').addEventListener('click', (e) => {
     case 'src-status': src.status = a.dataset.val; renderPlaylists(); break;
     case 'src-cleanup': cleanupSources(); break;
     case 'src-sort': showMenu(a, SRC_SORTS.map(([k, l]) => ({ label: (k === src.sort ? '✓  ' : '      ') + l, run: () => { src.sort = k; LS.set('tuner.srcSort', k); renderPlaylists(); } }))); break;
+    case 'recent-more': {
+      const id = a.dataset.sec;
+      if (recentOpen.has(id)) recentOpen.delete(id); else recentOpen.add(id);
+      recentClamp();
+      if (!recentOpen.has(id)) document.getElementById('recent-' + id).scrollIntoView({ block: 'nearest' });   // back to its heading
+      break;
+    }
     case 'goto': {
+      if (/^recent-/.test(a.dataset.sec || '')) recentOpen.add(a.dataset.sec.slice(7));   // "See all": that part in full
       go(a.dataset.route);
       const to = a.dataset.sec && document.getElementById(a.dataset.sec);
       if (to) to.scrollIntoView({ block: 'start' });
