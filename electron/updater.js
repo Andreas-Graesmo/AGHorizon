@@ -57,6 +57,17 @@ function init() {
   }));
   ipcMain.handle('updater:status', () => status);
   ipcMain.handle('updater:open', () => { if (releasesUrl) shell.openExternal(releasesUrl); });
+  // "What's new?": the notes of one version, as the Markdown written on its GitHub release.
+  ipcMain.handle('updater:notes', async (_e, version) => {
+    const none = { error: 'No release notes were found for this version.' };
+    if (!releasesUrl || !/^\d+\.\d+\.\d+$/.test(String(version))) return none;
+    try {
+      const r = await fetch(`https://api.github.com/repos/${pub.owner}/${pub.repo}/releases/tags/v${version}`, { headers: { 'User-Agent': 'AG-Horizon', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000) });
+      if (r.status === 404) return none;   // not published (a draft), or started from source with a version that was never released
+      if (!r.ok) throw new Error('GitHub answered ' + r.status);
+      return { body: String((await r.json()).body || '') };
+    } catch (e) { return { error: 'Couldn’t fetch the release notes: ' + String((e && e.message) || e).slice(0, 120) }; }
+  });
 
   if (reason()) {
     // No in-app installer here (started from source, or no repository configured): still tell the person whether a newer release exists.
