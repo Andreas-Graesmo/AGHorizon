@@ -345,7 +345,7 @@ function renderDownloads() {
   el.innerHTML = `<div class="page narrow dl-page">${pageHead('Downloads', sub, acts)}
     ${!all.length ? emptyState('i-download', 'No downloads yet', 'Use the download button on a movie or an episode – or “Download season” on a series – to watch it later without internet. Downloads are normal video files you can also open in VLC.') : ''}
     ${failed.length ? sec('Needs attention', failed.length, `<div class="dl-list">${failed.map((d) => dlRowHtml(d)).join('')}</div>`) : ''}
-    ${moving.length ? sec('Downloading', moving.length, `${dl.held ? '<p class="muted dl-note">Paused while you watch, so playback gets the connection. Change this in Settings › Downloads.</p>' : ''}<div class="dl-list dl-queue">${moving.map((d) => dlRowHtml(d, { drag: moving.length > 1 })).join('')}</div>`) : ''}
+    ${moving.length ? sec('Downloading', moving.length, `${dl.held ? setLinks('<p class="muted dl-note">Paused while you watch, so playback gets the connection. Change this in Settings › Downloads.</p>') : ''}<div class="dl-list dl-queue">${moving.map((d) => dlRowHtml(d, { drag: moving.length > 1 })).join('')}</div>`) : ''}
     ${movies.length ? sec('Movies', movies.length, `<div class="grid">${movies.map((d) => cardHtml(dlCard(d.uid, d), { fav: false })).join('')}</div>`) : ''}
     ${showList.length ? sec('Series', showList.length, `<div class="grid">${showList.map((eps) => cardHtml(dlCard(eps[0].seriesUid, eps[0]), { fav: false, sub: dlEpisodesLabel(eps) })).join('')}</div>`) : ''}
   </div>`;
@@ -418,7 +418,7 @@ $('#v-downloads').addEventListener('error', (e) => { if (e.target.tagName === 'I
 
 /* Settings › Downloads (desktop only) */
 function dlSettingsCard() {
-  return `<section class="set-card"><h3>Downloads</h3>
+  return `<section class="set-card">
     <div class="set-row"><div><b>Download folder</b><p class="muted dl-path">${esc(dl.folder)}</p></div><div class="upd-btns"><button class="btn ghost" data-act="dl-open">Open</button> <button class="btn ghost" data-act="dl-folder">Change</button></div></div>
     <div class="set-row"><div><b>Pause downloads while I watch</b><p class="muted">Most providers allow only one or two connections at a time. Downloads wait while a stream plays and continue afterwards. Downloaded titles don’t count.</p></div><label class="switch"><input type="checkbox" data-set="dlPause"${dl.pauseWhileWatching ? ' checked' : ''}><span></span></label></div>
   </section>`;

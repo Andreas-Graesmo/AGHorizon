@@ -94,7 +94,7 @@ class MvTile {
     el.className = 'mv-ov' + (kind === 'error' ? ' error' : '');
     el.innerHTML = kind === 'loading'
       ? `<div><div class="spinner"></div><p>${esc(title)}</p></div>`
-      : `<div><strong>${esc(title)}</strong><p>${esc(text || '')}</p><button class="btn small" data-a="retry">Try again</button></div>`;
+      : `<div><strong>${esc(title)}</strong><p>${setLinks(esc(text || ''))}</p><button class="btn small" data-a="retry">Try again</button></div>`;
   }
   hideOv() { this.ovEl.hidden = true; }
 
@@ -428,9 +428,9 @@ function mvWarn() {
   const sharing = mv.slots.slice(0, mvCount()).filter((c) => c && mvShareUrl(c)).length >= 2;
   el.hidden = !many && !sharing;
   el.className = 'mv-note';
-  el.textContent = many
+  el.innerHTML = many
     ? 'Every picture uses one connection from your provider, and many providers allow only 1–2. If a picture won’t start, remove one.'
-    : 'Pictures from the same playlist take turns on one provider connection (experimental, Settings › Playback), so they play about 20 seconds behind.';
+    : setLinks('Pictures from the same playlist take turns on one provider connection (experimental, Settings › Playback), so they play about 20 seconds behind.');
 }
 
 /* ── names that follow the guide ── */

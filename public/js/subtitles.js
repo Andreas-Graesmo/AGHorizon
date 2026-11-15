@@ -1,14 +1,14 @@
 'use strict';
 /* AG Horizon – subtitles in the player: the CC button, the subtitles saved with a download (built-in ones are
    saved as .srt next to the file the first time), OpenSubtitles.com, and fetching subtitles for new downloads.
-   They turn on by themselves only in the language set in Settings › Subtitles, or the one last picked for that
+   They turn on by themselves only in the language set in Settings › Languages, or the one last picked for that
    series or movie. The server side is subtitles.js. */
 
 const SUB_KEY = 'tuner.subs';   // { username, password, langs: "no, en" } – the OpenSubtitles API key is the app's own (server)
 const subCfg = () => LS.get(SUB_KEY, {});
 const subOs = () => { const c = subCfg(); return { username: c.username || '', password: c.password || '' }; };
 const subHasAccount = () => { const o = subOs(); return !!(state.opensubtitles && o.username && o.password); };
-const subNoAccount = () => toast(state.opensubtitles ? 'Add your OpenSubtitles account in Settings › Subtitles' : 'OpenSubtitles isn’t available in this build of AG Horizon', 'err');
+const subNoAccount = () => toast(state.opensubtitles ? 'Add your OpenSubtitles account in Settings › Languages' : 'OpenSubtitles isn’t available in this build of AG Horizon', 'err');
 
 // "nob" / "nor" / "nb" -> "no", "swe" -> "sv": one code per language, to compare built-in tracks with wishes
 function subNorm(code) {
@@ -112,7 +112,7 @@ function subUseStream(c, n, key, label) {
   subPollStream();
 }
 /* ─────────────────────────────── turning on by themselves ─────────────────────────────── */
-// Settings › Subtitles › "Turn on automatically", or what was picked for this series / movie before ('off' too).
+// Settings › Languages › "Turn on subtitles automatically", or what was picked for this series / movie before ('off' too).
 const SUB_PICKS = 'tuner.subPick';
 const subPickKey = (c) => (c.kind === 'episode' && c.seriesUid) || c.uid;
 function subRemember(c, lang) {
@@ -161,7 +161,7 @@ function subAutoRow() {
 video.addEventListener('loadedmetadata', () => { if (sub.cues.length && sub.offset !== (tcState.on && tcState.vod ? tcState.offset : 0)) subApply(); });
 
 /* ─────────────────────────────── how they look ─────────────────────────────── */
-// Settings › Subtitles › Appearance. Font, colours and outline go on ::cue; size and position on the cue
+// Settings › Languages › Subtitles › Appearance. Font, colours and outline go on ::cue; size and position on the cue
 // container (size on ::cue leaves gaps between lines). Size and position follow the player's height, like
 // Chromium's own default (5 % of the video height).
 const SUB_LOOK_KEY = 'tuner.subLook';
@@ -365,7 +365,7 @@ function subOnDownloaded(d) {
   });
 }
 
-/* ─────────────────────────────── Settings › Subtitles ─────────────────────────────── */
+/* ─────────────────────────────── Settings › Languages › Subtitles ─────────────────────────────── */
 function subSettingsCard() {
   const c = subCfg();
   const field = (key, label, type = 'text', ph = '') => `<label class="sub-field"><span>${label}</span><input type="${type}" data-sub="${key}" value="${esc(c[key] || '')}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false"></label>`;
@@ -373,8 +373,7 @@ function subSettingsCard() {
     ? `<div class="sub-fields">${field('username', 'Username')}${field('password', 'Password', 'password')}
       <div class="sub-test"><button class="btn ghost" data-act="sub-test">Test login</button><span class="muted" id="subTest"></span></div></div>`
     : '<p class="muted sub-na">OpenSubtitles isn’t available in this build of AG Horizon. Subtitles inside downloaded files still work.</p>';
-  return `<section class="set-card"><h3>Subtitles</h3>
-    ${subAutoRow()}
+  return `<section class="set-card">
     ${subLookRows()}
     <div class="set-row"><div><b>OpenSubtitles account</b><p class="muted">Finds subtitles for streams, and for downloads that don't include your language. Create a free account on opensubtitles.com and log in with it here. Free accounts can download a limited number of subtitles per day. Stored only on this computer.</p></div></div>
     ${os}
@@ -382,7 +381,7 @@ function subSettingsCard() {
   </section>`;
 }
 
-// The appearance controls, shared by Settings › Subtitles and the Appearance panel in the player.
+// The appearance controls, shared by Settings › Languages and the Appearance panel in the player.
 function subLookControls() {
   const l = subLook();
   const seg = (key, opts) => `<div class="seg">${opts.map(([v, label]) => `<button data-sublook="${key}" data-val="${v}" class="${l[key] === v ? 'on' : ''}">${label}</button>`).join('')}</div>`;

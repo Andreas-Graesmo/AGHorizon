@@ -272,7 +272,7 @@ function syncSettingsCard() {
   const mode = cfg.on ? cfg.mode : (sy.mode || cfg.mode || (canCloud ? 'cloud' : 'folder'));
   const intro = `<div class="set-row"><div><b>Sync between your computers</b><p class="muted">Keeps Recently viewed, where you stopped and your favorites the same on every computer you use.
     It’s encrypted on this computer with your sync code before it leaves, so nobody else can read it, not even AG Horizon. Playlists and logins aren’t synced: add the same playlist on each computer.</p></div></div>`;
-  if (!canCloud && !canFolder) return `<section class="set-card"><h3>Sync</h3>${intro}<p class="muted sub-na">Sync isn’t available in this build.</p></section>`;
+  if (!canCloud && !canFolder) return `<section class="set-card" id="syncCard">${intro}<p class="muted sub-na">Sync isn’t available in this build.</p></section>`;
   const msg = sy.msg ? `<p class="err-text sync-msg">${esc(sy.msg)}</p>` : '';
   const busy = sy.working ? ' disabled' : '';
 
@@ -290,7 +290,7 @@ function syncSettingsCard() {
           <div class="upd-btns"><button class="btn" data-sync="join-go"${busy}>Connect</button><button class="btn ghost" data-sync="join-cancel">Cancel</button></div></div>`
       : `<div class="set-row"><div><b>Turn on sync</b><p class="muted">Create a code on the first computer, then enter it on the others.</p>${msg}</div>
           <div class="upd-btns"><button class="btn" data-sync="create"${ready ? busy : ' disabled'}>Create a sync code</button><button class="btn ghost" data-sync="join"${ready ? busy : ' disabled'}>I have a code</button></div></div>`;
-    return `<section class="set-card"><h3>Sync</h3>${intro}${modeRow}${folderRow}${start}</section>`;
+    return `<section class="set-card" id="syncCard">${intro}${modeRow}${folderRow}${start}</section>`;
   }
 
   const last = cfg.last;
@@ -303,7 +303,7 @@ function syncSettingsCard() {
   const devRows = devs.map(([id, d]) => `<li class="sync-dev"><svg class="ic"><use href="#i-monitor"/></svg><div><b>${esc(d.name)}</b>${id === cfg.device ? ' <span class="pill">This computer</span>' : ''}
       <small class="muted">${d.bad ? 'Its data can’t be read with this code' : 'Synced ' + ago(Date.parse(d.at))}</small></div>
       ${id === cfg.device ? '' : `<button class="icon-btn danger" data-sync="remove-dev" data-id="${esc(id)}" title="Remove" aria-label="Remove ${esc(d.name)}"><svg class="ic"><use href="#i-x"/></svg></button>`}</li>`).join('');
-  return `<section class="set-card"><h3>Sync</h3>${intro}
+  return `<section class="set-card" id="syncCard">${intro}
     <div class="set-row"><div><b>${last && !last.ok ? 'Sync has a problem' : 'Sync is on'}</b><p class="muted">${status}</p>${msg}</div><div class="upd-btns"><button class="btn ghost" data-sync="now"${sy.busy ? ' disabled' : ''}>${sy.busy ? 'Syncing…' : 'Sync now'}</button></div></div>
     <div class="set-row"><div><b>Sync code</b><p class="muted">Enter it on your other computers: Settings › Sync › I have a code. Anyone with this code can read what you sync, so keep it like a password.</p>
       <code class="sync-code${shown ? '' : ' hidden-code'}">${code}</code></div>
@@ -317,13 +317,9 @@ function syncSettingsCard() {
 // redraw just this card (not the whole page: a code being typed elsewhere stays put)
 function syncRenderCard() {
   if (ui.route !== 'settings') return;
-  const el = document.getElementById('set-sync');
+  const el = document.getElementById('syncCard');
   if (!el || (document.activeElement && document.activeElement.id === 'syncCodeIn')) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = syncSettingsCard();
-  const card = tmp.firstElementChild;
-  card.id = 'set-sync';
-  el.replaceWith(card);
+  el.outerHTML = syncSettingsCard();   // stays inside its Settings pane, shown or hidden with it
 }
 
 async function syncAction(fn) {

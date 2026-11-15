@@ -76,6 +76,7 @@
     <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.300M8 11h6"/></symbol>
     <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></symbol>
+    <symbol id="i-article" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 8h9M7.5 12h9M7.5 16h5"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3"/></symbol>
@@ -285,7 +286,7 @@
         <span id="pcLiveTime" class="pc-time pc-livetime">0:00</span>
         <button class="p-btn" id="pcMute" title="Mute (M)" aria-label="Mute"><svg class="ic"><use href="#i-volume"/></svg></button>
         <input id="pcVol" class="pc-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
-        <button class="p-btn" id="pAudio" title="Sound language" aria-label="Sound language" hidden><svg class="ic"><use href="#i-audio"/></svg></button>
+        <button class="p-btn" id="pAudio" title="Audio language" aria-label="Audio language" hidden><svg class="ic"><use href="#i-audio"/></svg></button>
         <button class="p-btn" id="pSubs" title="Subtitles" aria-label="Subtitles" hidden><svg class="ic"><use href="#i-cc"/></svg></button>
         <span class="grow"></span>
         <button class="p-btn pc-skip" id="pcBack" title="Back 15 seconds" aria-label="Back 15 seconds"><svg class="ic"><use href="#i-back15"/></svg></button>
@@ -418,6 +419,11 @@
 <dialog id="helpDlg">
   <div class="dlg-head"><h2>Keyboard shortcuts</h2><button id="helpClose" class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
   <div class="help-body" id="helpBody"></div>
+</dialog>
+<!-- ───────────── what's new (release notes) ───────────── -->
+<dialog id="newsDlg" aria-labelledby="newsTitle">
+  <div class="dlg-head"><h2 id="newsTitle"></h2><button id="newsClose" class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <div class="news-body" id="newsBody"></div>
 </dialog>
 
 <script src="js/core.js"></script>
