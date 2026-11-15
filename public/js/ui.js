@@ -687,7 +687,7 @@ function renderRecent() {
   const count = (n, one, many) => (n ? `${n} ${n === 1 ? one : many}` : '');
   const pad = (n) => String(n || 0).padStart(2, '0');
   const sub = (s) => (s.kind === 'episode' ? `S${pad(s.season || 1)}E${pad(s.num)} · ${ago(s.ts)}` : ago(s.ts));
-  const sec = (id, title, list, remove) => (list.length ? `<section class="sec" id="recent-${id}"><div class="sec-head"><h3>${title} <span class="muted">${list.length}</span></h3>
+  const sec = (id, title, list, remove) => (list.length ? `<section class="sec" id="recent-${id}"><div class="rail-head"><h3>${title}</h3><span class="pill">${list.length}</span>
     <button class="link" data-act="recent-more" data-sec="${id}" hidden></button></div>
     <div class="grid">${list.map((s) => cardHtml(s, { sub: sub(s), remove })).join('')}</div></section>` : '');
   el.innerHTML = `<div class="page">${pageHead('Recently viewed', [count(live.length, 'channel', 'channels'), count(series.length, 'series', 'series'), count(movies.length, 'movie', 'movies')].filter(Boolean).join(' · '),
@@ -707,7 +707,7 @@ function recentClamp() {
     cards.forEach((c, i) => { c.hidden = !open && i >= cols * 2; });
     const b = sec.querySelector('[data-act="recent-more"]');
     b.hidden = cards.length <= cols * 2;
-    b.textContent = open ? 'Show less' : `Show all ${cards.length}`;
+    b.textContent = open ? 'Show less ‹' : 'Show all ›';   // like the dashboard's "See all ›"
   }
 }
 new ResizeObserver(() => { if (ui.route === 'recent') recentClamp(); }).observe($('#v-recent'));
