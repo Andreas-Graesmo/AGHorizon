@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('tunerDesktop', {
   focusWindow: () => ipcRenderer.invoke('tuner:focus'),
   appInfo: () => ipcRenderer.invoke('app:info'),
   ready: () => ipcRenderer.send('app:ready'),   // the first view is drawn: main.js shows the window
+  titleBar: (colors) => ipcRenderer.send('app:titlebar', colors),   // the theme's colours for the window buttons
   updater: {
     status: () => ipcRenderer.invoke('updater:status'),
     check: () => ipcRenderer.invoke('updater:check'),

@@ -97,6 +97,9 @@ function applyTheme() {
   root.style.setProperty('--accent', a);
   root.style.setProperty('--accent-ink', ink);
   $('#btnTheme use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  // the system's window buttons sit on the top bar: give them its colours
+  const bar = getComputedStyle($('#topbar'));
+  if (window.tunerDesktop.titleBar) window.tunerDesktop.titleBar({ color: bar.backgroundColor, symbolColor: bar.color, height: $('#topbar').offsetHeight });
 }
 prefersDark.addEventListener('change', applyTheme);
 $('#btnTheme').addEventListener('click', () => {
@@ -157,7 +160,6 @@ $('#nav').addEventListener('click', (e) => {
 $('#btnBrand').addEventListener('click', () => go('dashboard'));
 $('#btnAdd').addEventListener('click', () => openPlaylistDialog());
 $('#btnKeys').addEventListener('click', openHelp);
-$('#btnMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 
 function curPid() {
   if (ws.pid && playlistById(ws.pid)) return ws.pid;
@@ -234,7 +236,6 @@ function playerTitle(c) {
 function updatePlayerChrome() {
   const c = state.current;
   const open = mirrorOpen();
-  $('#btnMirror').classList.toggle('on', open);
   $('#pMirror').classList.toggle('on', open);
   if (!c) { document.title = 'AG Horizon'; return; }
   $('#pMulti').hidden = isVod(c);

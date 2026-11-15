@@ -39,7 +39,7 @@ Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 
 ## Mirror picture (show the video on two displays)
 
-Click the **Mirror picture** button on the player (the two-screens icon, also in the top bar).
+Click the **Mirror picture** button on the player (the two-screens icon).
 
 - With one display, a small window opens that stays on top of other windows (drag it by the picture, resize it by the edges) while the player keeps playing in the app.
 - With more displays, pick that floating window or a monitor or TV. On a monitor, a borderless window opens full screen there, showing exactly what the main player shows.
