@@ -578,7 +578,7 @@ function tvInit() {
   window.addEventListener('keydown', tvKeydown, true);
   window.addEventListener('keyup', tvKeyup, true);
   document.addEventListener('focusin', (e) => { tvRemember(e.target); tvLiveFocus(e.target); });
-  document.addEventListener('focusout', (e) => { if (tvIsText(e.target)) tvKeyboard(false); });
+  document.addEventListener('focusout', (e) => { if (tvIsText(e.target) && !tvIsText(e.relatedTarget)) tvKeyboard(false); });   // "Next" on the keyboard goes on typing in the next box
   tvManualKeyboards();
   new MutationObserver(tvEnsureSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'disabled'] });
   // A WebView older than the pages need (their colours and layout) shows them broken: say what to do about it.
