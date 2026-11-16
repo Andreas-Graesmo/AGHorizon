@@ -31,6 +31,16 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      # The server runs on Node.js 18 inside the app: its tests must pass there too
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 18
+      - name: Test on Node.js 18
+        run: |
+          npm ci --ignore-scripts
+          node --test
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       # Node.js for Android (about 100 MB) is downloaded by the build once; keep it between builds
       - name: Cache Node.js for Android
         uses: actions/cache@v4
