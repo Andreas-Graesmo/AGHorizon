@@ -63,3 +63,16 @@ jobs:
         run: npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Test versions (a tag with a dash, e.g. v2.5.0-beta.1) go out by themselves once all three systems are built:
+  # published as a GitHub pre-release, which only apps on the Test update channel pick up.
+  # Stable versions stay drafts until you press Publish.
+  publish-test:
+    needs: build
+    if: contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the draft as a pre-release
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
