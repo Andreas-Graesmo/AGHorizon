@@ -63,3 +63,59 @@ jobs:
         run: npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The Android TV app: one APK, added to the same draft release once the desktop builds have made it.
+  android-tv:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Cache Node.js for Android
+        uses: actions/cache@v4
+        with:
+          path: android/app/libnode
+          key: libnode-${{ hashFiles('android/app/build.gradle.kts') }}
+          restore-keys: libnode-
+      - name: Add the API keys (repository secrets OPENSUBTITLES_API_KEY and TMDB_API_KEY)
+        run: |
+          node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '', tmdbApiKey: process.env.TMDB_API_KEY || '' }))"
+        env:
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      # Android only installs a new version over the old one when both are signed with the same key: yours, kept as
+      # repository secrets (RELEASING.md, "Android TV"). Without it the build is signed with a throwaway key.
+      - name: The signing key (repository secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS)
+        id: key
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+            echo "file=$RUNNER_TEMP/release.keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Android TV::No signing key is set up (see RELEASING.md), so this APK is signed with a throwaway key: it installs, but the next version can't be installed over it without uninstalling first."
+          fi
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      - name: Build
+        working-directory: android
+        run: ./gradlew assembleRelease --stacktrace
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ steps.key.outputs.file }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Add the APK to the draft release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          apk="AG-Horizon-TV-$version.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft --title "$version" --notes ""
+          gh release upload "$GITHUB_REF_NAME" "$apk" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

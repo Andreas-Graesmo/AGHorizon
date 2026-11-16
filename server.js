@@ -92,7 +92,11 @@ async function handleFetch(req, res, q) {
 /* ------------------------------------------------------------------- EPG */
 
 // keep identical to normName in public/js/core.js, which sends the channel names the guide is matched by
-const normName = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+// A Node.js built without the Unicode tables (the one inside the Android TV app) can't make this expression: there
+// unicode-ln.js does the same with a table of its own.
+const normName = (() => {
+  try { const other = new RegExp('[^\\p{L}\\p{N}]+', 'gu'); return (s) => String(s).toLowerCase().replace(other, ''); } catch { return require('./unicode-ln').normName; }
+})();
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 function decode(s) {
