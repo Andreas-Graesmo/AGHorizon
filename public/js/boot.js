@@ -69,5 +69,5 @@ async function startupReload() {
 }
 startupReload();
 initUpdates();
-initDownloads();
+if (TV) tvInit(); else initDownloads();   // a TV has the remote instead (tv.js), and downloads nothing
 

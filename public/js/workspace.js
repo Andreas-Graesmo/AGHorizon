@@ -224,7 +224,7 @@ function renderLive() {
   $('#liveGridCount').textContent = ws.loading ? '' : `${ws.chans.length.toLocaleString()} items`;
   renderLiveStatus();
   syncTopSearch();
-  if (grid) renderLiveGrid(); else { renderLiveList(true); renderLiveInfo(); }
+  if (grid) renderLiveGrid(); else { renderLiveList(true); renderLiveInfo(); if (TV) tvLiveCard(); }
   layoutPlayer();
 }
 
@@ -341,7 +341,7 @@ function renderLiveInfo() {
   if (ws.mode !== 'live' || ws.lv !== 'channels' || $('#wsLive').dataset.view !== 'list') return;
   const tl = $('#tl');
   tl.classList.toggle('collapsed', !ws.tl);
-  const ch = state.current && !isVod(state.current) ? state.current : null;
+  const ch = TV ? tvLiveChannel() : state.current && !isVod(state.current) ? state.current : null;   // a TV: the channel the focus is on
   const [la, lb] = dayLabels();
   $('#tlDayA').textContent = la; $('#tlDayB').textContent = lb;
   const t = Date.now();
@@ -527,6 +527,7 @@ gRows.addEventListener('click', (e) => {
     ${prog[3] ? `<p>${esc(prog[3])}</p>` : ''}`;
   $('#gWatch').onclick = () => playChannel(ch);
   renderGuide();
+  if (TV) tvGuidePicked(pEl);   // the focus goes to "Watch", and Back returns it to the programme
 });
 $('#gPrev').onclick = () => { guideState.t0 -= 4 * 3600e3; renderGuide(); };
 $('#gNext').onclick = () => { guideState.t0 += 4 * 3600e3; renderGuide(); };
@@ -892,9 +893,10 @@ function uiEpgUpdated() {
   clearTimeout(epgTimer);
   epgTimer = setTimeout(() => {
     mvRefreshNames();
+    if (TV) tvBanner();
     if (ui.route !== 'ws' || ws.mode !== 'live') return;
     renderLiveStatus();
-    if (ws.lv === 'channels') { renderLiveList(); renderLiveInfo(); } else { guideState.dirty = true; renderGuide(); }
+    if (ws.lv === 'channels') { renderLiveList(); renderLiveInfo(); if (TV) tvLiveCard(); } else { guideState.dirty = true; renderGuide(); }
   }, 60);
 }
 

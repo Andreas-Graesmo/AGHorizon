@@ -387,7 +387,8 @@ function playChannel(ch) {
   const token = ++playToken;
   pushRecent(ch);
   if (!isVod(ch)) loadShortEpg(ch);
-  audStart(ch, token);   // startPlayback, after checking a marked live channel's languages when there's a wish
+  if (TV) tvPlay(ch, token);   // the TV's own player, full screen (tv.js)
+  else audStart(ch, token);   // startPlayback, after checking a marked live channel's languages when there's a wish
   mirrorTitle(ch.name);
   uiPlayback(true);
   dlSyncWatching();
@@ -396,6 +397,7 @@ function playChannel(ch) {
 
 function stopPlayback() {
   playToken++;
+  if (TV) tvStop();
   teardown();
   hideOverlay();
   subOff();

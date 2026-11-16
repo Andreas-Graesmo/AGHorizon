@@ -870,7 +870,7 @@ function initUpdates() {
     renderUpdBanner();
     if (ui.route === 'settings') renderSettings();
     // a Mac only checks for a newer version: it downloads it from GitHub
-    if ((info.updater || info.platform === 'darwin') && LS.get('tuner.autoUpdate', true)) setTimeout(() => d.updater.check(), 6000);
+    if ((info.updater || info.platform === 'darwin' || TV) && LS.get('tuner.autoUpdate', true)) setTimeout(() => d.updater.check(), 6000);
   }).catch(() => {});
 }
 
@@ -890,21 +890,22 @@ function renderSettings() {
       <div class="set-row"><div><b>Theme</b><p class="muted">Dark, light, or follow your system.</p></div>${seg('theme', theme, [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']])}</div>
       <div class="set-row"><div><b>Dark palette</b><p class="muted">Used when the app is dark. OLED black suits OLED screens and dark rooms.</p></div>${palSeg('dark')}</div>
       <div class="set-row"><div><b>Light palette</b><p class="muted">Used when the app is light. Channel logos get a dark backdrop so white logos stay visible.</p></div>${palSeg('light')}</div>
+      ${TV ? `<div class="set-row"><div><b>Size</b><p class="muted">How large everything is on the TV.</p></div>${seg('tvWidth', String(tv.info.width || 1120), [['1280', 'Small'], ['1120', 'Normal'], ['960', 'Large']])}</div>` : ''}
       <div class="set-row"><div><b>Accent colour</b></div><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch${accent === k ? ' on' : ''}" data-set="accent" data-val="${k}" style="--c:${c}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
     </section>`)}
-    ${pane('Playback', 'i-play', 'Compatibility mode, the next episode, Multi view and mirroring.', `<section class="set-card">
-      <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted.'}</p></div>
+    ${pane('Playback', 'i-play', TV ? 'What happens when an episode ends.' : 'Compatibility mode, the next episode, Multi view and mirroring.', `<section class="set-card">
+      ${TV ? '' : `<div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted.'}</p></div>
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
+      <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>`}
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
-      <div class="set-row"><div><b>Share one connection in Multi view (experimental)</b><p class="muted">Pictures from the same Xtream playlist take turns on one provider connection instead of using one each, and play about 20 seconds behind. It needs a provider that sends a burst of video on every new connection. Switch it off if pictures freeze or skip.</p></div><label class="switch"><input type="checkbox" data-set="mvShare"${LS.get('tuner.mvShare', false) ? ' checked' : ''}><span></span></label></div>
-      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>
+      ${TV ? '' : `<div class="set-row"><div><b>Share one connection in Multi view (experimental)</b><p class="muted">Pictures from the same Xtream playlist take turns on one provider connection instead of using one each, and play about 20 seconds behind. It needs a provider that sends a burst of video on every new connection. Switch it off if pictures freeze or skip.</p></div><label class="switch"><input type="checkbox" data-set="mvShare"${LS.get('tuner.mvShare', false) ? ' checked' : ''}><span></span></label></div>
+      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>`}
     </section>`)}
     ${pane('Languages', 'i-audio', 'Audio and subtitle languages, and how subtitles look.', `<h3 class="set-sec">Preferred languages</h3>
       <section class="set-card">${audSettingsRow()}${subAutoRow()}</section>
-      <h3 class="set-sec">Subtitles</h3>
-      ${subSettingsCard()}`)}
-    ${pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
+      ${TV ? '' : `<h3 class="set-sec">Subtitles</h3>
+      ${subSettingsCard()}`}`)}
+    ${TV ? '' : pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
     ${pane('Sync', 'i-cloud', 'The same history, progress and favorites on all your computers.', syncSettingsCard())}
     ${pane('About & updates', 'i-info', 'Your version, and what is new.', updatesCard() + tmdbCredit())}
     <p class="muted center">AG Horizon · use only with services you’re entitled to watch.</p></div></div>`;
@@ -948,6 +949,7 @@ document.addEventListener('click', (e) => {
 $('#v-settings').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-set]');
   if (!b) return;
+  if (b.dataset.set === 'tvWidth') { tv.info.width = Number(b.dataset.val); window.AGHorizonTV.setWidth(tv.info.width); renderSettings(); return; }   // the TV shell lays the pages out again
   LS.set('tuner.' + b.dataset.set, b.dataset.val);
   applyTheme();
   if (b.dataset.set === 'mirrorSound') applyMirrorSound();
