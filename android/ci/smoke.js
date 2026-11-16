@@ -233,9 +233,11 @@ async function main() {
   const saved = await ev(`JSON.stringify(state.progress['smoke:' + ws.items[0].id] || null)`);
   check('where the movie was is remembered', saved && JSON.parse(saved) && JSON.parse(saved).t > 55, saved);
   check('the button now says Resume', /Resume/.test(await ev(`document.querySelector('#wsDetail [data-act="play"]').textContent`)));
+  const before = await focus();
+  await ev(`window.__keys = []; 0`);
   await key('DPAD_CENTER', 500);
-  st = await until('the movie again', async () => { const s = await player(); return s.playing ? s : null; });
-  check('it resumes where it was', st && st.pos > 50, st ? `at ${st.pos} s` : '');
+  st = await until('the movie again', async () => { const s = await player(); return s.playing ? s : null; }, 30000);
+  check('it resumes where it was', st && st.pos > 50, st ? `at ${st.pos} s` : `focus before: ${before}; now: ${await focus()}; keys: ${await ev(`window.__keys.join(' ')`)}; page focused: ${await ev(`document.hasFocus()`)}; playing: ${await ev(`state.current && state.current.name`)}; player: ${JSON.stringify(await player())}`);
   await key('BACK', 1200);
   if ((await player()).visible) await key('BACK', 1200);
 

@@ -17,6 +17,7 @@ const tv = {
   focusUid: '',      // Live TV: the channel the focus is on (its programme shows next to the list)
   guideFrom: '',     // TV guide: the programme that was picked (Back from "Watch" returns to it)
   num: '', numTimer: 0,   // a channel number being typed while a channel plays
+  playFrom: '',      // what had the focus when the player was started (it gets it back when the player closes)
   timer: 0,
 };
 
@@ -128,6 +129,7 @@ function tvSubLang(ch) {
 
 // playChannel() ends up here instead of in this page's player.
 function tvPlay(ch, token) {
+  if (!state.current || !tv.playFrom) tv.playFrom = document.activeElement && document.activeElement !== document.body ? tvSig(document.activeElement) : '';
   const p = playlistById(ch.pid);
   const vod = isVod(ch);
   const resume = progressOf(ch.uid);
@@ -152,6 +154,17 @@ function tvSaveProgress(c, ev) {
   const t = ev.pos || 0, d = ev.dur;
   state.progress[c.uid] = { t, d, w: d - t < Math.min(90, d * 0.04) ? 1 : 0, ts: Date.now() };
   persistProgress();
+}
+
+// The player is gone and the page has drawn itself again (Resume instead of Play, a progress bar): the focus goes
+// back to what was pressed to start it.
+function tvBackFromPlayer() {
+  const from = tv.playFrom;
+  tv.playFrom = '';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const scope = tvScope();
+    if (!tvFocus(from ? tvFind(scope, from) : null)) tvEnsureFocus(true);
+  }));
 }
 
 // Another episode of the series that plays: the next one (+1) or the one before (-1). False when there is none.
@@ -190,10 +203,11 @@ if (TV) {
         tvSaveProgress(c, ev);
         stopPlayback();
         if (!isVod(c)) tvToChannel(c.uid);   // back in the list on the channel that was on, also after changing channel in the player
+        else tvBackFromPlayer();
         break;
       case 'ended':
         if (isVod(c)) { state.progress[c.uid] = { t: 0, d: ev.dur || 0, w: 1, ts: Date.now() }; persistProgress(); }
-        if (!(LS.get('tuner.autonext', true) && tvEpisode(c, 1))) stopPlayback();
+        if (!(LS.get('tuner.autonext', true) && tvEpisode(c, 1))) { stopPlayback(); tvBackFromPlayer(); }
         break;
       case 'zap': zap(ev.delta > 0 ? 1 : -1); break;
       case 'skip': tvEpisode(c, ev.delta > 0 ? 1 : -1); break;
