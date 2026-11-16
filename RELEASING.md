@@ -74,7 +74,8 @@ When the test version is good, release it to everyone with `npm run release:mino
 - Test versions must use `beta` after the dash (the scripts do this). The updater ignores other names.
 - Switching from Test back to Stable never downgrades: someone on 2.5.0-beta.1 stays there until a stable version newer than it is released.
 - A pre-release never becomes GitHub's "latest release", so the download link in the README still goes to the latest stable version.
-- If the publish step fails (for example because one of the builds failed), the test version stays a draft. Fix it and push a new test version, or tick **Set as a pre-release** and publish the draft by hand.
+- If a build fails, the test version stays a draft, but it is still marked as a pre-release. Fix it and push a new test version, or publish the draft by hand: it stays a pre-release, so only the Test channel sees it.
+- **Never publish a test version as a normal release** (the *Set as a pre-release* box must stay ticked). GitHub then makes it the "latest release", and every installed app, on either channel, is offered it. If it happens: edit the release, tick *Set as a pre-release*, and update it.
 
 ## 5. What users see
 
