@@ -984,3 +984,5 @@ html.tv .player-slot { background: var(--bg); overflow: hidden; }
 .tv-ch p { margin: 0; max-width: 62ch; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .tv-ch-next { font-size: 14px; }
 .tv-ch-hint { margin-top: auto; font-size: 12px; }
+html.tv .cats-col { width: 242px; }   /* the narrower columns of a small window crowd the icons in their heading */
+html.tv .chan-col { width: 300px; }
