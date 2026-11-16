@@ -156,7 +156,8 @@ function tvTitles(ch) {
   if (isVod(ch)) return { title: ch.name, sub: ch.year || '' };
   const { now, next } = nowNext(ch);
   const sub = now ? `${fmtTime(now[0])} – ${fmtTime(now[1])}   ${now[2] || ''}${next && next[2] ? `   ·   Next: ${next[2]}` : ''}` : '';
-  return { title: ch.name, sub };
+  // now / next as [start ms, end ms, title]: the player's controls draw the programme's progress from them
+  return { title: ch.name, sub, num: String(ch.num || ''), now: now ? now.slice(0, 3) : null, next: next ? next.slice(0, 3) : null };
 }
 
 // The language subtitles go on in by themselves (Settings › Languages), or what was picked for this title.
@@ -177,6 +178,7 @@ function tvPlay(ch, token) {
   window.AGHorizonTV.play(JSON.stringify({
     token, url: ch.url, ua: (p && p.ua) || '', live: !vod, start,
     audioLang: audRemembered(ch) || audPrefLang(), subLang: tvSubLang(ch),
+    accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),   // the player's controls follow the theme
     ...tvTitles(ch),
   }));
 }

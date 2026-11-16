@@ -1,9 +1,11 @@
 package app.aghorizon.tv
 
 import android.app.Activity
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.format.DateFormat
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -28,6 +30,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.PlayerView
 import org.json.JSONObject
+import java.util.Date
 
 /**
  * The TV's player: ExoPlayer, full screen over the app's pages, with its own controls for the remote.
@@ -65,9 +68,12 @@ class PlayerController(
 
     private val playerView: PlayerView = layer.findViewById(R.id.playerView)
     private val banner: View = layer.findViewById(R.id.banner)
+    private val bannerNum: TextView = layer.findViewById(R.id.bannerNum)
     private val bannerTitle: TextView = layer.findViewById(R.id.bannerTitle)
     private val bannerSub: TextView = layer.findViewById(R.id.bannerSub)
+    private val clock: TextView = layer.findViewById(R.id.clock)
     private val message: TextView = layer.findViewById(R.id.playerMessage)
+    private val controls = PlayerControls(layer) { onControls(it) }
     private val handler = Handler(Looper.getMainLooper())
     private var player: ExoPlayer? = null
     private var req: Request? = null
@@ -82,17 +88,31 @@ class PlayerController(
     private var lastError = ""
 
     init {
-        playerView.controllerShowTimeoutMs = 4000
-        playerView.setShowPreviousButton(false)
-        playerView.setShowNextButton(false)
         playerView.isFocusable = true
         playerView.isFocusableInTouchMode = true
         playerView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        // the title shows with the controls (and for a moment when something starts, see showBanner)
-        playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
-            if (v == View.VISIBLE) banner.visibility = View.VISIBLE
-            else if (SystemClock.uptimeMillis() >= bannerUntil) banner.visibility = View.GONE
-        })
+    }
+
+    /** The title shows with the controls (and for a moment when something starts, see showBanner). */
+    private fun onControls(shown: Boolean) {
+        if (shown) {
+            showClock()
+            banner.visibility = View.VISIBLE
+        } else {
+            if (SystemClock.uptimeMillis() >= bannerUntil) banner.visibility = View.GONE
+            playerView.requestFocus()
+        }
+        titleLines(shown)
+        updateSnapshot()
+    }
+
+    /** With the controls, one line as in the desktop player ("Marshals · S01E01 · …"); a channel's programme is in
+     *  the controls then, so it isn't repeated up here. Without them, the title and the line under it. */
+    private fun titleLines(shown: Boolean) {
+        val (title, sub) = bannerText
+        val vod = req?.live == false
+        bannerTitle.text = if (shown && vod && sub.isNotEmpty() && !title.contains(sub)) "$title  ·  $sub" else title   // not "Film (2024) · 2024"
+        bannerSub.visibility = if (sub.isEmpty() || shown) View.GONE else View.VISIBLE
     }
 
     /* ───────────────────────────── what the pages ask for ───────────────────────────── */
@@ -105,19 +125,21 @@ class PlayerController(
             onVisibility(true)
         }
         playerView.requestFocus()
-        setBanner(r.title, r.sub)
-        playerView.setShowRewindButton(!r.live)
-        playerView.setShowFastForwardButton(!r.live)
-        playerView.hideController()
+        controls.reset(r.live, json.optString("accent"))
+        controls.programme(json.optJSONArray("now"), json.optJSONArray("next"))
+        setBanner(r.title, r.sub, json.optString("num"))
         showBanner()
+        // the sound and subtitles picked for the last title are not for this one
+        player?.let { p -> p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverrides().build() }
         start(r, r.startMs)
     }
 
-    /** New text for the title lines (the programme changed, the guide arrived). */
+    /** New text for the title lines (the programme changed, the guide arrived, a channel number is typed). */
     fun banner(json: JSONObject) {
         val r = req ?: return
         if (json.optInt("token") != r.token) return
-        setBanner(json.optString("title", r.title), json.optString("sub"))
+        if (json.has("now")) controls.programme(json.optJSONArray("now"), json.optJSONArray("next"))
+        setBanner(json.optString("title", r.title), json.optString("sub"), json.optString("num"))
         if (json.optBoolean("show")) showBanner()
     }
 
@@ -127,6 +149,8 @@ class PlayerController(
         if (r != null && reason == "closed") emit(event("closed", r))
         req = null
         handler.removeCallbacksAndMessages(null)
+        controls.hide()
+        controls.player = null
         player?.let { p ->
             playerView.player = null
             p.removeListener(listener)
@@ -153,13 +177,14 @@ class PlayerController(
             .setEnableDecoderFallback(true)
         val audio = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build()
         val p = ExoPlayer.Builder(activity, renderers)
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(30_000)
+            .setSeekBackIncrementMs(15_000)   // 15 s both ways, as the desktop player (and its ⟲15 ⟳15 buttons)
+            .setSeekForwardIncrementMs(15_000)
             .setAudioAttributes(audio, true)
             .build()
         p.addListener(listener)
         p.addAnalyticsListener(analytics)
         playerView.player = p
+        controls.player = p
         player = p
         return p
     }
@@ -199,6 +224,8 @@ class PlayerController(
         override fun run() {
             val r = req ?: return
             val p = player ?: return
+            controls.update()
+            if (banner.visibility == View.VISIBLE) showClock()
             updateSnapshot()
             if (++n % 5 == 0 && !r.live && p.isPlaying) emit(event("time", r))
             handler.postDelayed(this, TICK_MS)
@@ -230,7 +257,7 @@ class PlayerController(
                 .put("video", p.videoFormat?.let { "${it.sampleMimeType} ${it.codecs ?: ""}".trim() } ?: "")
                 .put("audio", p.audioFormat?.let { "${it.sampleMimeType} ${it.language ?: ""}".trim() } ?: "")
                 .put("videoDecoder", videoDecoder).put("audioDecoder", audioDecoder)
-                .put("controls", playerView.isControllerFullyVisible)
+                .put("controls", controls.visible)
                 .put("banner", banner.visibility == View.VISIBLE)
                 .put("error", lastError)
         }
@@ -251,11 +278,13 @@ class PlayerController(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             layer.keepScreenOn = isPlaying
+            controls.update()
             val r = req ?: return
             if (!isPlaying && !r.live && player?.playbackState == Player.STATE_READY) emit(event("time", r))   // paused: remember where
         }
 
         override fun onTracksChanged(tracks: Tracks) {
+            controls.tracksChanged()
             // "Turn on subtitles automatically" is for what you don't understand: not when it is spoken in that language
             val r = req ?: return
             if (r.subsChecked || r.subLang.isBlank() || tracks.isEmpty) return
@@ -340,17 +369,25 @@ class PlayerController(
 
     /* ───────────────────────────────── title lines ───────────────────────────────── */
 
-    private fun setBanner(title: String, sub: String) {
-        bannerTitle.text = title
+    private var bannerText = "" to ""
+
+    private fun setBanner(title: String, sub: String, num: String) {
+        bannerText = title to sub
         bannerSub.text = sub
-        bannerSub.visibility = if (sub.isEmpty()) View.GONE else View.VISIBLE
+        titleLines(controls.visible)
+        bannerNum.text = num
+        bannerNum.visibility = if (num.isEmpty()) View.GONE else View.VISIBLE
+        bannerNum.background = GradientDrawable().apply { setColor(controls.accent); cornerRadius = 8 * activity.resources.displayMetrics.density }
     }
 
+    private fun showClock() { clock.text = DateFormat.getTimeFormat(activity).format(Date()) }
+
     private var bannerUntil = 0L   // the title stays up until then, also when the controls go away meanwhile
-    private val hideBanner = Runnable { if (!playerView.isControllerFullyVisible) banner.visibility = View.GONE }
+    private val hideBanner = Runnable { if (!controls.visible) banner.visibility = View.GONE }
 
     private fun showBanner() {
         bannerUntil = SystemClock.uptimeMillis() + BANNER_MS
+        showClock()
         banner.visibility = View.VISIBLE
         handler.removeCallbacks(hideBanner)
         handler.postDelayed(hideBanner, BANNER_MS)
@@ -359,21 +396,28 @@ class PlayerController(
     /* ───────────────────────────────── the remote ───────────────────────────────── */
 
     /**
-     * Keys while the player is up, before the player's own controls see them. True: handled here.
-     * With the controls hidden: ▲ ▼ change channel (live), ◀ ▶ skip back and forward (movies, episodes), OK brings
-     * up the controls. Back hides the controls, then leaves the player.
+     * Keys while the player is up, before the views see them. True: handled here.
+     * With the controls hidden: ▲ ▼ change channel (live), ◀ ▶ skip back and forward and bring up the controls
+     * (movies, episodes), OK brings up the controls. With them up, the arrows move between them (PlayerControls).
+     * Back closes the list of tracks, then hides the controls, then leaves the player.
      */
     fun onKey(e: KeyEvent): Boolean {
         val r = req ?: run { if (e.action == KeyEvent.ACTION_UP && isBack(e.keyCode)) close(); return true }
         val down = e.action == KeyEvent.ACTION_DOWN
         val first = down && e.repeatCount == 0
-        val controls = playerView.isControllerFullyVisible
+        val shown = controls.visible
         val failed = message.visibility == View.VISIBLE
+        val p = player
         when (e.keyCode) {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
-                if (e.action == KeyEvent.ACTION_UP) { if (controls && !failed) playerView.hideController() else close() }
+                if (e.action == KeyEvent.ACTION_UP && !controls.back()) { if (shown && !failed) controls.hide() else close() }
                 return true
             }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (first && p != null && !failed) { if (p.isPlaying) p.pause() else p.play(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_PLAY -> { if (first && !failed) { p?.play(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> { if (first && !failed) { p?.pause(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (down && !r.live && !failed) { p?.seekForward(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { if (down && !r.live && !failed) { p?.seekBack(); controls.show() }; return true }
             KeyEvent.KEYCODE_MEDIA_STOP -> { if (first) close(); return true }
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> { if (first) other(r, 1); return true }
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> { if (first) other(r, -1); return true }
@@ -385,13 +429,19 @@ class PlayerController(
             }
         }
         if (failed) return true   // nothing to steer: Back leaves
-        if (controls) return false
-        val p = player ?: return false
+        if (shown) {
+            if (controls.onKey(e)) return true
+            // ▲ ▼ still change channel with the controls up (the buttons are one row), but not in the list of tracks
+            val zap = r.live && !controls.picking && (e.keyCode == KeyEvent.KEYCODE_DPAD_UP || e.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+            if (!zap) return false
+        }
+        if (p == null) return false
         when (e.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> if (r.live) { if (first) other(r, -1); return true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> if (r.live) { if (first) other(r, 1); return true }
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (!r.live) { if (down) { p.seekBack(); showBanner() }; return true }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (!r.live) { if (down) { p.seekForward(); showBanner() }; return true }
+            KeyEvent.KEYCODE_DPAD_UP -> { if (first) { if (r.live) other(r, -1) else controls.show() }; return true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { if (first) { if (r.live) other(r, 1) else controls.show() }; return true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> if (!r.live) { if (down) { p.seekBack(); controls.show() }; return true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> if (!r.live) { if (down) { p.seekForward(); controls.show() }; return true }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { if (first) controls.show(); return true }
         }
         return false
     }
