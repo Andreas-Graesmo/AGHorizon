@@ -54,13 +54,35 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
    (This runs `npm version`, which edits `package.json`, commits, tags `vX.Y.Z`, and then pushes both. Your working folder must have no uncommitted changes.)
 3. Wait for the Action to finish, open **Releases**, edit the new draft's notes and **Publish release**.
 
-## 4. What users see
+## 4. Test versions (the Test update channel)
+
+There are two update channels, chosen in the app under **Settings → About & updates → Update channel**:
+
+- **Stable** (the default) gets only releases you published with **Publish release**.
+- **Test** also gets *test versions*, for example `2.5.0-beta.1`. Use it on your own computer, or give it to a few people who want to try things first.
+
+To put out a test version, commit and push your changes as usual, then:
+```
+npm run release:test-minor   # 2.4.0 → 2.5.0-beta.0   (start testing the next feature version)
+npm run release:test         # 2.5.0-beta.0 → 2.5.0-beta.1   (the next test build of it)
+npm run release:test-major   # 2.4.0 → 3.0.0-beta.0
+```
+The Action builds it the same way, and when all three systems are done it **publishes it as a GitHub pre-release by itself**, so you don't have to publish it. (Writing notes on the release is still nice: "What's new?" shows them.) Apps on the Test channel see it; apps on Stable don't.
+
+When the test version is good, release it to everyone with `npm run release:minor` (2.5.0-beta.1 → 2.5.0; use `release:patch` for a 2.4.1-beta.x) and publish the draft as usual. Apps on Test get that too, since 2.5.0 is newer than 2.5.0-beta.1.
+
+- Test versions must use `beta` after the dash (the scripts do this). The updater ignores other names.
+- Switching from Test back to Stable never downgrades: someone on 2.5.0-beta.1 stays there until a stable version newer than it is released.
+- A pre-release never becomes GitHub's "latest release", so the download link in the README still goes to the latest stable version.
+- If the publish step fails (for example because one of the builds failed), the test version stays a draft. Fix it and push a new test version, or tick **Set as a pre-release** and publish the draft by hand.
+
+## 5. What users see
 
 - On start (if "Check for updates when the app starts" is on) and whenever they press **Check for updates**, the app asks GitHub for the newest published release.
 - If one is newer it shows "Version X is available" → **Download update** (progress bar) → **Restart and install**. A downloaded update also installs by itself the next time the app is closed.
 - Their playlists, favorites and history are kept; they live in the user data folder, not in the installation.
 
-## 5. Things to know
+## 6. Things to know
 
 - **Windows** – works out of the box. Because the installer isn't code-signed, Windows SmartScreen shows "Windows protected your PC" on the *first* install: **More info → Run anyway**. Updates installed from inside the app don't show this again.
 - **Linux** – the `.AppImage` updates itself. Make it executable once (`chmod +x`).
@@ -74,7 +96,7 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
 - To test an installer on your own machine without GitHub: `npm install`, then `npm run dist` (output in `dist/`).
 - If the Action fails, open the failed run in the **Actions** tab and read the red step. The most common causes are forgetting step 3 (workflow permissions) or a tag that doesn't match the version in `package.json`.
 
-## 6. Android TV
+## 7. Android TV
 
 The same tag also builds the Android TV app: the *Release* workflow's `android-tv` job adds `AG-Horizon-TV-<version>.apk` to the draft release, next to the desktop installers. It takes its version from `package.json`, like they do. Nothing more to do per release.
 
@@ -100,7 +122,7 @@ Android only installs a new version over the old one when both are signed with t
 
 ### What people do
 
-They download the `.apk` from the release and install it on the TV once (the README's *Android TV* section says how). From then on the app updates itself much like the desktop app: on start it asks GitHub whether a newer published release has an `.apk`, shows a banner, downloads the file and opens Android's installer with it, which asks the person before it installs. The first time, Android also asks whether AG Horizon may install apps. If any of that doesn't work on a TV, the app says where the file is so it can be installed by hand.
+They download the `.apk` from the release and install it on the TV once (the README's *Android TV* section says how). From then on the app updates itself much like the desktop app: on start it asks GitHub whether a newer published release (on the Test channel: also a pre-release, see section 4) has an `.apk`, shows a banner, downloads the file and opens Android's installer with it, which asks the person before it installs. The first time, Android also asks whether AG Horizon may install apps. If any of that doesn't work on a TV, the app says where the file is so it can be installed by hand.
 
 ### Checking it
 
@@ -122,5 +144,6 @@ The build copies `server.js`, `subtitles.js` and `public/` into the app, and dow
 
 - **The server must keep running on Node.js 18 without the Unicode tables.** That is what the app has inside (nodejs-mobile). In `server.js` and `subtitles.js`: no `/\p{…}/u` in a regular expression, no `Intl`, and nothing newer than Node.js 18 without a fallback. The emulator test catches it when the server doesn't start.
 - **Processor types.** The APK holds the app for 64-bit and 32-bit ARM, which is every TV box and set; that makes it about 45 MB.
+- **Test versions** get the same Android version code as the release they lead up to (2.5.0-beta.1 and 2.5.0 are both 20500). Android installs an equal code over the other, so beta → beta → release works; what stops an older version from being offered is the app's own version check.
 - **Not in the Play Store.** Google requires TV apps there to be built for 16 KB memory pages, and Node.js for Android isn't yet; it would also need an app bundle and Google's TV review. Sideloading has none of that.
 - **Old TVs.** The pages need *Android System WebView* 111 or newer (March 2023). TVs update it through their app store; the app says so when it is older.

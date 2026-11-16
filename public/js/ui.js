@@ -794,9 +794,14 @@ function updatesCard() {
   else if (st.state === 'ready') { line = `Version <b>${esc(st.version || '')}</b> is ready. ${TV ? 'Android asks before it installs it.' : 'It also installs automatically when you close the app.'}`; btn = `<button class="btn" data-act="upd-install">${TV ? 'Install' : 'Restart and install'}</button>`; }
   else if (st.state === 'error') { line = `Couldn’t update: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-check">Try again</button>' + (info.releasesUrl ? ' <button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   const auto = LS.get('tuner.autoUpdate', true);
+  const ch = updChannel();
+  const chSeg = `<div class="seg">${[['stable', 'Stable'], ['test', 'Test']].map(([v, l]) => `<button data-act="upd-channel" data-val="${v}" class="${ch === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   return `<section class="set-card">
     <div class="set-row"><div><b>AG Horizon ${info.version ? 'v' + esc(info.version) : ''}</b><p class="muted">${line}</p></div><div class="upd-btns">${whatsNewBtn} ${btn}</div></div>
     <div class="set-row"><div><b>Check for updates when the app starts</b></div><label class="switch"><input type="checkbox" data-set="autoUpdate"${auto ? ' checked' : ''}><span></span></label></div>
+    <div class="set-row"><div><b>Update channel</b><p class="muted">${ch === 'test'
+      ? 'Test: you also get test versions (for example 2.5.0-beta.1) before they are released to everyone. They can have bugs.'
+      : 'Stable: only finished releases.'}${ch === 'stable' && /-/.test(info.version || '') ? ' You have a test version: you get the next finished release once it is newer than this one.' : ''}</p></div>${chSeg}</div>
   </section>`;
 }
 /* banner above the views: shown for a newer version until dismissed (remembered per version and step, so a dismissed "available" doesn't return on every start) */
@@ -857,6 +862,15 @@ async function whatsNew() {
 $('#newsClose').addEventListener('click', () => $('#newsDlg').close());
 $('#newsDlg').addEventListener('mousedown', (e) => { if (e.target === $('#newsDlg')) $('#newsDlg').close(); });
 $('#newsDlg').addEventListener('click', (e) => { if (e.target.closest('[data-act="upd-open"]')) window.tunerDesktop.updater.openReleases(); });
+// Stable or Test (see RELEASING.md). Someone running a test version starts on Test.
+function updChannel() { return LS.get('tuner.updChannel', /-/.test((upd.info && upd.info.version) || '') ? 'test' : 'stable'); }
+async function setUpdChannel(ch) {
+  LS.set('tuner.updChannel', ch);
+  const d = window.tunerDesktop;
+  await d.updater.setChannel(ch).catch(() => {});
+  renderSettings();
+  if (upd.info && (upd.info.updater || upd.info.platform === 'darwin' || TV)) d.updater.check();   // what this channel offers
+}
 function updStatus(s) {
   upd.st = s || { state: 'idle' };
   renderUpdBanner();
@@ -867,6 +881,7 @@ function initUpdates() {
   d.updater.onStatus(updStatus);
   Promise.all([d.appInfo(), d.updater.status()]).then(([info, st]) => {
     upd.info = info; upd.st = st || upd.st;
+    if (updChannel() !== info.channel) d.updater.setChannel(updChannel()).catch(() => {});
     renderUpdBanner();
     if (ui.route === 'settings') renderSettings();
     // a Mac only checks for a newer version: it downloads it from GitHub
@@ -1002,6 +1017,7 @@ $('#views').addEventListener('click', (e) => {
       .then((yes) => { if (yes) { state.favs.clear(); state.favdata = {}; persistFavs(); renderRoute(ui.route); toast('Favorites cleared'); } }); break;
     case 'whats-new': whatsNew(); break;
     case 'upd-check': window.tunerDesktop.updater.check(); break;
+    case 'upd-channel': setUpdChannel(a.dataset.val); break;
     case 'upd-download': window.tunerDesktop.updater.download(); break;
     case 'upd-install': window.tunerDesktop.updater.install(); break;
     case 'upd-open': window.tunerDesktop.updater.openReleases(); break;
