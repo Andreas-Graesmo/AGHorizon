@@ -167,9 +167,15 @@ async function main() {
   await key('DPAD_CENTER', 1200);
   check('OK opens what the focus is on', await ev(`!!document.querySelector('#addDlg[open]')`), 'keys: ' + await ev(`window.__keys.slice(4).join(' ')`));
   screenshot('add-playlist');
-  // the dialog starts in its first text box, which brings up the TV's keyboard: the first Back only puts that away
+  // the TV's keyboard: not when a text box merely has the focus, but when OK is pressed on it
+  const keyboard = () => /mInputShown=true/.test(adb('shell', 'dumpsys', 'input_method'));
+  const inBox = await ev(`document.activeElement.tagName + ' ' + (navigator.virtualKeyboard ? 'has virtualKeyboard' : 'no virtualKeyboard')`);
+  check('the keyboard stays away until it is asked for', !keyboard(), inBox);
+  await key('DPAD_CENTER', 1500);
+  check('OK on a text box brings up the keyboard', keyboard());
+  if (keyboard()) await key('BACK', 1000);
+  check('Back puts the keyboard away, the dialog stays', !keyboard() && await ev(`!!document.querySelector('#addDlg[open]')`));
   await key('BACK', 1000);
-  if (await ev(`!!document.querySelector('#addDlg[open]')`)) await key('BACK', 1000);
   check('Back closes the dialog', await ev(`!document.querySelector('#addDlg[open]')`));
 
   /* a playlist: fetched through the app's server */

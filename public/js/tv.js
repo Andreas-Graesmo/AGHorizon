@@ -372,6 +372,7 @@ function tvScroll(cur, dir) {
 // Keep the focus on something: pages draw themselves again (which removes what had the focus), dialogs and menus
 // open and close, and going back should land where you were.
 function tvEnsureFocus(force) {
+  tvManualKeyboards();
   const scope = tvScope();
   const key = tvScopeKey(scope);
   const ae = document.activeElement;
@@ -429,8 +430,8 @@ function tvKeydown(e) {
   if (key === 'back') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvBack(); return; }
   if (key === 'menu') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvMenu(); return; }
   if (key === 'ok') {
-    if (tvIsText(t)) return;   // brings up the TV's keyboard, or is the form's own Enter
     e.preventDefault(); e.stopPropagation();
+    if (tvIsText(t)) { if (!e.repeat) tvKeyboard(true); return; }   // OK on a text box: the TV's keyboard (not the form's Enter)
     if (!e.repeat) { tv.okDown = Date.now(); tv.okEl = t; tv.okLong = false; }
     else if (!tv.okLong && tv.okEl === t && Date.now() - tv.okDown > 550) { tv.okLong = true; tvContext(t); }
     return;
@@ -449,14 +450,26 @@ function tvKeydown(e) {
 function tvKeyup(e) {
   if (tvKeyName(e) !== 'ok') return;
   const t = document.activeElement;
-  if (tvIsText(t)) return;
   e.preventDefault(); e.stopPropagation();
+  if (tvIsText(t)) return;
   const el = tv.okEl;
   tv.okEl = null;
   if (!el || tv.okLong || el !== t) return;   // a long press already did its thing; or the focus moved meanwhile
   if (!tvScope().contains(el) || !tvShown(el)) { tvEnsureFocus(true); return; }
   if (el.tagName === 'SELECT') { try { el.showPicker(); } catch { el.click(); } return; }
   el.click();
+}
+
+// The TV's on-screen keyboard takes over the remote while it is up, so it should come when asked for (OK on a text
+// box), not whenever the focus passes one. Text boxes are marked so (tvEnsureFocus), and this shows and hides it.
+// Where the WebView doesn't know that, the keyboard comes by itself as before.
+function tvKeyboard(show) {
+  const vk = navigator.virtualKeyboard;
+  if (!vk) return;
+  try { if (show) vk.show(); else vk.hide(); } catch { /* not allowed right now */ }
+}
+function tvManualKeyboards() {
+  for (const el of document.querySelectorAll('input:not([virtualkeyboardpolicy]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=hidden]), textarea:not([virtualkeyboardpolicy])')) el.setAttribute('virtualkeyboardpolicy', 'manual');
 }
 
 // A long press on OK, or the Menu key: what the small buttons on a tile or row do on a computer.
@@ -565,6 +578,8 @@ function tvInit() {
   window.addEventListener('keydown', tvKeydown, true);
   window.addEventListener('keyup', tvKeyup, true);
   document.addEventListener('focusin', (e) => { tvRemember(e.target); tvLiveFocus(e.target); });
+  document.addEventListener('focusout', (e) => { if (tvIsText(e.target)) tvKeyboard(false); });
+  tvManualKeyboards();
   new MutationObserver(tvEnsureSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'disabled'] });
   // A WebView older than the pages need (their colours and layout) shows them broken: say what to do about it.
   const chrome = Number((/Chrome\/(\d+)/.exec(navigator.userAgent) || [])[1]) || 0;
