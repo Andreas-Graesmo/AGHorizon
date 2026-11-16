@@ -70,8 +70,6 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Try the app on an emulator
         uses: reactivecircus/android-emulator-runner@v2
-        env:
-          SMOKE_INLINE_SHOTS: '1'
         with:
           api-level: 34
           arch: x86_64
