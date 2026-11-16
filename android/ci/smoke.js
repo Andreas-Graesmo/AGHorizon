@@ -137,6 +137,7 @@ async function main() {
   const server = await serveMedia();
   adb('install', '-r', APK);
   adb('shell', 'pm', 'clear', PKG);   // a first run every time: no playlists from the run before
+  try { adb('shell', 'appops', 'set', PKG, 'REQUEST_INSTALL_PACKAGES', 'allow'); } catch { /* the installer will ask */ }
   adb('logcat', '-c');
   adb('shell', 'am', 'start', '-n', `${PKG}/.MainActivity`);
   const page = await connectPage();
@@ -229,6 +230,20 @@ async function main() {
   await key('BACK', 1200);
   if ((await player()).visible) await key('BACK', 1200);
 
+  /* a new version: downloaded by the app, then Android's installer comes up (the "new version" here is the same APK) */
+  fs.copyFileSync(APK, path.join(MEDIA, 'update.apk'));
+  await ev(`(() => { const shell = window.tvUpdate; window.__upd = []; window.tvUpdate = (e) => { window.__upd.push(e.state + (e.message ? ': ' + e.message : '')); shell(e); }; AGHorizonTV.updateDownload('http://${HOST}:${PORT}/update.apk'); })()`);
+  const got = await until('the update downloaded', async () => { const u = await ev(`window.__upd.join(' ')`); return /ready|error/.test(u) ? u : null; }, 120000);
+  check('a new version downloads', got && /downloading.*ready$/.test(got), (got || '').replace(/(downloading )+/, 'downloading … '));
+  await wait(2500);
+  const resumed = () => adb('shell', 'dumpsys', 'activity', 'activities').split('\n').filter((l) => /ResumedActivity/.test(l)).join(' | ').trim();
+  check('Android’s installer opens with it', /packageinstaller/i.test(resumed()), resumed().slice(0, 200));
+  screenshot('installer');
+  await key('BACK', 1500);
+  if (!resumed().includes(PKG)) { await key('BACK', 1500); }
+  if (!resumed().includes(PKG)) { adb('shell', 'am', 'start', '-n', `${PKG}/.MainActivity`); await wait(2000); }
+  check('the app is back after the installer was dismissed', resumed().includes(PKG) && await ev(`ui.route`) === 'ws', resumed().slice(0, 160));
+
   /* Back walks back through the app, and leaves it from the first page */
   await key('BACK', 900);
   check('Back closes the movie page', await ev(`ui.route === 'ws' && !ws.detail`));
@@ -238,8 +253,7 @@ async function main() {
   await key('BACK', 500);
   check('Back on the first page asks first', adb('shell', 'dumpsys', 'activity', 'activities').includes(`${PKG}/.MainActivity`) && /Press Back again/.test(await ev(`document.querySelector('#toasts').textContent`)));
   await key('BACK', 2000);
-  const top = adb('shell', 'dumpsys', 'activity', 'activities').split('\n').filter((l) => /ResumedActivity/.test(l)).join(' | ');
-  check('Back again leaves the app', !top.includes(PKG), top.trim().slice(0, 160));
+  check('Back again leaves the app', !resumed().includes(PKG), resumed().slice(0, 160));
 
   page.close();
   server.close();

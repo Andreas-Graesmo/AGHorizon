@@ -16,6 +16,7 @@ const tv = {
   auto: true,        // the focus is where the app put it, not where the remote moved it: it may still be put somewhere better
   focusUid: '',      // Live TV: the channel the focus is on (its programme shows next to the list)
   guideFrom: '',     // TV guide: the programme that was picked (Back from "Watch" returns to it)
+  num: '', numTimer: 0,   // a channel number being typed while a channel plays
   timer: 0,
 };
 
@@ -36,7 +37,24 @@ function tvShell() {
     return false;
   };
   const gh = (path) => fetch(`https://api.github.com/repos/${TV_REPO}/${path}`, { headers: { Accept: 'application/vnd.github+json' } });
-  // A TV can't install by itself what it finds: it says a newer version exists, and how to get it.
+  // The shell downloads a new version's APK and hands it to Android's installer (Updater.kt). An older shell can't:
+  // then the app only says that a newer version exists, and how to get it.
+  const canInstall = typeof window.AGHorizonTV.updateDownload === 'function';
+  window.tvUpdate = (ev) => {
+    const version = upd.st.version;
+    if (ev.state === 'downloading') send({ state: 'downloading', version, percent: ev.percent || 0, url: upd.st.url });
+    else if (ev.state === 'ready') { send({ state: 'ready', version, url: upd.st.url }); install(); }
+    else send({ state: 'error', version, url: upd.st.url, message: ev.message || 'The download failed.' });
+  };
+  async function download() {
+    if (canInstall && upd.st.url) { send({ state: 'downloading', version: upd.st.version, percent: 0, url: upd.st.url }); window.AGHorizonTV.updateDownload(upd.st.url); }
+    else tvHowToUpdate(upd.st.version);
+    return upd.st;
+  }
+  async function install() {
+    if (!(canInstall && window.AGHorizonTV.updateInstall())) tvHowToUpdate(upd.st.version);
+    return upd.st;
+  }
   async function check() {
     send({ state: 'checking' });
     try {
@@ -45,21 +63,22 @@ function tvShell() {
       if (!r.ok) throw new Error('GitHub answered ' + r.status);
       const j = await r.json();
       const tag = String(j.tag_name || '');
-      const forTv = (j.assets || []).some((a) => /\.apk$/i.test(a.name || ''));   // a release without the TV app is not an update here
-      return send(forTv && newer(tag, tv.info.version || '0') ? { state: 'available', version: tag.replace(/^v/i, ''), manual: true } : { state: 'current', checkedAt: Date.now() });
+      const apk = (j.assets || []).find((a) => /\.apk$/i.test(a.name || ''));   // a release without the TV app is not an update here
+      if (!apk || !newer(tag, tv.info.version || '0')) return send({ state: 'current', checkedAt: Date.now() });
+      return send({ state: 'available', version: tag.replace(/^v/i, ''), url: apk.browser_download_url || '', manual: !canInstall });
     } catch (e) { return send({ state: 'error', message: String((e && e.message) || e).slice(0, 200) }); }
   }
   const nothing = async () => null;
   return {
     displays: async () => [],
     focusWindow: async () => {},
-    appInfo: async () => ({ version: tv.info.version || '', platform: 'android-tv', updater: false, updaterReason: 'On a TV, new versions are installed by hand.', releasesUrl }),
+    appInfo: async () => ({ version: tv.info.version || '', platform: 'android-tv', updater: canInstall, updaterReason: canInstall ? '' : 'On this TV, new versions are installed by hand.', releasesUrl }),
     ready: () => { try { window.AGHorizonTV.ready(); } catch { /* an older shell */ } },
     updater: {
       status: async () => upd.st,
       check,
-      download: async () => upd.st,
-      install: async () => upd.st,
+      download,
+      install,
       openReleases: async () => tvHowToUpdate(upd.st.version),
       notes: async (version) => {
         const none = { error: 'No release notes were found for this version.' };
@@ -145,6 +164,20 @@ function tvEpisode(c, delta) {
   return true;
 }
 
+// Number keys while a channel plays: the channel with that number, once no more digits follow.
+function tvDigit(n) {
+  tv.num = (tv.num + String(n)).slice(-5);
+  try { window.AGHorizonTV.banner(JSON.stringify({ token: playToken, title: 'Channel ' + tv.num, sub: '', show: true })); } catch { /* an older shell */ }
+  clearTimeout(tv.numTimer);
+  tv.numTimer = setTimeout(() => {
+    const want = Number(tv.num);
+    tv.num = '';
+    const ch = ws.mode === 'live' ? ws.items.find((c) => Number(c.num) === want) : null;
+    if (ch) playChannel(ch);
+    else if (state.current && !isVod(state.current)) window.AGHorizonTV.banner(JSON.stringify({ token: playToken, ...tvTitles(state.current), show: true }));
+  }, 1500);
+}
+
 // What the player tells the page (see PlayerController.kt): where the video is, that it ended or was left, and
 // that the remote asked for another channel or episode.
 if (TV) {
@@ -164,6 +197,7 @@ if (TV) {
         break;
       case 'zap': zap(ev.delta > 0 ? 1 : -1); break;
       case 'skip': tvEpisode(c, ev.delta > 0 ? 1 : -1); break;
+      case 'digit': tvDigit(ev.n); break;
       default: break;   // 'error': the player shows it until Back, which arrives as 'closed'
     }
   };
@@ -193,7 +227,9 @@ function tvScope() {
 function tvScopeKey(scope) {
   if (scope.id === 'menu') return 'menu';
   if (scope.tagName === 'DIALOG') return 'dialog:' + scope.id;
-  return ui.route === 'ws' ? `ws|${ws.pid}|${ws.mode}|${ws.lv}|${ws.detail ? ws.detail.uid : ''}` : String(ui.route);
+  if (ui.route !== 'ws') return String(ui.route);
+  // Live TV is two pages in one: the tiles of all channels, and a category's list
+  return `ws|${ws.pid}|${ws.mode}|${ws.lv}|${ws.detail ? ws.detail.uid : ''}|${ws.mode === 'live' ? $('#wsLive').dataset.view : ''}`;
 }
 
 function tvItems(scope) {
@@ -255,19 +291,20 @@ function tvOnScreen(el, r) {
   return !!top && (el.contains(top) || top.contains(el));
 }
 
-// The nearest item in that direction: first one that lies in the same row (for ← →) or column (for ↑ ↓), else
-// the closest one beside it. Sideways it only leaves the row for something that is on screen, so the end of a row
-// of tiles doesn't jump to a tile far off in another row.
 // The parts of the app the focus doesn't wander between by accident: the rail of icons, the top bar, and the page.
 // Inside the page, columns that stand side by side (categories | channels | programme) are parts of their own.
 const tvZone = (el) => (el.closest('#nav') ? 'nav' : el.closest('#topbar') ? 'top' : 'page');
 const tvColumn = (el) => el.closest('.cats-col, .chan-col, .live-main, .grid-main, .set-index, .set-main, .src-side, .src-main, #nav');
+
+// The nearest item in that direction: first one that lies in the same row (for ← →) or column (for ↑ ↓), else
+// the closest one beside it. Sideways it only leaves the row for something that is on screen, so the end of a row
+// of tiles doesn't jump to a tile far off in another row.
 function tvNext(cur, dir, items) {
   const a = cur.getBoundingClientRect();
   const horiz = dir === 'left' || dir === 'right';
   const zone = tvZone(cur), column = tvColumn(cur);
   const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
-  let best = null, bestScore = Infinity, side = null, sideScore = Infinity;
+  let best = null, bestScore = Infinity, side = null, sideScore = Infinity, far = null, farScore = Infinity;
   for (const el of items) {
     if (el === cur || el.contains(cur)) continue;
     const b = el.getBoundingClientRect();
@@ -279,22 +316,28 @@ function tvNext(cur, dir, items) {
     else { ahead = by < ay - 1 && b.top < a.top - 1; gap = a.top - b.bottom; off = tvGap(a.left, a.right, b.left, b.right); slide = Math.abs(bx - ax); }
     if (!ahead) continue;
     gap = Math.max(0, gap);
-    if (off === 0) {
+    const z = tvZone(el);
+    if (!horiz && z !== zone) {
+      // Up and down, the focus leaves its part of the app (the page for the top bar, say) only when there is nothing
+      // more in it that way; and it enters or leaves the rail of icons only straight ahead.
+      if (off !== 0 && (z === 'nav' || zone === 'nav')) continue;
+      const score = gap + off * 3 + slide * 0.15;
+      if (score < farScore) { farScore = score; far = el; }
+    } else if (off === 0) {
       const score = gap + slide * 0.15;
       if (score < bestScore) { bestScore = score; best = el; }
     } else {
       // Beside it, not straight ahead. Sideways: only what is on screen, and never between the top bar and the page.
-      // Up and down: not into or out of the rail of icons, and not into the column next door (down on the last
-      // channel stays there instead of jumping to the categories).
-      const z = tvZone(el);
-      if (horiz ? (!tvOnScreen(el, b) || (z !== zone && (z === 'top' || zone === 'top'))) : ((z === 'nav') !== (zone === 'nav') || (z === zone && tvColumn(el) !== column))) continue;
+      // Up and down: not into the column next door (down on the last channel stays there instead of jumping to the
+      // categories).
+      if (horiz ? (!tvOnScreen(el, b) || (z !== zone && (z === 'top' || zone === 'top'))) : tvColumn(el) !== column) continue;
       const score = gap + off * 3 + slide * 0.15;
       if (score < sideScore) { sideScore = score; side = el; }
     }
   }
   // something straight ahead wins, unless it is far away and something beside it is right here
   if (best && side && sideScore * 4 < bestScore) return side;
-  return best || side;
+  return best || side || far;
 }
 
 function tvMove(dir) {

@@ -791,7 +791,7 @@ function updatesCard() {
   else if (st.state === 'current') { line = `You have the latest version${st.checkedAt ? ' · checked ' + ago(st.checkedAt) : ''}.`; }
   else if (st.state === 'available') { line = `Version <b>${esc(st.version || '')}</b> is available.`; btn = '<button class="btn" data-act="upd-download"><svg class="ic"><use href="#i-download"/></svg>Download update</button>'; }
   else if (st.state === 'downloading') { line = `Downloading version ${esc(st.version || '')}… ${st.percent || 0}%<div class="bar upd-bar"><i style="width:${st.percent || 0}%"></i></div>`; btn = '<button class="btn" disabled>Downloading…</button>'; }
-  else if (st.state === 'ready') { line = `Version <b>${esc(st.version || '')}</b> is ready. It also installs automatically when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
+  else if (st.state === 'ready') { line = `Version <b>${esc(st.version || '')}</b> is ready. ${TV ? 'Android asks before it installs it.' : 'It also installs automatically when you close the app.'}`; btn = `<button class="btn" data-act="upd-install">${TV ? 'Install' : 'Restart and install'}</button>`; }
   else if (st.state === 'error') { line = `Couldn’t update: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-check">Try again</button>' + (info.releasesUrl ? ' <button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   const auto = LS.get('tuner.autoUpdate', true);
   return `<section class="set-card">
@@ -808,7 +808,7 @@ function renderUpdBanner() {
   if (st.state === 'available' && st.manual) { line = `AG Horizon <b>${v}</b> is available.`; btn = '<button class="btn" data-act="upd-open"><svg class="ic"><use href="#i-download"/></svg>Download from GitHub</button>'; }
   else if (st.state === 'available') { line = `AG Horizon <b>${v}</b> is available.`; btn = '<button class="btn" data-act="upd-download"><svg class="ic"><use href="#i-download"/></svg>Download update</button>'; }
   else if (st.state === 'downloading') { line = `Downloading AG Horizon ${v}… ${st.percent || 0}%<div class="bar upd-bar"><i style="width:${st.percent || 0}%"></i></div>`; }
-  else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready. It also installs when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
+  else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready.${TV ? '' : ' It also installs when you close the app.'}`; btn = `<button class="btn" data-act="upd-install">${TV ? 'Install' : 'Restart and install'}</button>`; }
   else if (st.state === 'error' && st.version) { line = `Couldn’t download ${v}: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-download">Try again</button>' + (upd.info && upd.info.releasesUrl ? '<button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   if (!line || LS.get('tuner.updDismissed', '') === st.state + ':' + st.version) { el.hidden = true; return; }
   if (st.version) btn = whatsNewBtn + btn;

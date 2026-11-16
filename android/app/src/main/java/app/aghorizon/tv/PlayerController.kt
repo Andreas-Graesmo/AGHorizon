@@ -38,6 +38,7 @@ import org.json.JSONObject
  *   error  – it could not be played (the message is on screen until Back)
  *   zap    – another channel is wanted: delta +1 (next) or -1 (previous)
  *   skip   – another episode is wanted: delta +1 or -1
+ *   digit  – a number key was pressed while a channel plays: n
  * Every event carries the token of the play request it belongs to.
  */
 class PlayerController(
@@ -117,6 +118,7 @@ class PlayerController(
         val r = req ?: return
         if (json.optInt("token") != r.token) return
         setBanner(json.optString("title", r.title), json.optString("sub"))
+        if (json.optBoolean("show")) showBanner()
     }
 
     /** Stop and hide. reason "closed": the person left; "stopped": the pages asked (nothing is reported back). */
@@ -377,6 +379,10 @@ class PlayerController(
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> { if (first) other(r, -1); return true }
             KeyEvent.KEYCODE_MEDIA_NEXT -> { if (first) other(r, 1); return true }
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (first) other(r, -1); return true }
+            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> if (r.live) {   // a channel number, digit by digit
+                if (first) emit(JSONObject().put("type", "digit").put("token", r.token).put("n", e.keyCode - KeyEvent.KEYCODE_0))
+                return true
+            }
         }
         if (failed) return true   // nothing to steer: Back leaves
         if (controls) return false

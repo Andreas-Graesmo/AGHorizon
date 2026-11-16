@@ -34,6 +34,7 @@ class MainActivity : Activity() {
     private lateinit var splash: View
     private lateinit var splashText: TextView
     private lateinit var player: PlayerController
+    private lateinit var updater: Updater
     private val ui = Handler(Looper.getMainLooper())
     private var pageLoaded = false
     private var destroyed = false
@@ -47,7 +48,8 @@ class MainActivity : Activity() {
         web = findViewById(R.id.web)
         splash = findViewById(R.id.splash)
         splashText = findViewById(R.id.splashText)
-        player = PlayerController(this, findViewById(R.id.playerLayer), ::sendToPage) { playing ->
+        updater = Updater(this) { sendToPage("tvUpdate", it) }
+        player = PlayerController(this, findViewById(R.id.playerLayer), { sendToPage("tvNative", it) }) { playing ->
             // while the player is up the remote belongs to it, not to the page underneath
             web.isFocusable = !playing
             web.isFocusableInTouchMode = !playing
@@ -146,8 +148,8 @@ class MainActivity : Activity() {
         if (!player.visible) web.requestFocus()
     }
 
-    private fun sendToPage(event: JSONObject) {
-        val js = "window.tvNative&&window.tvNative($event)"
+    private fun sendToPage(function: String, event: JSONObject) {
+        val js = "window.$function&&window.$function($event)"
         ui.post { if (!destroyed) web.evaluateJavascript(js, null) }
     }
 
@@ -246,6 +248,14 @@ class MainActivity : Activity() {
             prefs.edit().putInt("cssWidth", width).apply()
             ui.post { if (!destroyed) { applyScale(); web.reload() } }
         }
+
+        /** A new version: download its APK (the pages hear how it goes through window.tvUpdate)… */
+        @JavascriptInterface
+        fun updateDownload(url: String) { updater.download(url) }
+
+        /** …and open Android's installer with it. False when that can't be done. */
+        @JavascriptInterface
+        fun updateInstall(): Boolean = updater.install()
 
         /** Back on the first page: leave the app. */
         @JavascriptInterface
