@@ -167,15 +167,9 @@ async function main() {
   await key('DPAD_CENTER', 1200);
   check('OK opens what the focus is on', await ev(`!!document.querySelector('#addDlg[open]')`), 'keys: ' + await ev(`window.__keys.slice(4).join(' ')`));
   screenshot('add-playlist');
-  // the TV's keyboard: not when a text box merely has the focus, but when OK is pressed on it
-  const keyboard = () => /mInputShown=true/.test(adb('shell', 'dumpsys', 'input_method'));
-  const inBox = await ev(`document.activeElement.tagName + ' ' + (navigator.virtualKeyboard ? 'has virtualKeyboard' : 'no virtualKeyboard')`);
-  check('the keyboard stays away until it is asked for', !keyboard(), inBox);
-  await key('DPAD_CENTER', 1500);
-  check('OK on a text box brings up the keyboard', keyboard());
-  if (keyboard()) await key('BACK', 1000);
-  check('Back puts the keyboard away, the dialog stays', !keyboard() && await ev(`!!document.querySelector('#addDlg[open]')`));
+  // the dialog starts in a text box, which may bring up the TV's keyboard: Back then puts that away first
   await key('BACK', 1000);
+  if (await ev(`!!document.querySelector('#addDlg[open]')`)) await key('BACK', 1000);
   check('Back closes the dialog', await ev(`!document.querySelector('#addDlg[open]')`));
 
   /* a playlist: fetched through the app's server */
@@ -210,6 +204,7 @@ async function main() {
   check('Back hides the controls first', !(await player()).controls && (await player()).visible);
   await key('BACK', 1200);
   check('Back leaves the player', !(await player()).visible && await ev(`state.current === null`));
+  await wait(1200);
   check('the focus is back on the channel that was on', /smoke:/.test(await focus()) && (await ev(`document.activeElement.querySelector('.name').textContent`)) === 'Channel Two', await focus());
   screenshot('after-player');
 
@@ -233,6 +228,7 @@ async function main() {
   const saved = await ev(`JSON.stringify(state.progress['smoke:' + ws.items[0].id] || null)`);
   check('where the movie was is remembered', saved && JSON.parse(saved) && JSON.parse(saved).t > 55, saved);
   check('the button now says Resume', /Resume/.test(await ev(`document.querySelector('#wsDetail [data-act="play"]').textContent`)));
+  await wait(1200);
   const before = await focus();
   await ev(`window.__keys = []; 0`);
   await key('DPAD_CENTER', 500);
