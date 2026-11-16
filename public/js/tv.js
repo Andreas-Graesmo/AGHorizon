@@ -18,6 +18,7 @@ const tv = {
   guideFrom: '',     // TV guide: the programme that was picked (Back from "Watch" returns to it)
   num: '', numTimer: 0,   // a channel number being typed while a channel plays
   playFrom: '',      // what had the focus when the player was started (it gets it back when the player closes)
+  away: false,       // the player is up, or just closed: what gets the focus meanwhile is not where the person was
   timer: 0,
 };
 
@@ -129,7 +130,8 @@ function tvSubLang(ch) {
 
 // playChannel() ends up here instead of in this page's player.
 function tvPlay(ch, token) {
-  if (!state.current || !tv.playFrom) tv.playFrom = document.activeElement && document.activeElement !== document.body ? tvSig(document.activeElement) : '';
+  if (!tv.away) tv.playFrom = document.activeElement && document.activeElement !== document.body ? tvSig(document.activeElement) : '';
+  tv.away = true;
   const p = playlistById(ch.pid);
   const vod = isVod(ch);
   const resume = progressOf(ch.uid);
@@ -156,15 +158,21 @@ function tvSaveProgress(c, ev) {
   persistProgress();
 }
 
-// The player is gone and the page has drawn itself again (Resume instead of Play, a progress bar): the focus goes
-// back to what was pressed to start it.
-function tvBackFromPlayer() {
+// The player is gone. The page draws itself again (Resume instead of Play, a progress bar), and when the WebView gets
+// the remote back, Android puts the focus on the first button of the page. So the focus is put back where it belongs
+// a few times over: on what find() gives, else on what was pressed to start the player.
+function tvBackFromPlayer(find) {
   const from = tv.playFrom;
   tv.playFrom = '';
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const scope = tvScope();
-    if (!tvFocus(from ? tvFind(scope, from) : null)) tvEnsureFocus(true);
-  }));
+  const put = (last) => {
+    if (state.current) return;   // something plays again
+    const el = (find && find()) || (from ? tvFind(tvScope(), from) : null);
+    if (el && document.activeElement !== el) { tv.away = false; tvFocus(el); tv.away = !last; }
+    if (last) { tv.away = false; tvEnsureFocus(); tvRemember(document.activeElement); }
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => put(false)));
+  setTimeout(() => put(false), 250);
+  setTimeout(() => put(true), 700);
 }
 
 // Another episode of the series that plays: the next one (+1) or the one before (-1). False when there is none.
@@ -386,7 +394,6 @@ function tvScroll(cur, dir) {
 // Keep the focus on something: pages draw themselves again (which removes what had the focus), dialogs and menus
 // open and close, and going back should land where you were.
 function tvEnsureFocus(force) {
-  tvManualKeyboards();
   const scope = tvScope();
   const key = tvScopeKey(scope);
   const ae = document.activeElement;
@@ -410,7 +417,7 @@ function tvEnsureFocus(force) {
   tv.auto = auto;
 }
 function tvRemember(el) {
-  if (!el || el === document.body) return;
+  if (!el || el === document.body || tv.away) return;
   const scope = tvScope();
   if (!scope.contains(el)) return;
   const r = el.getBoundingClientRect();
@@ -444,8 +451,8 @@ function tvKeydown(e) {
   if (key === 'back') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvBack(); return; }
   if (key === 'menu') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvMenu(); return; }
   if (key === 'ok') {
+    if (tvIsText(t)) return;   // a text box: the TV's keyboard, or the form's own Enter
     e.preventDefault(); e.stopPropagation();
-    if (tvIsText(t)) { if (!e.repeat) tvKeyboard(true); return; }   // OK on a text box: the TV's keyboard (not the form's Enter)
     if (!e.repeat) { tv.okDown = Date.now(); tv.okEl = t; tv.okLong = false; }
     else if (!tv.okLong && tv.okEl === t && Date.now() - tv.okDown > 550) { tv.okLong = true; tvContext(t); }
     return;
@@ -464,26 +471,14 @@ function tvKeydown(e) {
 function tvKeyup(e) {
   if (tvKeyName(e) !== 'ok') return;
   const t = document.activeElement;
-  e.preventDefault(); e.stopPropagation();
   if (tvIsText(t)) return;
+  e.preventDefault(); e.stopPropagation();
   const el = tv.okEl;
   tv.okEl = null;
   if (!el || tv.okLong || el !== t) return;   // a long press already did its thing; or the focus moved meanwhile
   if (!tvScope().contains(el) || !tvShown(el)) { tvEnsureFocus(true); return; }
   if (el.tagName === 'SELECT') { try { el.showPicker(); } catch { el.click(); } return; }
   el.click();
-}
-
-// The TV's on-screen keyboard takes over the remote while it is up, so it should come when asked for (OK on a text
-// box), not whenever the focus passes one. Text boxes are marked so (tvEnsureFocus), and this shows and hides it.
-// Where the WebView doesn't know that, the keyboard comes by itself as before.
-function tvKeyboard(show) {
-  const vk = navigator.virtualKeyboard;
-  if (!vk) return;
-  try { if (show) vk.show(); else vk.hide(); } catch { /* not allowed right now */ }
-}
-function tvManualKeyboards() {
-  for (const el of document.querySelectorAll('input:not([virtualkeyboardpolicy]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=hidden]), textarea:not([virtualkeyboardpolicy])')) el.setAttribute('virtualkeyboardpolicy', 'manual');
 }
 
 // A long press on OK, or the Menu key: what the small buttons on a tile or row do on a computer.
@@ -567,10 +562,9 @@ function tvLiveCard() {
   </div>`;
 }
 function tvToChannel(uid) {
-  if (ui.route !== 'ws' || ws.mode !== 'live' || ws.lv !== 'channels' || $('#wsLive').dataset.view !== 'list') return;
-  scrollLiveTo(uid);
-  renderLiveList();
-  requestAnimationFrame(() => requestAnimationFrame(() => { const row = $$('#liveRows .row.ch').find((r) => r.dataset.uid === uid); if (row) tvFocus(row); }));
+  const inList = ui.route === 'ws' && ws.mode === 'live' && ws.lv === 'channels' && $('#wsLive').dataset.view === 'list';
+  if (inList) { scrollLiveTo(uid); renderLiveList(); }
+  tvBackFromPlayer(() => (inList ? $$('#liveRows .row.ch').find((r) => r.dataset.uid === uid) : null));
 }
 function tvLiveFocus(el) {
   const row = el && el.closest && el.closest('#liveRows .row.ch');
@@ -592,8 +586,6 @@ function tvInit() {
   window.addEventListener('keydown', tvKeydown, true);
   window.addEventListener('keyup', tvKeyup, true);
   document.addEventListener('focusin', (e) => { tvRemember(e.target); tvLiveFocus(e.target); });
-  document.addEventListener('focusout', (e) => { if (tvIsText(e.target) && !tvIsText(e.relatedTarget)) tvKeyboard(false); });   // "Next" on the keyboard goes on typing in the next box
-  tvManualKeyboards();
   new MutationObserver(tvEnsureSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'disabled'] });
   // A WebView older than the pages need (their colours and layout) shows them broken: say what to do about it.
   const chrome = Number((/Chrome\/(\d+)/.exec(navigator.userAgent) || [])[1]) || 0;
