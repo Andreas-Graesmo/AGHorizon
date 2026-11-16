@@ -70,6 +70,7 @@ kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarg
 
 dependencies {
     val media3 = "1.8.0"
+    implementation("androidx.core:core:1.16.0")   // FileProvider: hands a downloaded update to Android's installer
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-datasource:$media3")
