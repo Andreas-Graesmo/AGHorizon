@@ -37,7 +37,7 @@ Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 
 The same app on a TV: Android TV and Google TV boxes and sets with Android 7 or newer. (Fire TV runs Android apps too, but the app hasn't been tried there.) It has the dashboard, Live TV with the guide, movies and series, favorites, recently viewed, search, several playlists and sync (AG Horizon cloud).
 
-**Installing.** Download `AG-Horizon-TV-<version>.apk` from the [releases page](https://github.com/Andreas-Graesmo/AGHorizon/releases/latest) and install it on the TV. The usual ways: the *Downloader* app on the TV (type the address of the file), *Send files to TV* from a phone, or `adb install` from a computer. The TV asks once whether that app may install apps. A new version installs over the old one the same way, and keeps your playlists, favorites and history; the app tells you when there is one (**Settings › About & updates**).
+**Installing.** Download `AG-Horizon-TV-<version>.apk` from the [releases page](https://github.com/Andreas-Graesmo/AGHorizon/releases/latest) and install it on the TV. The usual ways: the *Downloader* app on the TV (type the address of the file), *Send files to TV* from a phone, or `adb install` from a computer. The TV asks once whether that app may install apps. After that the app updates itself: it tells you when there is a new version, downloads it, and hands it to Android's installer, which asks you once more (**Settings › About & updates**). Your playlists, favorites and history are kept.
 
 **The remote.**
 
@@ -49,7 +49,7 @@ The same app on a TV: Android TV and Google TV boxes and sets with Android 7 or 
 | Back | Close a menu or dialog, go back a page; twice on the dashboard leaves the app | Hide the controls, then leave the player |
 | Channel + / − | | Next / previous channel |
 | Play / pause, ⏪ ⏩, ⏮ ⏭ | | Pause, skip, previous / next episode |
-| 0–9 | Live TV: go to that channel number | |
+| 0–9 | Live TV: go to that channel number | Live TV: go to that channel number |
 
 **What plays, plays in the TV's own player** (ExoPlayer), full screen, not in the page. It uses the TV's hardware decoders, so HEVC and 4K play where the TV can, and sound it has no decoder for (AC-3, E-AC-3, DTS, MP2) is decoded by the app. That is why there is no compatibility mode on a TV. The player picks your preferred audio language and turns subtitles on in your language (**Settings › Languages**); you can change both in its controls.
 
