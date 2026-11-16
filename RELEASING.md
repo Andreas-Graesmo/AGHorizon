@@ -80,7 +80,7 @@ The same tag also builds the Android TV app: the *Release* workflow's `android-t
 
 ### The signing key (once)
 
-Android only installs a new version over the old one when both are signed with the same key. So the app needs a key of its own that never changes, kept as repository secrets. **Until you add it, each build is signed with a throwaway key**: it installs, but the next version won't install over it (people would have to uninstall first, losing their playlists). The workflow says so with a warning. Do this before you hand the first APK to anyone:
+Android only installs a new version over the old one when both are signed with the same key. So the app needs a key of its own that never changes, kept as repository secrets. **Until you add it, each build is signed with a throwaway key**: it installs, but the next version won't install over it, from inside the app or by hand (people would have to uninstall first, losing their playlists). The workflow says so with a warning. Do this before you hand the first APK to anyone:
 
 1. Make the key. With Java installed (`keytool` comes with it):
    ```
@@ -100,7 +100,7 @@ Android only installs a new version over the old one when both are signed with t
 
 ### What people do
 
-They download the `.apk` from the release and install it on the TV (the README's *Android TV* section says how). The app can't update itself: on start it asks GitHub whether a newer release has an `.apk`, and says so in **Settings › About & updates** and in a banner; they then install the new file over the old one.
+They download the `.apk` from the release and install it on the TV once (the README's *Android TV* section says how). From then on the app updates itself much like the desktop app: on start it asks GitHub whether a newer published release has an `.apk`, shows a banner, downloads the file and opens Android's installer with it, which asks the person before it installs. The first time, Android also asks whether AG Horizon may install apps. If any of that doesn't work on a TV, the app says where the file is so it can be installed by hand.
 
 ### Checking it
 
