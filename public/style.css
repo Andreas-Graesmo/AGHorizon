@@ -118,7 +118,7 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .ps-text small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-switch .chev { width: 14px; height: 14px; color: var(--muted); }
 .top-search { display: flex; align-items: center; gap: 8px; width: min(460px, 38vw); height: 32px; padding: 0 8px 0 11px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; flex: none; }
-.top-search:focus-within { border-color: var(--accent); }
+.top-search:has(input:focus) { border-color: var(--accent); }
 .top-search > .ic { width: 15px; height: 15px; color: var(--text); }
 .top-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; height: 100%; font-size: 13px; border-radius: 0; }
 .top-search input:focus { border: 0; }
@@ -253,7 +253,7 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .cats-head .icon-btn { color: var(--text); opacity: .85; }
 .cats-head .icon-btn.on { background: var(--sel); color: var(--accent); opacity: 1; }
 .cat-search { display: flex; align-items: center; gap: 6px; margin: 0 10px 8px; padding: 0 4px 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); flex: none; }
-.cat-search:focus-within { border-color: var(--accent); }
+.cat-search:has(input:focus) { border-color: var(--accent); }
 .cat-search > .ic { width: 15px; height: 15px; color: var(--muted); }
 .cat-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; font-size: 13px; height: 100%; border-radius: 0; }
 .cat-search input:focus { border: 0; }
@@ -962,16 +962,17 @@ html.tv #typeTiles [data-type="file"], html.tv #player, html.tv [data-copy], htm
 html.tv #topbar { -webkit-app-region: no-drag; }
 html.tv, html.tv body { cursor: default; }
 /* the focus ring: what the remote is on */
-html.tv :focus { outline: 3px solid var(--accent); outline-offset: 2px; scroll-margin: 28px; }
+html.tv :focus { outline: 1px solid var(--accent); outline-offset: 2px; scroll-margin: 28px; }
 html.tv .card:focus { outline: none; }
-html.tv .card:focus .c-img, html.tv .chan-card:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+html.tv .card:focus .c-img, html.tv .chan-card:focus { outline: 1px solid var(--accent); outline-offset: 2px; }
 html.tv .card:focus .c-img { transform: translateY(-2px); box-shadow: var(--shadow); }
 html.tv .card:focus .c-title { color: var(--text); }
-html.tv .row.ch:focus, html.tv .ep:focus, html.tv .sw-row:focus, html.tv .cat:focus, html.tv .menu-i:focus, html.tv .g-prog:focus, html.tv .g-chan:focus { outline-offset: -3px; }
+html.tv .row.ch:focus, html.tv .ep:focus, html.tv .sw-row:focus, html.tv .cat:focus, html.tv .menu-i:focus, html.tv .g-prog:focus, html.tv .g-chan:focus { outline-offset: -1px; }
 html.tv .ep:focus { background: var(--panel); border-color: var(--line); }
-html.tv :is(.top-search, .cat-search, .sw-search, .pal-in):focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* a search box: its own border shows the focus of the text field in it (a button in it, like the scope chip, has its own) */
 html.tv :is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
-html.tv .sw-search { border-color: var(--line); }   /* the ring is the focus's, as everywhere on the TV */
+html.tv .sw-search { border-color: var(--line); }
+html.tv .sw-search:has(input:focus) { border-color: var(--accent); }
 /* keys of a computer keyboard: no use with a remote */
 html.tv .sw-keys, html.tv .sw-foot > span:has(> kbd), html.tv .pal-foot, html.tv #mvPickClose { display: none; }
 html.tv [data-act="hero-open"]:focus { scroll-margin-top: 600px; }   /* the first thing on the dashboard: scrolls it back to its top */
