@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('tunerDesktop', {
     install: () => ipcRenderer.invoke('updater:install'),
     openReleases: () => ipcRenderer.invoke('updater:open'),
     notes: (version) => ipcRenderer.invoke('updater:notes', version),
+    setChannel: (channel) => ipcRenderer.invoke('updater:channel', channel),   // 'stable' or 'test'
     onStatus: (cb) => { ipcRenderer.on('updater:status', (_e, s) => cb(s)); },
   },
   downloads: {

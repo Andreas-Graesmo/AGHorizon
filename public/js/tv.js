@@ -33,11 +33,9 @@ function tvShell() {
   const upd = { st: { state: 'idle' }, cbs: [] };
   const send = (st) => { upd.st = st; upd.cbs.forEach((cb) => cb(st)); return st; };
   const releasesUrl = `https://github.com/${TV_REPO}/releases/latest`;
-  const newer = (tag, cur) => {
-    const a = String(tag).replace(/^v/i, '').split('.').map(Number), b = String(cur).split('.').map(Number);
-    for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
-    return false;
-  };
+  // Update channel (Settings › About & updates): 'stable' takes GitHub's latest release, 'test' also pre-releases.
+  // A test version installed by hand starts out on 'test', like on a computer (electron/updater.js).
+  let channel = /-/.test(tv.info.version || '') ? 'test' : 'stable';
   const gh = (path) => fetch(`https://api.github.com/repos/${TV_REPO}/${path}`, { headers: { Accept: 'application/vnd.github+json' } });
   // The shell downloads a new version's APK and hands it to Android's installer (Updater.kt). An older shell can't:
   // then the app only says that a newer version exists, and how to get it.
@@ -60,13 +58,25 @@ function tvShell() {
   async function check() {
     send({ state: 'checking' });
     try {
-      const r = await gh('releases/latest');
-      if (r.status === 404) return send({ state: 'error', message: 'No published release was found.' });
-      if (!r.ok) throw new Error('GitHub answered ' + r.status);
-      const j = await r.json();
+      const hasApk = (j) => (j.assets || []).find((a) => /\.apk$/i.test(a.name || ''));   // a release without the TV app is not an update here
+      let j = null;
+      if (channel === 'test') {
+        // the newest published release or pre-release that has the TV app
+        const r = await gh('releases?per_page=30');
+        if (!r.ok) throw new Error('GitHub answered ' + r.status);
+        for (const rel of await r.json()) {
+          if (!rel.draft && hasApk(rel) && tvVersionCompare(rel.tag_name, '0.0.0') > 0 && (!j || tvVersionCompare(rel.tag_name, j.tag_name) > 0)) j = rel;
+        }
+        if (!j) return send({ state: 'error', message: 'No published release was found.' });
+      } else {
+        const r = await gh('releases/latest');
+        if (r.status === 404) return send({ state: 'error', message: 'No published release was found.' });
+        if (!r.ok) throw new Error('GitHub answered ' + r.status);
+        j = await r.json();
+      }
       const tag = String(j.tag_name || '');
-      const apk = (j.assets || []).find((a) => /\.apk$/i.test(a.name || ''));   // a release without the TV app is not an update here
-      if (!apk || !newer(tag, tv.info.version || '0')) return send({ state: 'current', checkedAt: Date.now() });
+      const apk = hasApk(j);
+      if (!apk || !(tvVersionCompare(tag, tv.info.version || '0.0.0') > 0)) return send({ state: 'current', checkedAt: Date.now() });
       return send({ state: 'available', version: tag.replace(/^v/i, ''), url: apk.browser_download_url || '', manual: !canInstall });
     } catch (e) { return send({ state: 'error', message: String((e && e.message) || e).slice(0, 200) }); }
   }
@@ -74,7 +84,7 @@ function tvShell() {
   return {
     displays: async () => [],
     focusWindow: async () => {},
-    appInfo: async () => ({ version: tv.info.version || '', platform: 'android-tv', updater: canInstall, updaterReason: canInstall ? '' : 'On this TV, new versions are installed by hand.', releasesUrl }),
+    appInfo: async () => ({ version: tv.info.version || '', platform: 'android-tv', updater: canInstall, updaterReason: canInstall ? '' : 'On this TV, new versions are installed by hand.', releasesUrl, channel }),
     ready: () => { try { window.AGHorizonTV.ready(); } catch { /* an older shell */ } },
     updater: {
       status: async () => upd.st,
@@ -82,9 +92,16 @@ function tvShell() {
       download,
       install,
       openReleases: async () => tvHowToUpdate(upd.st.version),
+      setChannel: async (next) => {
+        if ((next === 'stable' || next === 'test') && next !== channel) {
+          channel = next;
+          if (!['downloading', 'ready'].includes(upd.st.state)) send({ state: 'idle' });
+        }
+        return channel;
+      },
       notes: async (version) => {
         const none = { error: 'No release notes were found for this version.' };
-        if (!/^\d+\.\d+\.\d+$/.test(String(version))) return none;
+        if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(String(version))) return none;
         try {
           const r = await gh(`releases/tags/v${version}`);
           if (r.status === 404) return none;
@@ -102,11 +119,32 @@ function tvShell() {
   };
 }
 
+// "2.5.0-beta.1" vs "2.4.0": < 0 older, > 0 newer, 0 the same or unreadable. Ordered as in semver, like
+// electron/versions.js (a page script can't load that file): 2.4.0 < 2.5.0-beta.1 < 2.5.0-beta.2 < 2.5.0.
+function tvVersionCompare(a, b) {
+  const parse = (v) => { const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(v || '').trim()); return m && { n: [+m[1], +m[2], +m[3]], pre: m[4] ? m[4].split('.') : [] }; };
+  const x = parse(a), y = parse(b);
+  if (!x || !y) return 0;
+  for (let i = 0; i < 3; i++) if (x.n[i] !== y.n[i]) return x.n[i] - y.n[i];
+  if (!x.pre.length || !y.pre.length) return y.pre.length - x.pre.length;
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const p = x.pre[i], q = y.pre[i];
+    if (p === undefined) return -1;
+    if (q === undefined) return 1;
+    if (p === q) continue;
+    const pn = /^\d+$/.test(p), qn = /^\d+$/.test(q);
+    if (pn && qn) return +p - +q;
+    if (pn !== qn) return pn ? -1 : 1;
+    return p < q ? -1 : 1;
+  }
+  return 0;
+}
+
 function tvHowToUpdate(version) {
   askConfirm({
     title: version ? `Version ${version} is available` : 'Getting a new version',
     text: 'Install it over this one, the same way you installed AG Horizon. Your playlists, favorites and history are kept.',
-    list: [`The file is AG-Horizon-TV-${version || '<version>'}.apk on the releases page:`, `github.com/${TV_REPO}/releases/latest`, 'With the Downloader app on the TV you can type that address, or send the file from a phone or computer.'],
+    list: [`The file is AG-Horizon-TV-${version || '<version>'}.apk on the releases page:`, `github.com/${TV_REPO}/releases/${version ? 'tag/v' + version : 'latest'}`, 'With the Downloader app on the TV you can type that address, or send the file from a phone or computer.'],
     ok: 'OK',
   });
 }

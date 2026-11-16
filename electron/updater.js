@@ -6,6 +6,7 @@
  */
 const { app, ipcMain, BrowserWindow, shell } = require('electron');
 const pkg = require('../package.json');
+const versions = require('./versions');
 
 let autoUpdater = null;
 try { ({ autoUpdater } = require('electron-updater')); } catch { /* dependency missing: updates are simply unavailable */ }
@@ -14,6 +15,19 @@ try { ({ autoUpdater } = require('electron-updater')); } catch { /* dependency m
 const repo = /github\.com[/:]([^/]+)\/([^/#]+?)(?:\.git)?$/i.exec(String((pkg.repository && pkg.repository.url) || pkg.repository || '').trim());
 const pub = repo ? { owner: repo[1], repo: repo[2] } : {};
 const releasesUrl = pub.owner && pub.repo ? `https://github.com/${pub.owner}/${pub.repo}/releases/latest` : '';
+const api = (p) => fetch(`https://api.github.com/repos/${pub.owner}/${pub.repo}${p}`, { headers: { 'User-Agent': 'AG-Horizon', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000) });
+
+// Update channel, chosen in Settings: 'stable' gets published releases only; 'test' also gets pre-releases
+// (versions like 2.5.0-beta.1, see RELEASING.md). A test version installed by hand starts out on 'test'.
+let channel = versions.isTest(app.getVersion()) ? 'test' : 'stable';
+function applyChannel() {
+  if (!autoUpdater) return;
+  // electron-updater: with channel "beta" it reads the GitHub releases feed and takes the newest beta or release;
+  // with "latest" and allowPrerelease off it takes GitHub's "latest release", which is never a pre-release
+  autoUpdater.channel = channel === 'test' ? 'beta' : 'latest';
+  autoUpdater.allowPrerelease = channel === 'test';
+  autoUpdater.allowDowngrade = false;   // setting the channel turns this on: never offer an older version
+}
 
 let status = { state: 'idle' };
 function send(next) {
@@ -29,23 +43,28 @@ const reason = () => {
   return '';
 };
 
-// "v1.12.0" vs "1.9.3": compare the numbers part by part
-function newer(tag, current) {
-  const a = tag.replace(/^v/i, '').split('.').map(Number), b = current.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
-  return false;
-}
-
 async function manualCheck() {
   if (!releasesUrl) { send({ state: 'error', message: 'No GitHub repository is configured yet: set your username and repository in package.json (see RELEASING.md).' }); return status; }
   send({ state: 'checking' });
   try {
-    const r = await fetch(`https://api.github.com/repos/${pub.owner}/${pub.repo}/releases/latest`, { headers: { 'User-Agent': 'AG-Horizon', Accept: 'application/vnd.github+json' } });
-    if (r.status === 404) { send({ state: 'error', message: 'No published release found. Draft releases are invisible: open the release on GitHub and press Publish.' }); return status; }
-    if (!r.ok) throw new Error('GitHub answered ' + r.status);
-    const j = await r.json();
-    const tag = String(j.tag_name || '');
-    send(newer(tag, app.getVersion()) ? { state: 'available', version: tag.replace(/^v/i, ''), manual: true } : { state: 'current', checkedAt: Date.now() });
+    let tag = '';
+    if (channel === 'test') {
+      // the newest published release or pre-release (drafts aren't listed for people who aren't logged in)
+      const r = await api('/releases?per_page=30');
+      if (!r.ok) throw new Error('GitHub answered ' + r.status);
+      for (const rel of await r.json()) {
+        const t = String(rel.tag_name || '');
+        if (!rel.draft && versions.parse(t) && (!tag || versions.compare(t, tag) > 0)) tag = t;
+      }
+    } else {
+      const r = await api('/releases/latest');
+      if (r.status !== 404) {
+        if (!r.ok) throw new Error('GitHub answered ' + r.status);
+        tag = String((await r.json()).tag_name || '');
+      }
+    }
+    if (!tag) { send({ state: 'error', message: 'No published release found. Draft releases are invisible: open the release on GitHub and press Publish.' }); return status; }
+    send(versions.compare(tag, app.getVersion()) > 0 ? { state: 'available', version: tag.replace(/^v/i, ''), manual: true } : { state: 'current', checkedAt: Date.now() });
   } catch (e) { send({ state: 'error', message: String((e && e.message) || e).slice(0, 200) }); }
   return status;
 }
@@ -53,16 +72,26 @@ async function manualCheck() {
 function init() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(), platform: process.platform, arch: process.arch,
-    updater: !reason(), updaterReason: reason(), releasesUrl,
+    updater: !reason(), updaterReason: reason(), releasesUrl, channel,
   }));
+  ipcMain.handle('updater:channel', (_e, next) => {
+    if (next !== 'stable' && next !== 'test') return channel;
+    if (next !== channel) { channel = next; applyChannel(); if (status.state !== 'downloading' && status.state !== 'ready') send({ state: 'idle' }); }
+    return channel;
+  });
   ipcMain.handle('updater:status', () => status);
-  ipcMain.handle('updater:open', () => { if (releasesUrl) shell.openExternal(releasesUrl); });
+  // the release on offer, else the newest release (or, on the test channel, the list with the pre-releases)
+  ipcMain.handle('updater:open', () => {
+    if (!releasesUrl) return;
+    const v = ['available', 'downloading', 'ready', 'error'].includes(status.state) && status.version;
+    shell.openExternal(v ? releasesUrl.replace(/latest$/, 'tag/v' + v) : channel === 'test' ? releasesUrl.replace(/\/latest$/, '') : releasesUrl);
+  });
   // "What's new?": the notes of one version, as the Markdown written on its GitHub release.
   ipcMain.handle('updater:notes', async (_e, version) => {
     const none = { error: 'No release notes were found for this version.' };
-    if (!releasesUrl || !/^\d+\.\d+\.\d+$/.test(String(version))) return none;
+    if (!releasesUrl || !versions.parse(version)) return none;
     try {
-      const r = await fetch(`https://api.github.com/repos/${pub.owner}/${pub.repo}/releases/tags/v${version}`, { headers: { 'User-Agent': 'AG-Horizon', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000) });
+      const r = await api(`/releases/tags/v${String(version).replace(/^v/i, '')}`);
       if (r.status === 404) return none;   // not published (a draft), or started from source with a version that was never released
       if (!r.ok) throw new Error('GitHub answered ' + r.status);
       return { body: String((await r.json()).body || '') };
@@ -77,6 +106,7 @@ function init() {
     return;
   }
 
+  applyChannel();
   autoUpdater.autoDownload = false;          // the person decides
   autoUpdater.autoInstallOnAppQuit = true;   // a downloaded update installs when the app is closed
   autoUpdater.on('checking-for-update', () => send({ state: 'checking' }));
