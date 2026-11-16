@@ -64,10 +64,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The Android TV app: one APK, added to the same draft release once the desktop builds have made it.
+  # The Android TV app: one APK, added to the same draft release. It doesn't wait for the desktop builds (a Mac
+  # build can sit in GitHub's queue for a long time): by the time the APK is built, the Linux or Windows build has
+  # normally made the draft, and the last step waits a little for it if not.
   android-tv:
-    needs: build
-    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -114,6 +114,11 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           apk="AG-Horizon-TV-$version.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          # the desktop builds make the draft; wait up to five minutes for it before making it here
+          for i in $(seq 1 30); do
+            gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 && break
+            sleep 10
+          done
           gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft --title "$version" --notes ""
           gh release upload "$GITHUB_REF_NAME" "$apk" --clobber
         env:
