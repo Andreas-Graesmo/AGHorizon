@@ -435,8 +435,9 @@ function tvEnsureFocus(force) {
   const scope = tvScope();
   const key = tvScopeKey(scope);
   const ae = document.activeElement;
-  const fine = ae && ae !== document.body && scope.contains(ae) && tvShown(ae);
   const moved = key !== tv.scopeKey;
+  // a page picked in the rail of icons: the focus goes into that page, not stay on the icon
+  const fine = ae && ae !== document.body && scope.contains(ae) && tvShown(ae) && !(moved && scope === document.body && ae.closest('#nav'));
   tv.scopeKey = key;
   const items = tvItems(scope);
   if (!items.length) return;
