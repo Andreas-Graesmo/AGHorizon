@@ -25,8 +25,9 @@ const key = async (name, pause = 700) => { adb('shell', 'input', 'keyevent', 'KE
 
 const results = [];
 function check(name, ok, detail = '') {
-  results.push({ name, ok: !!ok });
-  console.log(`${ok ? '  ok  ' : ' FAIL '} ${name}${detail ? '  ·  ' + detail : ''}`);
+  const line = `${ok ? '  ok  ' : ' FAIL '} ${name}${detail ? '  ·  ' + String(detail).slice(0, 400) : ''}`;
+  results.push({ name, ok: !!ok, line });
+  console.log(line);
 }
 
 /* ── test videos: H.264 + AAC as MP4 and as HLS, and H.264 + AC-3 as MPEG-TS (sound most TVs can't decode themselves) ── */
@@ -122,10 +123,10 @@ function screenshot(name) {
   fs.mkdirSync(OUT, { recursive: true });
   const png = path.join(OUT, `${String(++shots).padStart(2, '0')}-${name}.png`);
   fs.writeFileSync(png, execFileSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 256e6 }));
-  // a small copy in the log, for reading a run without downloading its files
-  if (process.env.SMOKE_INLINE_SHOTS) {
+  // SMOKE_INLINE_SHOTS="live-tv,movie": small copies of those in the log, for reading a run without downloading its files
+  if ((process.env.SMOKE_INLINE_SHOTS || '').split(',').includes(name)) {
     try {
-      const jpg = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', png, '-vf', 'scale=640:-2', '-q:v', '9', '-f', 'mjpeg', '-'], { maxBuffer: 64e6 });
+      const jpg = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', png, '-vf', 'scale=480:-2', '-q:v', '14', '-f', 'mjpeg', '-'], { maxBuffer: 64e6 });
       console.log(`<<<SHOT ${name}\n${jpg.toString('base64').replace(/(.{160})/g, '$1\n')}\nSHOT>>>`);
     } catch (e) { console.log('  (no inline screenshot: ' + e.message.split('\n')[0] + ')'); }
   }
@@ -166,7 +167,9 @@ async function main() {
   await key('DPAD_CENTER', 1200);
   check('OK opens what the focus is on', await ev(`!!document.querySelector('#addDlg[open]')`), 'keys: ' + await ev(`window.__keys.slice(4).join(' ')`));
   screenshot('add-playlist');
+  // the dialog starts in its first text box, which brings up the TV's keyboard: the first Back only puts that away
   await key('BACK', 1000);
+  if (await ev(`!!document.querySelector('#addDlg[open]')`)) await key('BACK', 1000);
   check('Back closes the dialog', await ev(`!document.querySelector('#addDlg[open]')`));
 
   /* a playlist: fetched through the app's server */
@@ -264,9 +267,11 @@ main().catch((e) => { check('the test ran to its end', false, e.stack || String(
     fs.mkdirSync(OUT, { recursive: true });
     const log = adb('logcat', '-d', '-v', 'time', 'AGHorizon:V', 'AGHorizonNode:V', 'AGHorizonWeb:V', 'AndroidRuntime:E', '*:S');
     fs.writeFileSync(path.join(OUT, 'logcat.txt'), adb('logcat', '-d', '-v', 'time'));
-    console.log('\n── the app’s log ──\n' + log.split('\n').slice(-120).join('\n'));
+    // (the emulator's graphics driver chatters on the same output Node.js writes to)
+    console.log('\n── the app’s log ──\n' + log.split('\n').filter((l) => l.trim() && !/s_glBindAttribLocation/.test(l)).slice(-40).map((l) => l.slice(0, 300)).join('\n'));
   } catch (e) { console.log('no logcat: ' + e.message); }
   const failed = results.filter((r) => !r.ok);
+  console.log('\n── every check ──\n' + results.map((r) => r.line).join('\n'));
   console.log(`\n${results.length - failed.length} of ${results.length} checks passed${failed.length ? ': FAILED → ' + failed.map((f) => f.name).join('; ') : ''}`);
   process.exit(failed.length ? 1 : 0);
 });
