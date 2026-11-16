@@ -1,0 +1,351 @@
+package app.aghorizon.tv
+
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
+import android.os.Handler
+import android.os.Looper
+import android.text.format.DateFormat
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.SeekBar
+import android.widget.TextView
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.DefaultTrackNameProvider
+import org.json.JSONArray
+import java.util.Date
+
+/**
+ * The player's controls for the remote, laid out like the desktop app's player (public/index.html, #player): the bar
+ * with the times at its ends, sound and subtitles on the left, back 15 s / play-pause / forward 15 s in the middle,
+ * LIVE on the right. For a channel with a guide, the bar is how far the programme has come, with what's next above it.
+ * Sound and subtitles open a menu like the desktop app's, with the tracks named by language, channels and kind of sound.
+ * PlayerController owns the player and decides when the controls come and go; this draws them and steers them.
+ */
+class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit) {
+    private val res = layer.resources
+    private val panel: View = layer.findViewById(R.id.controls)
+    private val progRow: View = layer.findViewById(R.id.progRow)
+    private val progTitle: TextView = layer.findViewById(R.id.progTitle)
+    private val progNext: TextView = layer.findViewById(R.id.progNext)
+    private val seekRow: View = layer.findViewById(R.id.seekRow)
+    private val seek: SeekBar = layer.findViewById(R.id.seek)
+    private val timeLeft: TextView = layer.findViewById(R.id.timeLeft)
+    private val timeRight: TextView = layer.findViewById(R.id.timeRight)
+    private val btnAudio: View = layer.findViewById(R.id.btnAudio)
+    private val btnSubs: View = layer.findViewById(R.id.btnSubs)
+    private val btnBack: View = layer.findViewById(R.id.btnBack)
+    private val btnPlay: ImageView = layer.findViewById(R.id.btnPlay)
+    private val btnFwd: View = layer.findViewById(R.id.btnFwd)
+    private val liveBadge: View = layer.findViewById(R.id.liveBadge)
+    private val tracks: View = layer.findViewById(R.id.tracks)
+    private val tracksTitle: TextView = layer.findViewById(R.id.tracksTitle)
+    private val tracksList: LinearLayout = layer.findViewById(R.id.tracksList)
+    private val handler = Handler(Looper.getMainLooper())
+    private val names = DefaultTrackNameProvider(res)
+
+    var player: ExoPlayer? = null
+    private var live = false
+    private var now: JSONArray? = null    // [start ms, end ms, title] of what is on now, for a channel
+    private var next: JSONArray? = null
+    var accent = DEFAULT_ACCENT
+        private set
+    private var pickingFrom: View? = null
+
+    val visible: Boolean get() = panel.visibility == View.VISIBLE
+    val picking: Boolean get() = tracks.visibility == View.VISIBLE
+    /** A channel with a guide: the controls show the programme, so the title lines above can leave it out. */
+    val showsProgramme: Boolean get() = live && now != null
+
+    init {
+        btnPlay.setOnClickListener { togglePlay() }
+        btnBack.setOnClickListener { player?.seekBack(); update() }
+        btnFwd.setOnClickListener { player?.seekForward(); update() }
+        btnAudio.setOnClickListener { pick(C.TRACK_TYPE_AUDIO, it) }
+        btnSubs.setOnClickListener { pick(C.TRACK_TYPE_TEXT, it) }
+        seek.max = 1000
+        seek.nextFocusDownId = R.id.btnPlay
+        restyle()
+    }
+
+    /** Something new plays. accent: the app's accent colour as CSS gives it ("#6ea1ff"), or blank. */
+    fun reset(live: Boolean, accent: String) {
+        this.live = live
+        this.accent = parseColor(accent) ?: DEFAULT_ACCENT
+        now = null
+        next = null
+        hide()
+        restyle()
+        seek.isFocusable = !live   // live TV can't seek: there the bar only shows the programme
+        btnBack.visibility = if (live) View.GONE else View.VISIBLE
+        btnFwd.visibility = btnBack.visibility
+        liveBadge.visibility = if (live) View.VISIBLE else View.GONE
+        btnPlay.tag = null
+        tracksChanged()
+    }
+
+    /** What is on now and next on the channel (from the page's guide). */
+    fun programme(now: JSONArray?, next: JSONArray?) {
+        this.now = now?.takeIf { it.length() >= 2 }
+        this.next = next?.takeIf { it.length() >= 3 }
+        if (visible) update()
+    }
+
+    fun show() {
+        if (!visible) {
+            panel.visibility = View.VISIBLE
+            update()
+            (if (!live) seek else btnPlay).requestFocus()
+            onVisible(true)
+        }
+        hideLater()
+    }
+
+    fun hide() {
+        closePicker()
+        handler.removeCallbacksAndMessages(null)
+        if (visible) {
+            panel.visibility = View.GONE
+            onVisible(false)
+        }
+    }
+
+    /** Keys while the controls are up (Back and the media keys are PlayerController's). True: handled here. */
+    fun onKey(e: KeyEvent): Boolean {
+        hideLater()
+        val down = e.action == KeyEvent.ACTION_DOWN
+        if (picking) {
+            // the menu goes up and down; nothing to its sides
+            return e.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || e.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        }
+        if (seek.hasFocus()) {
+            val p = player ?: return false
+            when (e.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> { if (down) { p.seekBack(); update() }; return true }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { if (down) { p.seekForward(); update() }; return true }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    if (down && e.repeatCount == 0) togglePlay()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> return true
+            }
+        }
+        return false
+    }
+
+    /** Back with the menu of tracks open: close it. False when it wasn't open. */
+    fun back(): Boolean {
+        if (!picking) return false
+        closePicker()
+        return true
+    }
+
+    /** The stream's tracks are known or changed: the sound and subtitle buttons only show when there is a choice. */
+    fun tracksChanged() {
+        btnAudio.visibility = if (choices(C.TRACK_TYPE_AUDIO).size > 1) View.VISIBLE else View.GONE
+        btnSubs.visibility = if (choices(C.TRACK_TYPE_TEXT).isNotEmpty()) View.VISIBLE else View.GONE
+        if (visible && panel.findFocus() == null && !picking) btnPlay.requestFocus()
+    }
+
+    /** Draw the bar, the times and play / pause again (every second while the controls are up). */
+    fun update() {
+        if (!visible) return
+        val p = player ?: return
+        if (live) updateLive() else {
+            val dur = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+            val pos = p.currentPosition
+            progRow.visibility = View.GONE
+            seekRow.visibility = View.VISIBLE
+            seek.progress = if (dur > 0) (pos * 1000 / dur).toInt() else 0
+            seek.secondaryProgress = if (dur > 0) (p.bufferedPosition * 1000 / dur).toInt() else 0
+            timeLeft.text = hms(pos)
+            timeRight.text = if (dur > 0) hms(dur) else "–:––"
+        }
+        val playing = p.playWhenReady
+        if (btnPlay.tag != playing) {
+            btnPlay.tag = playing
+            btnPlay.setImageResource(if (playing) R.drawable.ic_p_pause else R.drawable.ic_p_play)
+        }
+    }
+
+    private fun updateLive() {
+        val n = now
+        if (n == null) {
+            progRow.visibility = View.GONE
+            seekRow.visibility = View.GONE
+            return
+        }
+        val start = n.optLong(0)
+        val end = n.optLong(1)
+        progTitle.text = n.optString(2)
+        progNext.text = next?.let { "Next  ${clock(it.optLong(0))}  ${it.optString(2)}" } ?: ""
+        progRow.visibility = View.VISIBLE
+        seekRow.visibility = View.VISIBLE
+        seek.progress = if (end > start) ((System.currentTimeMillis() - start) * 1000 / (end - start)).toInt().coerceIn(0, 1000) else 0
+        seek.secondaryProgress = 0
+        timeLeft.text = clock(start)
+        timeRight.text = clock(end)
+    }
+
+    private fun togglePlay() {
+        val p = player ?: return
+        if (p.isPlaying) p.pause() else p.play()
+        update()
+        hideLater()
+    }
+
+    /* ───────────────────────────── sound and subtitles ───────────────────────────── */
+
+    private class Choice(val group: Tracks.Group, val index: Int) {
+        val format: Format get() = group.getTrackFormat(index)
+        val selected: Boolean get() = group.isTrackSelected(index)
+    }
+
+    private fun choices(type: Int): List<Choice> {
+        val p = player ?: return emptyList()
+        return p.currentTracks.groups.filter { it.type == type }
+            .flatMap { g -> (0 until g.length).filter { g.isTrackSupported(it, true) }.map { Choice(g, it) } }
+    }
+
+    private fun pick(type: Int, from: View) {
+        val list = choices(type)
+        val audio = type == C.TRACK_TYPE_AUDIO
+        tracksTitle.text = if (audio) "Audio" else "Subtitles"
+        tracksList.removeAllViews()
+        var focus: View? = null
+        if (!audio) {
+            val off = list.none { it.selected }
+            focus = addItem("Off", off) { choose(type, null) }.takeIf { off }
+        }
+        for (c in list) {
+            val item = addItem(trackName(c.format), c.selected) { choose(type, c) }
+            if (c.selected && focus == null) focus = item
+        }
+        pickingFrom = from
+        tracks.visibility = View.VISIBLE
+        handler.removeCallbacks(autoHide)
+        (focus ?: tracksList.getChildAt(0))?.requestFocus()
+    }
+
+    private fun choose(type: Int, c: Choice?) {
+        val p = player ?: return
+        val b = p.trackSelectionParameters.buildUpon()
+        if (c == null) b.setTrackTypeDisabled(type, true)
+        else b.setTrackTypeDisabled(type, false).setOverrideForType(TrackSelectionOverride(c.group.mediaTrackGroup, c.index))
+        p.trackSelectionParameters = b.build()
+        closePicker()
+    }
+
+    private fun closePicker() {
+        if (!picking) return
+        tracks.visibility = View.GONE
+        tracksList.removeAllViews()
+        pickingFrom?.takeIf { it.visibility == View.VISIBLE && visible }?.requestFocus()
+        pickingFrom = null
+        hideLater()
+    }
+
+    /** A line in the menu, marked as the desktop app's are: "✓  English" and "      Norwegian". */
+    private fun addItem(text: String, selected: Boolean, onClick: () -> Unit): TextView {
+        val item = TextView(tracksList.context).apply {
+            this.text = (if (selected) "✓  " else "      ") + text
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTextColor(Color.parseColor("#e7eaf3"))
+            setPadding(dp(14), 0, dp(20), 0)
+            minHeight = dp(44)
+            gravity = Gravity.CENTER_VERTICAL
+            isFocusable = true
+            isClickable = true
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), round(Color.parseColor("#283049"), 8f).apply { setStroke(dp(2), accent) })
+                addState(intArrayOf(), round(Color.TRANSPARENT, 8f))
+            }
+            setOnClickListener { onClick() }
+        }
+        tracksList.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return item
+    }
+
+    /** "English, 5.1 surround sound · Dolby TrueHD", "Norwegian · Forced". */
+    private fun trackName(f: Format): String {
+        val parts = mutableListOf(names.getTrackName(f))
+        codecName(f.sampleMimeType)?.let { parts += it }
+        if (f.selectionFlags and C.SELECTION_FLAG_FORCED != 0) parts += "Forced"
+        return parts.joinToString(" · ")
+    }
+
+    /* ───────────────────────────────── looks ───────────────────────────────── */
+
+    private val autoHide = Runnable { if (!picking && (live || player?.playWhenReady != false)) hide() else hideLater() }
+
+    private fun hideLater() {
+        handler.removeCallbacks(autoHide)
+        handler.postDelayed(autoHide, HIDE_MS)
+    }
+
+    /** The desktop player's looks, with a focus a TV needs: a light circle behind a button, a ring round play / pause. */
+    private fun restyle() {
+        for (b in listOf(btnAudio, btnSubs, btnBack, btnFwd)) b.background = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), oval(0x40ffffff))
+            addState(intArrayOf(), oval(Color.TRANSPARENT))
+        }
+        btnPlay.background = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), oval(accent).apply { setStroke(dp(3), Color.WHITE) })
+            addState(intArrayOf(), oval(accent))
+        }
+        btnPlay.imageTintList = ColorStateList.valueOf(INK)
+        seek.progressTintList = ColorStateList.valueOf(accent)
+        seek.thumb = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), oval(Color.WHITE).apply { setSize(dp(20), dp(20)); setStroke(dp(3), accent) })
+            addState(intArrayOf(), oval(Color.WHITE).apply { setSize(dp(20), dp(20)); setStroke(dp(4), Color.TRANSPARENT) })
+        }
+        seek.background = null
+    }
+
+    private fun oval(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
+
+    private fun round(color: Int, radiusDp: Float) = GradientDrawable().apply { setColor(color); cornerRadius = radiusDp * res.displayMetrics.density }
+
+    private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), res.displayMetrics).toInt()
+
+    private fun clock(ms: Long): String = DateFormat.getTimeFormat(panel.context).format(Date(ms))
+
+    companion object {
+        private const val HIDE_MS = 5000L
+        private val DEFAULT_ACCENT = Color.parseColor("#ff7a59")
+        private val INK = Color.parseColor("#06142b")   // --accent-ink: the play / pause sign on the accent
+
+        fun parseColor(css: String): Int? = runCatching { Color.parseColor(css.trim()) }.getOrNull()
+
+        /** 3725000 → "1:02:05", 65000 → "1:05". */
+        fun hms(ms: Long): String {
+            val s = (ms / 1000).coerceAtLeast(0)
+            return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+        }
+
+        fun codecName(mime: String?): String? = when (mime) {
+            MimeTypes.AUDIO_AC3 -> "Dolby Digital"
+            MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Digital Plus"
+            MimeTypes.AUDIO_TRUEHD -> "Dolby TrueHD"
+            MimeTypes.AUDIO_AC4 -> "Dolby AC-4"
+            MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD, MimeTypes.AUDIO_DTS_EXPRESS -> "DTS"
+            MimeTypes.AUDIO_AAC -> "AAC"
+            MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_MPEG_L2 -> "MPEG"
+            MimeTypes.AUDIO_OPUS -> "Opus"
+            MimeTypes.AUDIO_FLAC -> "FLAC"
+            else -> null
+        }
+    }
+}

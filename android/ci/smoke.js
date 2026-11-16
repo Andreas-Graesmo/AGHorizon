@@ -218,22 +218,24 @@ async function main() {
   st = await until('the movie playing', async () => { const s = await player(); return s.playing && s.pos > 1 ? s : null; });
   check('the movie plays (MP4)', st && st.dur > 170, JSON.stringify(st || await player()));
   await wait(4500);
-  await key('DPAD_RIGHT', 300); await key('DPAD_RIGHT', 2500);
+  await key('DPAD_RIGHT', 300); await key('DPAD_RIGHT', 2500);   // 15 s each
   st = await player();
-  check('▶ skips forward', st.pos > 55, `at ${st.pos} s`);
+  check('▶ skips forward', st.pos > 30, `at ${st.pos} s`);
   await key('MEDIA_PLAY_PAUSE', 1500);
   check('play / pause pauses', !(await player()).playing);
+  check('the controls are up while paused', (await player()).controls);
+  screenshot('movie-controls');
   await key('BACK', 500); await key('BACK', 1500);
   if ((await player()).visible) await key('BACK', 1500);
   const saved = await ev(`JSON.stringify(state.progress['smoke:' + ws.items[0].id] || null)`);
-  check('where the movie was is remembered', saved && JSON.parse(saved) && JSON.parse(saved).t > 55, saved);
+  check('where the movie was is remembered', saved && JSON.parse(saved) && JSON.parse(saved).t > 30, saved);
   check('the button now says Resume', /Resume/.test(await ev(`document.querySelector('#wsDetail [data-act="play"]').textContent`)));
   await wait(1200);
   const before = await focus();
   await ev(`window.__keys = []; 0`);
   await key('DPAD_CENTER', 500);
   st = await until('the movie again', async () => { const s = await player(); return s.playing ? s : null; }, 30000);
-  check('it resumes where it was', st && st.pos > 50, st ? `at ${st.pos} s` : `focus before: ${before}; now: ${await focus()}; keys: ${await ev(`window.__keys.join(' ')`)}; page focused: ${await ev(`document.hasFocus()`)}; playing: ${await ev(`state.current && state.current.name`)}; player: ${JSON.stringify(await player())}`);
+  check('it resumes where it was', st && st.pos > 28, st ? `at ${st.pos} s` : `focus before: ${before}; now: ${await focus()}; keys: ${await ev(`window.__keys.join(' ')`)}; page focused: ${await ev(`document.hasFocus()`)}; playing: ${await ev(`state.current && state.current.name`)}; player: ${JSON.stringify(await player())}`);
   await key('BACK', 1200);
   if ((await player()).visible) await key('BACK', 1200);
 
