@@ -54,13 +54,35 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
    (This runs `npm version`, which edits `package.json`, commits, tags `vX.Y.Z`, and then pushes both. Your working folder must have no uncommitted changes.)
 3. Wait for the Action to finish, open **Releases**, edit the new draft's notes and **Publish release**.
 
-## 4. What users see
+## 4. Test versions (the Test update channel)
+
+There are two update channels, chosen in the app under **Settings → About & updates → Update channel**:
+
+- **Stable** (the default) gets only releases you published with **Publish release**.
+- **Test** also gets *test versions*, for example `2.5.0-beta.1`. Use it on your own computer, or give it to a few people who want to try things first.
+
+To put out a test version, commit and push your changes as usual, then:
+```
+npm run release:test-minor   # 2.4.0 → 2.5.0-beta.0   (start testing the next feature version)
+npm run release:test         # 2.5.0-beta.0 → 2.5.0-beta.1   (the next test build of it)
+npm run release:test-major   # 2.4.0 → 3.0.0-beta.0
+```
+The Action builds it the same way, and when all three systems are done it **publishes it as a GitHub pre-release by itself**, so you don't have to publish it. (Writing notes on the release is still nice: "What's new?" shows them.) Apps on the Test channel see it; apps on Stable don't.
+
+When the test version is good, release it to everyone with `npm run release:minor` (2.5.0-beta.1 → 2.5.0; use `release:patch` for a 2.4.1-beta.x) and publish the draft as usual. Apps on Test get that too, since 2.5.0 is newer than 2.5.0-beta.1.
+
+- Test versions must use `beta` after the dash (the scripts do this). The updater ignores other names.
+- Switching from Test back to Stable never downgrades: someone on 2.5.0-beta.1 stays there until a stable version newer than it is released.
+- A pre-release never becomes GitHub's "latest release", so the download link in the README still goes to the latest stable version.
+- If the publish step fails (for example because one of the builds failed), the test version stays a draft. Fix it and push a new test version, or tick **Set as a pre-release** and publish the draft by hand.
+
+## 5. What users see
 
 - On start (if "Check for updates when the app starts" is on) and whenever they press **Check for updates**, the app asks GitHub for the newest published release.
 - If one is newer it shows "Version X is available" → **Download update** (progress bar) → **Restart and install**. A downloaded update also installs by itself the next time the app is closed.
 - Their playlists, favorites and history are kept; they live in the user data folder, not in the installation.
 
-## 5. Things to know
+## 6. Things to know
 
 - **Windows** – works out of the box. Because the installer isn't code-signed, Windows SmartScreen shows "Windows protected your PC" on the *first* install: **More info → Run anyway**. Updates installed from inside the app don't show this again.
 - **Linux** – the `.AppImage` updates itself. Make it executable once (`chmod +x`).
