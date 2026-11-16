@@ -672,6 +672,8 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .sw-search > .ic { width: 16px; height: 16px; color: var(--muted); }
 .sw-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; height: 100%; font-size: 14px; border-radius: 0; }
 .sw-search input:focus { border: 0; outline: 0; }
+/* a search box shows the focus on the box around the text field, not on the field inside it as well */
+:is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
 .sw-keys { display: flex; gap: 6px; color: var(--muted); }
 .sw-keys .ic { width: 14px; height: 14px; }
 .sw-list { border-top: 1px solid var(--line); padding: 10px 10px; max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -967,8 +969,11 @@ html.tv .card:focus .c-img { transform: translateY(-2px); box-shadow: var(--shad
 html.tv .card:focus .c-title { color: var(--text); }
 html.tv .row.ch:focus, html.tv .ep:focus, html.tv .sw-row:focus, html.tv .cat:focus, html.tv .menu-i:focus, html.tv .g-prog:focus, html.tv .g-chan:focus { outline-offset: -3px; }
 html.tv .ep:focus { background: var(--panel); border-color: var(--line); }
-html.tv .top-search:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
-html.tv .top-search input:focus { outline: none; }
+html.tv :is(.top-search, .cat-search, .sw-search, .pal-in):focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+html.tv :is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
+html.tv .sw-search { border-color: var(--line); }   /* the ring is the focus's, as everywhere on the TV */
+/* keys of a computer keyboard: no use with a remote */
+html.tv .sw-keys, html.tv .sw-foot > span:has(> kbd), html.tv .pal-foot, html.tv #mvPickClose { display: none; }
 html.tv [data-act="hero-open"]:focus { scroll-margin-top: 600px; }   /* the first thing on the dashboard: scrolls it back to its top */
 /* Live TV: next to the channel list, the channel the focus is on and what it shows now */
 html.tv .player-slot { background: var(--bg); overflow: hidden; }

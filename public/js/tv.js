@@ -19,6 +19,7 @@ const tv = {
   num: '', numTimer: 0,   // a channel number being typed while a channel plays
   playFrom: '',      // what had the focus when the player was started (it gets it back when the player closes)
   away: false,       // the player is up, or just closed: what gets the focus meanwhile is not where the person was
+  editing: null,     // the text box OK opened for typing (the others are read-only while the focus passes by, see tvLock)
   timer: 0,
 };
 
@@ -269,8 +270,26 @@ if (TV) {
 // What the focus can land on. Rows and tiles that are only clickable on a computer count too.
 const TV_ITEMS = 'button, a[href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"]), .row.ch, .ep[data-act], .sw-row, .g-prog, .g-chan';
 // Small buttons inside a tile or row (♥, ⋮ …) are reached with a long press on it instead.
-const TV_INSIDE = '.card, .row.ch, .ep[data-act], .src-row';
+const TV_INSIDE = '.card, .row.ch, .ep[data-act]';
+// Rows in a list with their buttons at the end (Reload, Edit, ⋯): → from the row goes into them, ← back out.
+const TV_ROWS = '.src-row, .sw-row';
 const tvIsText = (el) => !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'submit', 'file', 'color'].includes(el.type)));
+
+// A text box the focus lands on doesn't bring up the TV's keyboard by itself (it covers half the screen, and the
+// focus only passes by): it is read-only until OK is pressed on it.
+function tvLock(el) {
+  if (!tvIsText(el) || el.readOnly || tv.editing === el) return;
+  el.readOnly = true;
+  el.dataset.tvLock = '1';
+}
+function tvEdit(el) {
+  if (!el.dataset.tvLock) return;
+  delete el.dataset.tvLock;
+  el.readOnly = false;
+  el.blur();
+  tv.editing = el;
+  el.focus();   // focused again, now that it can be typed in: Android brings up the keyboard
+}
 
 function tvShown(el) {
   if (!el || !el.isConnected || el.disabled || el.closest('[inert]')) return false;
@@ -309,6 +328,8 @@ function tvItems(scope) {
 // A name for an element that survives the page being drawn again: its id, or what it is and says.
 function tvSig(el) {
   if (el.id) return '#' + el.id;
+  const row = el.parentElement && el.parentElement.closest(TV_ROWS);
+  if (row) return tvSig(row) + '/' + el.tagName + '.' + (el.dataset.act || Object.keys(el.dataset).join());   // Edit in this row, not the first
   const data = Object.keys(el.dataset).filter((k) => k !== 'count').sort().map((k) => `${k}=${el.dataset[k]}`).join('&');
   const box = el.closest('[id]');
   const base = `${box ? box.id : ''}>${el.tagName}.${data}`;
@@ -323,6 +344,7 @@ function tvFind(scope, sig, items) {
 function tvFocus(el, { scroll = true } = {}) {
   if (!el) return false;
   if (!el.matches('button, a[href], input, select, textarea, [tabindex]')) el.tabIndex = -1;   // rows: focusable, but not by Tab
+  tvLock(el);
   el.focus({ preventScroll: true });
   if (scroll) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   return document.activeElement === el;
@@ -372,6 +394,12 @@ function tvNext(cur, dir, items) {
     const b = el.getBoundingClientRect();
     const bx = b.left + b.width / 2, by = b.top + b.height / 2;
     let ahead, gap, off, slide;
+    if (cur.contains(el)) {   // a row's own buttons: → goes into them, the first one first
+      if (dir !== 'right') continue;
+      const score = b.left - a.left;
+      if (score < bestScore) { bestScore = score; best = el; }
+      continue;
+    }
     if (dir === 'right') { ahead = bx > ax + 1 && b.right > a.right + 1; gap = b.left - a.right; off = tvGap(a.top, a.bottom, b.top, b.bottom); slide = Math.abs(by - ay); }
     else if (dir === 'left') { ahead = bx < ax - 1 && b.left < a.left - 1; gap = a.left - b.right; off = tvGap(a.top, a.bottom, b.top, b.bottom); slide = Math.abs(by - ay); }
     else if (dir === 'down') { ahead = by > ay + 1 && b.bottom > a.bottom + 1; gap = b.top - a.bottom; off = tvGap(a.left, a.right, b.left, b.right); slide = Math.abs(bx - ax); }
@@ -407,7 +435,10 @@ function tvMove(dir) {
   const items = tvItems(scope);
   const cur = document.activeElement;
   if (!cur || cur === document.body || !scope.contains(cur) || !tvShown(cur)) { tvEnsureFocus(true); return; }
-  const next = tvNext(cur, dir, items);
+  let next = tvNext(cur, dir, items);
+  // ← from a row's first button goes back to the row, not out of it
+  const row = cur.parentElement && cur.parentElement.closest(TV_ROWS);
+  if (row && dir === 'left' && !(next && row.contains(next)) && items.includes(row)) next = row;
   // up from a page that is scrolled down first scrolls it back up, before the focus leaves for the top bar
   if (next && dir === 'up' && tvZone(next) === 'top' && tvZone(cur) === 'page' && tvScroll(cur, dir)) return;
   if (next) tvFocus(next);
@@ -492,14 +523,18 @@ function tvKeydown(e) {
   if (key === 'back') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvBack(); return; }
   if (key === 'menu') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvMenu(); return; }
   if (key === 'ok') {
-    if (tvIsText(t)) return;   // a text box: the TV's keyboard, or the form's own Enter
+    if (tvIsText(t)) {
+      // a text box: OK opens it for typing (the TV's keyboard comes up); once open, Enter is the form's own
+      if (t.dataset.tvLock) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) tvEdit(t); }
+      return;
+    }
     e.preventDefault(); e.stopPropagation();
     if (!e.repeat) { tv.okDown = Date.now(); tv.okEl = t; tv.okLong = false; }
     else if (!tv.okLong && tv.okEl === t && Date.now() - tv.okDown > 550) { tv.okLong = true; tvContext(t); }
     return;
   }
-  // In a text box ← → move the caret until it is at the end; a slider is changed with them.
-  if (tvIsText(t) && (key === 'left' || key === 'right')) {
+  // In a text box that is open for typing ← → move the caret until it is at the end; a slider is changed with them.
+  if (tvIsText(t) && !t.dataset.tvLock && (key === 'left' || key === 'right')) {
     let at = null;
     try { at = t.selectionStart === t.selectionEnd ? t.selectionStart : -1; } catch { /* a type without a caret */ }
     if (at !== null && !(at === 0 && key === 'left') && !(at === t.value.length && key === 'right')) return;
@@ -626,7 +661,8 @@ function tvInit() {
   if (!TV) return;
   window.addEventListener('keydown', tvKeydown, true);
   window.addEventListener('keyup', tvKeyup, true);
-  document.addEventListener('focusin', (e) => { tvRemember(e.target); tvLiveFocus(e.target); });
+  document.addEventListener('focusin', (e) => { tvLock(e.target); tvRemember(e.target); tvLiveFocus(e.target); });   // also what the pages focus themselves
+  document.addEventListener('focusout', (e) => { if (tv.editing === e.target) tv.editing = null; });
   new MutationObserver(tvEnsureSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'disabled'] });
   // A WebView older than the pages need (their colours and layout) shows them broken: say what to do about it.
   const chrome = Number((/Chrome\/(\d+)/.exec(navigator.userAgent) || [])[1]) || 0;
