@@ -120,15 +120,22 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
 
-  # Test versions (a tag with a dash, e.g. v2.5.0-beta.1) go out by themselves once the desktop and Android TV builds are done:
-  # published as a GitHub pre-release, which only apps on the Test update channel pick up.
-  # Stable versions stay drafts until you press Publish.
+  # Test versions (a tag with a dash, e.g. v2.5.0-beta.1). Their draft is always marked as a pre-release, even when a
+  # build failed, so publishing it by hand can't make it GitHub's "latest release" (which every installed app takes).
+  # Once the desktop and Android TV builds are done, it is published by itself:
+  # only apps on the Test update channel pick it up. Stable versions stay drafts until you press Publish.
   publish-test:
     needs: [build, android-tv]
-    if: contains(github.ref_name, '-')
+    if: ${{ !cancelled() && contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - name: Publish the draft as a pre-release
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Mark the draft as a pre-release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then gh release edit "$GITHUB_REF_NAME" --prerelease
+          else echo "::warning::No release $GITHUB_REF_NAME was made (every build failed?)"; fi
+      - name: Publish it
+        if: ${{ needs.build.result == 'success' && needs.android-tv.result == 'success' }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease
