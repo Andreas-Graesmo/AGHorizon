@@ -11,3 +11,6 @@ app/libnode/
 *.jks
 *.keystore
 keystore.properties
+
+# what the emulator test leaves behind (screenshots, the log)
+ci/out/

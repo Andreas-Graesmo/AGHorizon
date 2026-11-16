@@ -46,3 +46,43 @@ jobs:
           name: ag-horizon-tv-debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+  # Installs the app on an emulator and steers it like a person with a remote would (android/ci/smoke.js).
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: ag-horizon-tv-debug
+          path: apk
+      - name: ffmpeg, for the test videos
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Let the emulator use hardware virtualisation
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Try the app on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          SMOKE_INLINE_SHOTS: '1'
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: node android/ci/smoke.js apk/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-test
+          path: android/ci/out
+          retention-days: 14
