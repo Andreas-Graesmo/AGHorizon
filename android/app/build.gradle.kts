@@ -81,7 +81,7 @@ dependencies {
 /* ── the app's own server: the same server.js and public/ as the desktop app, packed as assets ── */
 val nodeProject by tasks.registering(Sync::class) {
     from(rootProject.file("..")) {
-        include("server.js", "subtitles.js", "package.json", "secrets.json")
+        include("server.js", "subtitles.js", "unicode-ln.js", "package.json", "secrets.json")
         include("public/**")
         exclude("public/mirror.html", "public/mirror.js", "public/vendor/**")   // desktop only: mirror window, the web player's libraries
     }

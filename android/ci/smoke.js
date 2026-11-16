@@ -136,7 +136,7 @@ async function main() {
   makeMedia();
   const server = await serveMedia();
   adb('install', '-r', APK);
-  adb('shell', 'am', 'force-stop', PKG);
+  adb('shell', 'pm', 'clear', PKG);   // a first run every time: no playlists from the run before
   adb('logcat', '-c');
   adb('shell', 'am', 'start', '-n', `${PKG}/.MainActivity`);
   const page = await connectPage();
