@@ -1,0 +1,48 @@
+name: Android TV
+
+# Builds the Android TV app when something it is made of changes, and tries it on an emulator.
+# Releases are built by release.yml; this one only checks.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'android/**'
+      - 'public/**'
+      - 'server.js'
+      - 'subtitles.js'
+      - 'package.json'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      # Node.js for Android (about 100 MB) is downloaded by the build once; keep it between builds
+      - name: Cache Node.js for Android
+        uses: actions/cache@v4
+        with:
+          path: android/app/libnode
+          key: libnode-${{ hashFiles('android/app/build.gradle.kts') }}
+          restore-keys: libnode-
+      - name: Build
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ag-horizon-tv-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
