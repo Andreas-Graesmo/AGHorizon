@@ -32,7 +32,7 @@ async function openWorkspace(pid, mode, opts = {}) {
     ws.mode = m;
     ws.lv = mode === 'guide' ? 'guide' : 'channels';
   }
-  go('ws', {}, { push: opts.push !== false });
+  go('ws', { push: opts.push !== false });
   await loadWs({ force: !!opts.force });
 }
 
@@ -47,28 +47,20 @@ async function loadWs({ force = false } = {}) {
   ws.items = [];
   renderWsChrome();
   renderWsBody();
+  let items = [], errors = [];
   try {
-    ws.items = await loadItems(p, mode, force);
+    items = await loadItems(p, mode, force);
   } catch (e) {
-    ws.items = [];
-    ws.errors = [e.message];
+    errors = [e.message];
   }
-  if (token !== ws.token) return;
+  if (token !== ws.token) return;   // superseded: a newer load owns ws.items now
+  ws.items = items;
+  ws.errors = errors;
   ws.loading = false;
-  if (!['*', '*fav', '*recent'].includes(ws.cat) && !ws.items.some((c) => c.group === ws.cat)) ws.cat = '*';
+  if (!['*', '*fav'].includes(ws.cat) && !ws.items.some((c) => c.group === ws.cat)) ws.cat = '*';
   renderWsChrome();
   renderWsBody();
   if (mode === 'live' && !ws.errors.length && (force || (!state.epg[p.id] && state.epgState[p.id] !== 'loading'))) loadEpg(p, force);
-}
-
-function cachedCount(p, mode) {
-  if (!p) return null;
-  const base = state.cache[p.id];
-  if (mode === 'live') return base ? base.channels.length : null;
-  const own = state.cache[`${p.id}:${mode}`];
-  if (own) return own.channels.length;
-  if (base && p.type !== 'xtream') return (mode === 'movie' ? base.movies : base.series).length;
-  return null;
 }
 
 function renderWsChrome() {
@@ -103,7 +95,7 @@ $('#wsRefresh').addEventListener('click', () => {
 });
 
 /* top search box: filters the current list; elsewhere it opens the global search */
-const catLabel = () => (ws.cat === '*' ? 'All items' : ws.cat === '*fav' ? 'Favorites' : ws.cat === '*recent' ? 'Recent' : ws.cat);
+const catLabel = () => (ws.cat === '*' ? 'All items' : ws.cat === '*fav' ? 'Favorites' : ws.cat);
 function syncTopSearch() {
   const inp = $('#topInput');
   const chip = $('#scopeChip');
@@ -153,22 +145,17 @@ function groupCounts(items) {
   for (const c of items) counts.set(c.group, (counts.get(c.group) || 0) + 1);
   return counts;
 }
-function catItemHtml(key, label, n, icon) {
-  return `<button class="cat${ws.cat === key ? ' on' : ''}" data-cat="${esc(key)}" title="${esc(label)}">${icon || ''}<span class="name">${esc(label)}</span><span class="count">${n.toLocaleString()}</span></button>`;
+function catItemHtml(key, label, n) {
+  return `<button class="cat${ws.cat === key ? ' on' : ''}" data-cat="${esc(key)}" title="${esc(label)}"><span class="name">${esc(label)}</span><span class="count">${n.toLocaleString()}</span></button>`;
 }
-function catsHtml(allLabel) {
+function catsHtml() {
   const counts = groupCounts(ws.items);
   const q = ws.catQ.trim().toLowerCase();
   let html = '';
   for (const [g, n] of counts) if (!q || g.toLowerCase().includes(q)) html += catItemHtml(g, g, n);
   return html;
 }
-function renderLiveCats() { const el = $('#liveCatList'); el.innerHTML = catsHtml('All items'); el.classList.toggle('compact', ws.compact); }
-function recentLive() {
-  const ids = new Set(ws.items.map((c) => c.uid));
-  const seen = new Set();
-  return state.recent.filter((r) => r.pid === ws.pid && r.kind === 'live' && ids.has(r.uid) && !seen.has(r.uid) && seen.add(r.uid)).map((r) => ws.items.find((c) => c.uid === r.uid));
-}
+function renderLiveCats() { const el = $('#liveCatList'); el.innerHTML = catsHtml(); el.classList.toggle('compact', ws.compact); }
 function wireCats(prefix, listId, onPick) {
   const box = $(`#${prefix}CatSearchBox`);
   const inp = prefix === 'live' ? $('#liveCatSearch') : $('#catSearch');
@@ -186,7 +173,6 @@ function liveBase() {
   const q = ws.q.trim().toLowerCase();
   let list = ws.items;
   if (ws.cat === '*fav') list = list.filter((c) => state.favs.has(c.uid));
-  else if (ws.cat === '*recent') list = recentLive();
   else if (ws.cat !== '*') list = list.filter((c) => c.group === ws.cat);
   if (q) list = list.filter((c) => c.name.toLowerCase().includes(q));
   if (ws.az) list = [...list].sort((a, b) => collator.compare(a.name, b.name));
@@ -585,7 +571,7 @@ function buildVodView() {
 
 function renderCats() {
   const el = $('#catList');
-  el.innerHTML = catsHtml(ws.mode === 'movie' ? 'All items' : 'All items');
+  el.innerHTML = catsHtml();
   el.classList.toggle('compact', ws.compact);
   $('#vodCatCompact').classList.toggle('on', ws.compact);
   $('#vodCatsTitle').textContent = ws.mode === 'movie' ? 'Movie Categories' : 'Series Categories';

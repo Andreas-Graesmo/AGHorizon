@@ -256,7 +256,7 @@ async function main() {
   /* Back walks back through the app, and leaves it from the first page */
   await key('BACK', 900);
   check('Back closes the movie page', await ev(`ui.route === 'ws' && !ws.detail`));
-  await ev(`go('dashboard', {}, { push: false }); ui.hist.length = 0; 0`);
+  await ev(`go('dashboard', { push: false }); ui.hist.length = 0; 0`);
   await wait(800);
   screenshot('dashboard');
   await key('BACK', 500);

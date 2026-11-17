@@ -66,8 +66,6 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
 
     val visible: Boolean get() = panel.visibility == View.VISIBLE
     val picking: Boolean get() = tracks.visibility == View.VISIBLE
-    /** A channel with a guide: the controls show the programme, so the title lines above can leave it out. */
-    val showsProgramme: Boolean get() = live && now != null
 
     init {
         btnPlay.setOnClickListener { togglePlay() }
@@ -201,7 +199,7 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
 
     private fun togglePlay() {
         val p = player ?: return
-        if (p.isPlaying) p.pause() else p.play()
+        if (p.playWhenReady) p.pause() else p.play()   // not isPlaying: that is false while it buffers, and pause would do nothing
         update()
         hideLater()
     }

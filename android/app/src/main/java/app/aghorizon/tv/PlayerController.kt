@@ -272,7 +272,7 @@ class PlayerController(
                 r.retries = 0
                 message.visibility = View.GONE
             } else if (state == Player.STATE_ENDED) {
-                if (r.live) retryLive(r, "The stream ended.") else emit(event("ended", r))
+                if (r.live) { if (!retryLive(r)) fail(r, "The stream ended.") } else emit(event("ended", r))
             }
         }
 
@@ -317,14 +317,14 @@ class PlayerController(
                 p.prepare()
                 return
             }
-            if (r.live && retryLive(r, friendly(error))) return
+            if (r.live && retryLive(r)) return
             fail(r, friendly(error))
         }
     }
 
-    /** Live streams drop now and then: connect again a few times before giving up. True when it will try again. */
-    private fun retryLive(r: Request, why: String): Boolean {
-        if (r.retries >= LIVE_RETRIES) { fail(r, why); return false }
+    /** Live streams drop now and then: connect again a few times before giving up. True when it will try again; the caller fails when not. */
+    private fun retryLive(r: Request): Boolean {
+        if (r.retries >= LIVE_RETRIES) return false
         r.retries++
         handler.postDelayed({
             if (req === r) player?.let { p -> p.seekToDefaultPosition(); p.prepare() }
@@ -413,7 +413,7 @@ class PlayerController(
                 if (e.action == KeyEvent.ACTION_UP && !controls.back()) { if (shown && !failed) controls.hide() else close() }
                 return true
             }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (first && p != null && !failed) { if (p.isPlaying) p.pause() else p.play(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (first && p != null && !failed) { if (p.playWhenReady) p.pause() else p.play(); controls.show() }; return true }
             KeyEvent.KEYCODE_MEDIA_PLAY -> { if (first && !failed) { p?.play(); controls.show() }; return true }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> { if (first && !failed) { p?.pause(); controls.show() }; return true }
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (down && !r.live && !failed) { p?.seekForward(); controls.show() }; return true }

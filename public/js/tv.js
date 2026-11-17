@@ -605,7 +605,7 @@ if (TV) {
       return true;
     }
     if ((ui.route === 'ws' && ws.detail) || ui.hist.length) { goBack(); return true; }
-    if (ui.route !== 'dashboard') { go('dashboard', {}, { push: false }); return true; }
+    if (ui.route !== 'dashboard') { go('dashboard', { push: false }); return true; }
     if (Date.now() - tv.exitAt < 2500) { try { window.AGHorizonTV.exit(); } catch { /* an older shell */ } return true; }
     tv.exitAt = Date.now();
     toast('Press Back again to leave AG Horizon');
