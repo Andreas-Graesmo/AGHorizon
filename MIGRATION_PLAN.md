@@ -261,7 +261,7 @@ Most of it lives in `public/js/tauri-shell.js` and `src-tauri/src/main.rs`; `pla
   - the wake lock is held while playing and released after;
   - the window size is kept across a restart (1111×733);
   - closing the app with PiP open quits, as does the close button, and nothing is left running.
-- [ ] **Manual pass on a real Windows 10/11 PC** (CI can't do these):
+- [x] **Manual pass on a real Windows 10/11 PC** (CI can't do these). The owner did it on 2026-11-17 with v3.1.0-beta.0, and **everything passed**:
   - dragging the window by the top bar; Aero Snap to the edges and with Win+arrows; double-click to maximise;
   - resizing from every edge and corner;
   - the folder dialogs (download folder, sync folder) and "show in Explorer";
@@ -315,7 +315,12 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
     - the app starts again by itself from the install folder;
     - it reports 9.0.1, its localStorage is kept, and exactly one app and one server are running.
   - **Not covered by CI:** install-on-quit; the Stable/Test choice against real GitHub releases.
-- [ ] **Gate, first real release:** a `v3.0.0-beta.1` tag from this branch (after the bridge has been out a release cycle) produces one draft containing:
+- [x] **Gate, first real release: v3.1.0-beta.0** (2026-11-17, tagged by the owner; this session can only push its branch).
+  - The release has `AG-Horizon-Setup-3.1.0-beta.0.exe` (49.5 MB), its `.sig` (release key `F074C66F1E88511B`) and `latest.json`, plus the AppImage with `latest-linux.yml` and the APK. There is no Windows `latest.yml`.
+  - The **macOS job was cancelled** (as in v2.5.0's run), so this beta has no dmg. That needs a look before the next release.
+  - The owner's manual pass on Windows: data, playback, window, PiP and mirror, downloads, sync and updates all passed.
+  - Still to see: the Tauri app updating itself N → N+1 from a real release (the next beta).
+- [ ] ~~Gate, first real release:~~ the original wording, kept for reference: a `v3.0.0-beta.1` tag from this branch (after the bridge has been out a release cycle) produces one draft containing:
   - the Windows Tauri installer with its `.sig` and `latest.json`;
   - the Electron dmg and AppImage with their `*-mac.yml` / `*-linux.yml`;
   - the APK.
@@ -365,6 +370,7 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
   - `e2e/tauri-installer.js`, 10/10 checks:
     - with real electron-builder and Tauri installers, installing without a hand-over keeps both apps;
     - installing after a hand-over removes the Electron app (its entry and its files), keeps its data, and the Tauri app is installed.
+- [x] **Owner's PC (2026-11-17):** the hand-over to v3.1.0-beta.0 passed. Data, downloads, sync code and the single installed app were all as expected.
 - [ ] **Gate, by hand:** run the full upgrade on clean Windows 10 and 11 machines, Electron 2.5.x → bridge 2.9.0 → Tauri 3.0.0-beta.1. Check that:
   - playlists, file playlists, favourites, history, settings, theme, downloads list, sync folder and sync code all survive;
   - exactly one app is installed.
