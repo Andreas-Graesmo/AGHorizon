@@ -18,7 +18,7 @@ const zlib = require('zlib');
 const { Readable } = require('stream');
 
 const HOST = '127.0.0.1';   // only the desktop app talks to this server
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, 'public');   // the Tauri app's server sidecar passes its resource folder
 const DEFAULT_UA = 'VLC/3.0.20 LibVLC/3.0.20';
 
 const MIME = {
