@@ -88,6 +88,15 @@ async fn popup_fullscreen(app: tauri::AppHandle, label: String) -> Result<bool, 
     Ok(on)
 }
 
+// The page closed a popup (window.close) but WebView2 leaves the Tauri window up: remove it.
+#[tauri::command]
+fn popup_destroy(app: tauri::AppHandle, label: String) -> Result<bool, String> {
+    match app.get_webview_window(&label) {
+        Some(w) => w.destroy().map(|_| true).map_err(|e| e.to_string()),
+        None => Ok(false),
+    }
+}
+
 #[tauri::command]
 fn monitors(app: tauri::AppHandle) -> Result<Vec<MonitorInfo>, String> {
     let w = app.get_webview_window("main").ok_or("no main window")?;
@@ -121,6 +130,7 @@ fn main() {
             popup_mode,
             popup_windows,
             popup_fullscreen,
+            popup_destroy,
             monitors
         ])
         .setup(move |app| {
@@ -134,14 +144,16 @@ fn main() {
                     match mode.as_str() {
                         "allow" => NewWindowResponse::Allow,
                         "create" => {
-                            let n = POPUPS.fetch_add(1, Ordering::SeqCst);
                             let pip = target.as_str() == "about:blank";
+                            // fixed labels, as the plan's capabilities assume: one PiP and one mirror at a time
+                            let label = if pip { "pip".to_string() } else { "mirror".to_string() };
+                            POPUPS.fetch_add(1, Ordering::SeqCst);
                             // As electron/main.js:86-111: PiP is a frameless always-on-top 480x270 window,
                             // the mirror a frameless 960x540 one. window_features() also sets the same WebView2
                             // environment as the opener, which SetNewWindow requires.
                             let mut wb = WebviewWindowBuilder::new(
                                 &handle,
-                                format!("popup-{n}"),
+                                label,
                                 WebviewUrl::External("about:blank".parse().unwrap()),
                             )
                             .window_features(features)
