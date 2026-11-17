@@ -184,43 +184,40 @@ It changes nothing a user notices until a Tauri release exists. The code is port
 
 All 34 preload members are listed in Appendix A.
 
-- [ ] **3.1** Set `app.withGlobalTauri: true`.
-- [ ] **3.2** Add `public/js/tauri-shell.js` and load it right after `tv.js` in `public/index.html:428`.
-  - It defines `window.tunerDesktop` with the exact `preload.js` shape, using `__TAURI__.core.invoke` and `__TAURI__.event.listen`.
-  - It does nothing when `window.AGHorizonTV` exists (Android), when `__TAURI__` is missing (Electron, browsers), or when Electron's preload has already defined `tunerDesktop`.
-  - It must define the object **synchronously**, because `downloads.js:5` dereferences it at load time and `boot.js:46` calls `ready` without a guard.
-  - Exclude it from the Android asset list (`build.gradle.kts:88`), or keep the no-op guard.
-- [ ] **3.3 App and window commands:**
-  - `app_ready`: show the window, with a 5 s Rust fallback.
-  - `focus_main`
-  - `displays`: `available_monitors()`. There is no stable numeric id, so key monitors by `name + position`.
-  - `app_info`
-  - `titleBar`: becomes a no-op in the adapter.
-- [ ] **3.4 Sync commands** (Rust).
-  - `sync_info`: use the `hostname` crate.
-  - `sync_code_get` / `sync_code_set`: use the `keyring` crate (Windows Credential Manager), which replaces `safeStorage`.
-  - `sync_folder_choose`: use `tauri-plugin-dialog`, and save to `sync.json` in `app_config_dir`.
-  - `sync_folder_list` / `sync_folder_put` / `sync_folder_remove`.
-  - Keep the validation from `sync.js:17-29`: hex vault (64 chars), hex device (16-32 chars), and atomic tmp+rename writes.
-  - **Binary blobs:** the adapter sends `Array.from(blob)` (or base64) and converts results back to `Uint8Array`. A raw `Uint8Array` inside an object serialises as `{"0":…}`.
-- [ ] **3.5 Downloads**, recommended for the hybrid strategy:
-  - [ ] **Where it runs:** keep the engine in Node, inside the sidecar. Refactor `electron/downloads.js` into an injectable module (no direct `require('electron')`), used **both** by Electron (macOS/Linux) and by the sidecar, so there is one engine and `test/downloads.test.js` keeps covering it.
-  - [ ] **Control routes:** the sidecar exposes `/internal/downloads/*`, guarded by a per-launch random token passed through env. Thin Rust commands forward to those routes.
-  - [ ] **Change events:** `downloads:changed` snapshots go to the sidecar's stdout as JSON lines, and Rust re-emits them with `app.emit_to("main", "downloads:changed", …)`, throttled to 500 ms.
-  - [ ] **Rust-only actions:** folder picking (`dialog.pick_folder`), `reveal` (`opener.reveal_item_in_dir`) and `openFolder` (`opener.open_path`). Rust resolves the id to a path, and the renderer never names a path.
-  - [ ] **Validation to keep:**
-    - http(s)-only URLs (`downloads.js:282-285`)
-    - the under-folder check in `adopt` (`downloads.js:100`)
-    - free space (`fs.statfs`)
-- [ ] **3.6 Updater commands.** These are built in Phase 5. Until then, stub them so `app_info.updater = false` and the manual check path works.
-- [ ] **3.7 Tests.**
-  - Update `test/tv.test.js:32`, which asserts `tunerDesktop` is undefined outside the TV app.
-  - Add a node test that loads `tauri-shell.js` with a fake `__TAURI__` and asserts the 34-member shape.
-  - Add a test that the adapter is a no-op without `__TAURI__`.
-- [ ] **Gate:** every flow works in Tauri on Windows, and still works in Electron on macOS and Linux:
-  - Settings: downloads (add, pause, resume, reorder, remove, reveal, choose folder, orphans and adopt, pause while watching)
-  - Sync: cloud mode and folder mode, set and clear the code
-  - About: version, channel, manual update check
+- [x] **3.1** `app.withGlobalTauri: true` (done in Phase 2).
+- [x] **3.2 `public/js/tauri-shell.js`**, loaded right after `tv.js`.
+  - It defines `window.tunerDesktop` synchronously, with exactly the shape of `electron/preload.js`. `test/tauri-shell.test.js` reads the member list from `preload.js` itself, so the two can't drift apart.
+  - It does nothing in Electron, on Android TV, or without `__TAURI__`.
+- [x] **3.3 App and window.**
+  - `ready` / `focusWindow` use Tauri's window API.
+  - `displays()` uses `availableMonitors()`/`primaryMonitor()`, in logical pixels. The id is `name@x,y` (Windows names look like `\\.\DISPLAY1`, labelled "Display 1").
+  - `appInfo` gives the version; the updater comes in Phase 5.
+  - `titleBar` is a no-op (4.2).
+- [x] **3.4 Sync.**
+  - **The code** is in **Windows Credential Manager** (`keyring` 3.6, `windows-native`, entry "AG Horizon" / "sync-code"), and `info.keychain` is `true`. Other systems (development until Phase 9) use a file in the app's data folder, as Electron does without a keychain.
+  - **The folder** is shared code, `desktop/sync-folder.js`. Electron's `sync.js` now uses it too, with the same validation (hex vault and device, tmp+rename). In the Tauri app it runs in the sidecar, and Rust adds only the folder dialog.
+  - **Blobs** travel as base64.
+- [x] **3.5 Downloads.** **Changed from the plan's token-guarded `/internal/downloads/*` routes** to the sidecar's own stdin/stdout. That's simpler, with no new HTTP endpoints, no token and no HTTP client in Rust.
+  - **The engine** is now `desktop/downloads-core.js`, with no Electron. `electron/downloads.js` is a thin layer with the same IPC as before.
+  - **In the Tauri app** the engine runs in the sidecar (`sidecar/entry.js` with `AGH_DATA_DIR` = `app_data_dir`, `AGH_DOCUMENTS_DIR`), so `/api/local` plays downloads as before.
+  - **Requests:** Rust writes `{"id","cmd","args"}` lines to the sidecar and gets `RPC {…}` answers. Changes arrive as `EVENT {"name":"downloads:changed",…}` and are emitted to `main`.
+  - **Only a fixed list of operations** is reachable: the `downloads` and `sync` commands in `src-tauri/src/main.rs`.
+  - **Rust alone handles** the folder dialog, Explorer (`reveal_item_in_dir`, `open_path`) and the id-to-path lookup, so the page never names a path.
+  - **On exit,** Rust asks the sidecar to `quit` (what was downloading resumes next time) before stopping it.
+  - **Kept:** http(s)-only URLs, the under-folder check in `adopt`, and free space.
+- [x] **3.6 Updater:** still stubbed (`app_info.updater = false`) until Phase 5.
+- [x] **3.7 Tests.**
+  - `test/tauri-shell.test.js`: shape against `preload.js`; inert in Electron, Android TV and a browser; operations and arguments; base64 round trip; displays.
+  - `test/sidecar-rpc.test.js`: a real download over the sidecar protocol, played back through `/api/local`; folder-sync round trip; bad vault and device refused; `quit` saves.
+  - `npm test`: 74/74, on Linux and Windows.
+- [ ] **Gate** (Windows CI `e2e/tauri-windows.js`, plus Electron).
+  - **Tauri on Windows:**
+    - downloads folder from `downloads.json`;
+    - a 4.6 MB film downloads with progress events, plays back through `/api/local` byte for byte, lands in `Movies/E2E Film (2024)/`, and is **still listed after a kill and restart**;
+    - the sync code is in Credential Manager (`cmdkey /list`) and is removed when cleared; folder sync is byte-exact;
+    - monitors are listed.
+    - Not automated: the folder dialogs and Explorer, which need a person. Check them in the Phase 4 manual pass.
+  - **Electron (Linux):** dashboard, downloads and sync answer through its IPC after the split; `migration.json` is still written.
 
 ### Phase 4: Windows, title bar and OS integration
 
