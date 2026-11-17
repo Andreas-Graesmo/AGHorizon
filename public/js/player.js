@@ -22,11 +22,71 @@ function tcUrl(ch, p, start) {
   const audio = tcState.apid != null ? `&apid=${tcState.apid}` : tcState.audio != null ? `&audio=${tcState.audio}` : '';
   return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
 }
+/* WebKit's own player on macOS (the Tauri app's WKWebView, and Safari) refuses the conversion as <video src>: it is a
+   stream with no length and no byte ranges (MIGRATION_PLAN.md 9.2). There the same fragmented MP4 is fetched and fed
+   to MSE instead; everywhere else the element reads the address itself, as before. */
+const tcViaMse = (() => {
+  const ua = navigator.userAgent;
+  if (LS.get('tuner.tcMse', false) && window.MediaSource) return true;   // to try this path in any browser (tests)
+  return !TV && /Mac OS X|Macintosh/.test(ua) && /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua) && !!(window.ManagedMediaSource || window.MediaSource);
+})();
+const tcFeeds = new WeakMap();   // <video> -> { ac, url }: the conversion it is being fed
+function tcDetach(v) {
+  const f = tcFeeds.get(v);
+  if (!f) return;
+  tcFeeds.delete(v);
+  f.ac.abort();   // hangs up on the server, which stops its ffmpeg
+  URL.revokeObjectURL(f.url);
+}
+function tcAttach(v, url) {
+  tcDetach(v);
+  if (!tcViaMse) { v.src = url; return; }
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  const ms = new MS();
+  if (window.ManagedMediaSource && MS === window.ManagedMediaSource) v.disableRemotePlayback = true;   // ManagedMediaSource needs it
+  const f = { ac: new AbortController(), url: URL.createObjectURL(ms) };
+  tcFeeds.set(v, f);
+  v.src = f.url;
+  ms.addEventListener('sourceopen', () => tcFeed(v, ms, url, f.ac.signal), { once: true });
+}
+async function tcFeed(v, ms, url, signal) {
+  const end = (err) => { try { if (ms.readyState === 'open') ms.endOfStream(err); } catch { /* closed meanwhile */ } };   // 'network' / 'decode' reach v.onerror
+  try {
+    const r = await fetch(url, { signal });
+    if (!r.ok || !r.body) return end('network');
+    let type = 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+    if (!MediaSource.isTypeSupported(type)) type = 'video/mp4';
+    const sb = ms.addSourceBuffer(type);
+    sb.mode = 'sequence';
+    const done = () => new Promise((res) => sb.addEventListener('updateend', res, { once: true }));
+    const reader = r.body.getReader();
+    for (;;) {
+      const { value, done: last } = await reader.read();
+      if (last) break;
+      if (signal.aborted) return;
+      // keep about a minute behind the playhead, and no more than two minutes ahead (ffmpeg waits meanwhile)
+      const b = sb.buffered;
+      if (b.length && v.currentTime - b.start(0) > 60) { sb.remove(b.start(0), v.currentTime - 30); await done(); }
+      while (b.length && b.end(b.length - 1) - v.currentTime > 120 && !signal.aborted) await new Promise((res) => setTimeout(res, 500));
+      for (let tries = 0; ; tries++) {
+        try { sb.appendBuffer(value); await done(); break; } catch (e) {
+          if (e.name !== 'QuotaExceededError' || tries > 20 || signal.aborted) throw e;
+          const bb = sb.buffered;
+          if (bb.length && v.currentTime - bb.start(0) > 5) { sb.remove(bb.start(0), v.currentTime - 2); await done(); } else await new Promise((res) => setTimeout(res, 500));
+        }
+      }
+    }
+    end();
+  } catch (e) {
+    if (!signal.aborted) end(e && e.name === 'QuotaExceededError' ? 'decode' : 'network');
+  }
+}
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
 // HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
 const hevcOk = (() => { try { return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
-const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
+// (Kept HEVC comes as Matroska, which WebKit's MSE can't take: there it is converted to H.264.)
+const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && !tcViaMse && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
 
 // Copied video (and its sound) starts on the keyframe before t, up to a few seconds earlier.
 // Ask where that is, so the clock shows where the picture really is.
@@ -103,6 +163,7 @@ function teardown() {
   $('#tcBadge').hidden = true;
   video.onerror = null;
   video.pause();
+  tcDetach(video);
   video.removeAttribute('src');
   video.load();
 }
@@ -217,7 +278,7 @@ async function startPlayback(ch, kinds, token, lastError) {
       if (tcState.video !== 'hevc') return fail('The converted stream could not be played');
       tcHevcToH264(ch, p);
     };
-    video.src = tcUrl(ch, p, start);
+    tcAttach(video, tcUrl(ch, p, start));
     video.play().catch(() => {});
     subAfterTc(ch);   // a subtitle track of the stream picked automatically: read it from this conversion
     syncCtl();
@@ -251,7 +312,7 @@ async function startPlayback(ch, kinds, token, lastError) {
 function tcHevcToH264(ch, p) {
   tcState.video = 'h264';
   tcState.offset = tcState.vod ? curTime() : 0;
-  video.src = tcUrl(ch, p, tcState.offset);
+  tcAttach(video, tcUrl(ch, p, tcState.offset));
   video.play().catch(() => {});
 }
 
@@ -359,13 +420,14 @@ async function seekTc(t) {
   const p = playlistById(ch.pid);
   tcState.offset = Math.max(0, Math.min(t, (tcState.duration || Infinity) - 2));
   showOverlay('loading', 'Seeking…');
+  tcDetach(video);
   video.removeAttribute('src');   // hang up first: many providers allow only one connection
   video.load();
   const target = tcState.offset;
   const at = await tcStartAt(ch, p, target);
   if (id !== tcSeekId || token !== playToken) return;
   tcState.offset = at;
-  video.src = tcUrl(ch, p, target);
+  tcAttach(video, tcUrl(ch, p, target));
   video.play().catch(() => {});
 }
 function seekTo(t) {
