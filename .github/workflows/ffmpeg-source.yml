@@ -1,4 +1,4 @@
-# MIGRATION_PLAN.md 5.9: publish the complete corresponding source of the ffmpeg the Windows app ships, as one
+# MIGRATION_PLAN.md 5.9, 9.8: publish the complete corresponding source of the ffmpeg the Windows and Linux apps ship, as one
 # pre-release whose tag is not a version number, so no update channel (Electron, Tauri, Android TV) ever offers it.
 # Run by hand (Actions → this workflow → Run workflow) whenever scripts/tauri-prep.js pins a new ffmpeg, after
 # updating the pins in scripts/ffmpeg-source.sh (which also starts it).
@@ -31,9 +31,10 @@ jobs:
         run: bash scripts/ffmpeg-source.sh "$RUNNER_TEMP/ffmpeg-source"
       - name: Publish as a pre-release (never "latest")
         run: |
-          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false \
-            --title "ffmpeg source (GPL) for the Windows app" \
-            --notes "The complete corresponding source of the ffmpeg program in AG Horizon for Windows (3.x): ffmpeg n8.1.3-27-g8dca1586f4, win64 GPL, built by BtbN/FFmpeg-Builds (autobuild-2026-10-31-12-59). See README.txt. This is not an app release."
+          title="ffmpeg source (GPL) for the Windows and Linux apps"
+          notes="The complete corresponding source of the ffmpeg program in AG Horizon for Windows and Linux (3.x): ffmpeg n8.1.3-27-g8dca1586f4, win64 and linux64 GPL, built by BtbN/FFmpeg-Builds (autobuild-2026-10-31-12-59). See README.txt. This is not an app release."
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false --title "$title" --notes "$notes"
+          gh release edit "$TAG" --title "$title" --notes "$notes"
           gh release upload "$TAG" "$RUNNER_TEMP"/ffmpeg-source/* --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
