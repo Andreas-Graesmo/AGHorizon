@@ -221,41 +221,46 @@ All 34 preload members are listed in Appendix A.
 
 ### Phase 4: Windows, title bar and OS integration
 
-- [ ] **4.1 Window state.** Use `tauri-plugin-window-state` with `SIZE|POSITION|MAXIMIZED` (not `VISIBLE`, so `app_ready` still controls showing the window). Denylist `pip` and `mirror`. Import the legacy `%APPDATA%\Tuner IPTV\window-state.json` once.
-- [ ] **4.2 Title bar** (decided in 0.5; details in [`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#05-title-bar)).
-  - `main`: `decorations(false)`, `shadow(true)`.
-  - Three buttons at the right of `#topbar`, 46×42 px, rendered only under Tauri (the adapter sets a class on `<html>`; Electron on macOS/Linux keeps its native overlay).
-    - Theme hover colours; close turns red on hover.
-    - `minimize()` / `toggleMaximize()` / `close()`; the maximise icon swaps to "restore" while maximised.
-    - `aria-label`s, and reachable by keyboard.
-  - `data-tauri-drag-region` on `#topbar` next to the existing `-webkit-app-region: drag` (`public/style.css:101-104,835-836,939`, `public/mirror.html:21`). It drags, and double-click maximises (Tauri 2.12 `drag.js`).
-  - Under Tauri, replace the `env(titlebar-area-*)` padding with the buttons' width. `tunerDesktop.titleBar` is a no-op.
-  - Check in the gate: resizing from every edge and corner, Aero Snap by dragging and with Win+arrows, maximising on a second monitor, and that dragging never starts on a button.
-- [ ] **4.3 PiP** (`player.js:465-534`, Electron options `main.js:86-95,117-124`). The design is proven by spike 0.2.
-  - [ ] **`on_new_window` on `main`:** for `about:blank`, build `WebviewWindowBuilder::new(app, "pip", WebviewUrl::External("about:blank"))` with `.window_features(features)` (required: it gives the popup the opener's WebView2 environment), `decorations(false)`, `always_on_top(true)`, `inner_size(480, 270)` and `min_inner_size(260, 146)`. Return `NewWindowResponse::Create`. Deny any other URL that isn't the app's own `/mirror.html`.
-  - [ ] **Close:** `window.close()` leaves the Tauri window on screen (spike 0.2), so destroy the `pip` window from Rust when the page closes it. The adapter calls a `close_popup("pip")` command on the window's `pagehide`; Rust can also do it on the webview's close request. Without this the next PiP can't be created either, because the label is taken.
-  - [ ] **Position:** bottom-right of `current_monitor().work_area()` with a 24 px margin.
-  - [ ] Tauri has no `setAspectRatio`, so clamp to 16:9 on `WindowEvent::Resized`.
-  - [ ] Give `pip` its own minimal capability: window dragging only, no app commands.
-- [ ] **4.4 Mirror** (`player.js:546-623`, `mirror.js`, `main.js:98-141`). Proven by spike 0.2, including `captureStream()` from the main window, `window.opener` calls and fullscreen from Rust.
-  - [ ] **`on_new_window`:** for `/mirror.html`, build the `mirror` window the same way as PiP (`.window_features(features)`, `decorations(false)`, 960×540); on top only for the floating mirror (no `?d=`).
-  - [ ] **Close:** destroy the `mirror` window from Rust when the page closes it (same bug as PiP).
-  - [ ] **Display picker:** `?d=` carries the new monitor key (`name + position`; Windows names look like `\\.\DISPLAY1`). Rust sets position and size from the `Monitor`, then `set_fullscreen(true)`.
-  - [ ] **Drag:** `window.moveTo` does nothing for a Tauri window (spike 0.2). Under Tauri, replace the manual drag (`mirror.js:21-33`) with `getCurrentWindow().startDragging()`, keeping the old code path for Electron. Drop the `content-bounds-updated` hack on the Tauri side.
-  - [ ] Closing `main` closes `pip` and `mirror` (replaces `main.js:148-151`).
-- [ ] **4.5 Fullscreen.** In the adapter, mirror `document.fullscreenElement` to `getCurrentWindow().setFullscreen()`, because WebView2's element fullscreen fills only the webview.
-- [ ] **4.6 Keep-awake.**
-  - `navigator.wakeLock` works in WebView2 (spike 0.1), so it can be used directly.
-  - Add a Rust `keep_awake(on: bool)` using the `keepawake` crate as a fallback, and for Phase 9, where WebKit denies `wakeLock`.
-  - Call it on `playing`, `pause` and `ended` from `player.js` and `multiview.js`.
-- [ ] **4.7 External links.** `window.open(..., '_blank')` for trailers (`workspace.js:831`) goes to the opener plugin, and so do `updater:open` and any other http(s) URL.
-- [ ] **4.8 Multiview robustness.** Add a per-tile retry in `multiview.js`. It costs little on Windows and is required for Linux in Phase 9.
-- [ ] **Gate:** a manual QA pass on Windows 10 and 11:
-  - PiP, and Mirror to a second monitor;
-  - fullscreen player and Multiview;
-  - no screensaver during playback;
-  - window state restored, and a second launch focuses the first;
-  - `.m3u` drag-drop works.
+Most of it lives in `public/js/tauri-shell.js` and `src-tauri/src/main.rs`; `player.js` and `mirror.js` are unchanged.
+
+- [x] **4.1 Window state.**
+  - `tauri-plugin-window-state` keeps `SIZE|POSITION|MAXIMIZED`, not `VISIBLE` (the page still shows the window).
+  - `pip` and `mirror` are denylisted.
+  - On the first start, Electron's last bounds (`%APPDATA%\Tuner IPTV\window-state.json`) are used once.
+- [x] **4.2 Title bar** (decision 0.5).
+  - `decorations(false)` and `shadow(true)`.
+  - The adapter adds minimise/maximise/close (46×42, theme colours, red close, `aria-label`s, keyboard-reachable) to the end of `#topbar`, and sets `html.tauri-shell`.
+  - `#topbar` gets `data-tauri-drag-region="deep"`. Its buttons and inputs are excluded by Tauri itself, and `#topSearch` is `"false"`. Double-click maximises.
+  - Electron keeps its native overlay; the CSS only applies under `html.tauri-shell`.
+- [x] **4.3 PiP** (design from spike 0.2).
+  - `on_new_window`: `about:blank` becomes the `pip` window. It is frameless, on top, 480×270 (minimum 260×146), bottom right of the current screen's work area, 24 px in, and kept at 16:9 after resizing.
+  - A leftover window with that label is destroyed first.
+  - The adapter wraps `window.open`. Once the page's popup is closed, it asks Rust to destroy the window (the leak from 0.2), and it drags PiP by its `.p-top` bar through the `popups` command.
+- [x] **4.4 Mirror.**
+  - `/mirror.html` becomes the `mirror` window: frameless. Without `?d=` it floats on top, bottom right. With `?d=<name@x,y>` it is placed on that monitor and fullscreen.
+  - It is dragged anywhere except its controls, through the adapter. `window.moveTo` in `mirror.js` does nothing under Tauri, and that's harmless.
+  - Closing `main` destroys `pip` and `mirror`.
+- [x] **4.5 Fullscreen.**
+  - Element fullscreen also makes the window fullscreen.
+  - **Escape leaves fullscreen.** WebView2 in Tauri didn't do that by itself; the e2e found it.
+- [x] **4.6 Keep-awake.** The adapter holds a `navigator.wakeLock` screen lock while any video plays (the main page, PiP or the mirror), and releases it otherwise. The Rust `keepawake` crate is only needed for WebKit (Phase 9).
+- [x] **4.7 External links** (Phase 2).
+- [x] **4.8 Multiview:** a tile whose every way to play failed tries once more after 3 s ("Trying again…") before showing the error. This is shared code, so Electron gets it too.
+- [x] **Gate (automated): passed.** Windows CI `e2e/tauri-windows.js` 32/32 ([run #7](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44131114163)):
+  - no frame, with the three buttons; maximise/restore and minimise **by real clicks**;
+  - PiP opens frameless and on top, the player moves in and plays, and closing it leaves **no window**;
+  - the floating mirror shows the picture and leaves no window; on a chosen monitor it is fullscreen;
+  - the fullscreen button (a real click) makes the window fullscreen, and Escape leaves it;
+  - the wake lock is held while playing and released after;
+  - the window size is kept across a restart (1111×733);
+  - closing the app with PiP open quits, as does the close button, and nothing is left running.
+- [ ] **Manual pass on a real Windows 10/11 PC** (CI can't do these):
+  - dragging the window by the top bar; Aero Snap to the edges and with Win+arrows; double-click to maximise;
+  - resizing from every edge and corner;
+  - the folder dialogs (download folder, sync folder) and "show in Explorer";
+  - PiP and the mirror dragged around; the mirror on a real second monitor;
+  - the screen staying on during a long film;
+  - `.m3u` drag-and-drop onto the window.
 
 ### Phase 5: Updater, packaging and CI (mixed release)
 
