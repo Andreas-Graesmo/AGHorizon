@@ -45,7 +45,7 @@ jobs:
       - name: Electron installer (as released today, unsigned here)
         run: npx electron-builder --win nsis --x64 --publish never
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
-      - name: Tauri installer (no updater files: they need the signing key, and this test doesn't use them)
+      - name: Tauri installer, without updater files (they need the signing key; this test does not use them)
         run: npx --yes @tauri-apps/cli@2.12.4 build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
       - name: Installer over the Electron app
         run: node e2e/tauri-installer.js "$(ls dist/*Setup*.exe | head -1)" "$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)"
