@@ -96,7 +96,13 @@ pub async fn updater(app: AppHandle, op: String, args: Vec<Value>) -> Result<Val
         }
         "check" => Ok(check(&app, args.first().and_then(|v| v.as_str()).map(String::from)).await),
         "download" => Ok(download(&app).await),
-        "install" => Ok(install(&app)),
+        // on its own thread: the installer's hook stops the server, which waits (block_on), and that may not happen
+        // on one of the async runtime's threads (found by e2e/tauri-update.js: "Cannot start a runtime from within a
+        // runtime"). On Windows install() exits the process, so join() returns only if it failed.
+        "install" => {
+            let app2 = app.clone();
+            std::thread::spawn(move || install(&app2)).join().map_err(|_| "the installer could not be started".to_string())
+        }
         // the release on offer, else the newest release (or, on the Test channel, the list with the pre-releases)
         "open" => {
             let base = format!("https://github.com/{REPO}/releases");
