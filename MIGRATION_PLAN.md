@@ -130,9 +130,9 @@ It changes nothing a user notices until a Tauri release exists. The code is port
   - `npm test`: 67/67, including `test/handover.test.js`: signatures made by `tauri signer` (throwaway key in `test/fixtures/handover/`), tampering, wrong key, an edited trusted comment, release choice per channel, and the installer URL guard.
   - Signature verification also checked inside Electron 45 itself.
   - `spike/migration/check-roundtrip.js` (Chromium, real UI): Xtream credentials with special characters, a 3 MB file playlist, favourites, history, progress and settings all survive export → empty profile → import, 13/13. A second import doesn't overwrite.
-  - `spike/migration/check-electron-export.js`: the real Electron app writes `migration.json` with the stored data and no sync code. Linux done; Windows in `.github/workflows/bridge.yml`.
+  - `spike/migration/check-electron-export.js`: the real Electron app writes `migration.json` with the stored data and no sync code, on Linux and **on Windows** (`%APPDATA%\Tuner IPTV`; CI `bridge.yml` [run #2](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44115287363), where `npm test` also passes). The first Windows run showed Git turning the signed fixture's LF into CRLF; `.gitattributes` now keeps `test/fixtures/**` byte-exact.
   - **Not testable before a Tauri release exists:** the full download → verify → install path against a real release. That is covered by the Phase 6 gate (Electron 2.5 → bridge → Tauri on clean VMs).
-- [ ] **Gate:** `migration.json` appears on Windows with real data (CI: `bridge.yml`), the round trip restores everything (done), and 1.0 is done.
+- [ ] **Gate:** `migration.json` appears on Windows with real data (**done**, CI), the round trip restores everything (**done**), and **1.0 is done (waiting on you: the key pair)**. Then 1.4 ships the bridge.
 
 ### Phase 2: Tauri scaffold and server sidecar
 
