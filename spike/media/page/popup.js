@@ -86,7 +86,7 @@ async function pipChecks(mode) {
     if (mine.length) {
       const p = mine[0];
       record(G, 'Tauri window for it', 'info', `${p.label}: ${p.width}x${p.height}, decorated ${p.decorated}, on top ${p.always_on_top}, visible ${p.visible}`, p);
-      if (mode === 'create') record(G, 'frameless + always on top (Electron PiP options)', !p.decorated && p.always_on_top ? 'pass' : 'fail', `decorated ${p.decorated}, on top ${p.always_on_top}`);
+      if (mode.startsWith('create')) record(G, 'frameless + always on top (Electron PiP options)', !p.decorated && p.always_on_top ? 'pass' : 'fail', `decorated ${p.decorated}, on top ${p.always_on_top}`);
     } else record(G, 'Tauri window for it', 'info', 'none: WebView2 made its own window, which Tauri cannot frame, size or keep on top');
   }
 
@@ -98,9 +98,19 @@ async function pipChecks(mode) {
   record(G, 'close: w.closed and pagehide', w.closed && hid ? 'pass' : 'fail', `closed ${w.closed}, pagehide fired ${hid}`);
   try { document.getElementById('stage').appendChild(v); v.pause(); v.remove(); } catch { /* */ }
   const after = await tauriWindows();
-  if (after && during && mode === 'create') {
+  if (after && during && mode.startsWith('create')) {
     const left = after.filter((x) => x.label !== 'main' && !(before || []).some((b) => b.label === x.label));
     record(G, 'Tauri window gone after close', left.length ? 'fail' : 'pass', left.length ? `still there: ${left.map((x) => `${x.label} visible ${x.visible}`).join(', ')} (leaks a window per PiP)` : `${during.length} → ${after.length} windows`, left);
+    // the fix the plan takes: on pagehide the app asks Rust to destroy the window by its fixed label
+    for (const x of left) {
+      try { await invoke('popup_destroy', { label: x.label }); } catch (e) { record(G, 'fix: destroy from Rust on pagehide', 'fail', String(e)); }
+    }
+    if (left.length) {
+      await sleep(500);
+      const now = await tauriWindows();
+      const still = now.filter((x) => left.some((l) => l.label === x.label));
+      record(G, 'fix: destroy from Rust on pagehide', still.length ? 'fail' : 'pass', still.length ? 'window still there' : `gone (${now.length} window(s) left)`);
+    }
   }
 }
 
@@ -128,7 +138,7 @@ async function mirrorChecks(mode) {
 
   const wins = await tauriWindows();
   const mine = wins && wins.find((x) => x.label !== 'main');
-  if (mode === 'create' && mine) {
+  if (mode.startsWith('create') && mine) {
     try { const r = await invoke('popup_fullscreen', { label: mine.label }); record(G, 'Rust: set_fullscreen on the mirror window (mirror to a monitor)', r ? 'pass' : 'fail', `is_fullscreen ${r}`); } catch (e) { record(G, 'Rust: set_fullscreen on the mirror window (mirror to a monitor)', 'fail', String(e)); }
   }
   if (mw && mw.spikeMoveTo) {
@@ -136,6 +146,16 @@ async function mirrorChecks(mode) {
   }
   try { w.close(); } catch { /* */ }
   await sleep(800);
+  if (mode.startsWith('create')) {
+    const left = ((await tauriWindows()) || []).filter((x) => x.label === 'mirror');
+    record(G, 'Tauri window gone after close', left.length ? 'fail' : 'pass', left.length ? `still there, visible ${left[0].visible}` : 'gone');
+    if (left.length) {
+      try { await invoke('popup_destroy', { label: 'mirror' }); } catch { /* */ }
+      await sleep(500);
+      const still = ((await tauriWindows()) || []).some((x) => x.label === 'mirror');
+      record(G, 'fix: destroy from Rust on close', still ? 'fail' : 'pass', still ? 'window still there' : 'gone');
+    }
+  }
   v.remove();
 }
 
@@ -143,8 +163,8 @@ async function mirrorChecks(mode) {
   const started = Date.now();
   if (!T) record('setup', 'running in Tauri', 'fail', 'window.__TAURI__ missing: run this page in the spike app');
   try { const m = await invoke('monitors'); record('setup', 'monitors (display picker)', 'info', JSON.stringify(m)); } catch (e) { record('setup', 'monitors (display picker)', 'info', String(e)); }
-  for (const mode of ['deny', 'allow', 'create']) {
-    try { await invoke('popup_mode', { mode }); } catch (e) { record('setup', `popup_mode ${mode}`, 'fail', String(e)); continue; }
+  for (const mode of ['deny', 'allow', 'create', 'create-again']) {
+    try { await invoke('popup_mode', { mode: mode.replace('-again', '') }); } catch (e) { record('setup', `popup_mode ${mode}`, 'fail', String(e)); continue; }
     for (const [name, fn] of [['pip', pipChecks], ['mirror', mirrorChecks]]) {
       const r = await Promise.race([fn(mode).then(() => 'ok', (e) => `threw ${e && e.message}`), sleep(60000).then(() => 'wedged')]);
       if (r !== 'ok') record('harness', `${name}/${mode}`, 'fail', r);
