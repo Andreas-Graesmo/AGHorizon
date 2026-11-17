@@ -10,6 +10,8 @@ on:
       - 'public/**'
       - 'server.js'
       - 'subtitles.js'
+      - 'unicode-ln.js'
+      - 'test/**'
       - 'package.json'
       - '.github/workflows/android.yml'
   workflow_dispatch:
