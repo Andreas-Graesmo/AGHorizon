@@ -3,7 +3,7 @@
   "productName": "AG Horizon media spike",
   "version": "0.0.0",
   "identifier": "app.aghorizon.mediaspike",
-  "build": { "frontendDist": "dist" },
+  "build": { "frontendDist": "frontend" },
   "app": {
     "withGlobalTauri": true,
     "windows": [],
