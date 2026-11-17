@@ -497,27 +497,37 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
   - [x] By hand on a real PC with real providers, with v3.1.0-beta.1 (the Rust server and ffmpeg 8.1): the owner reported that everything works (2026-11-17). That covered compatibility mode, Multi view (shared mode too), downloads, subtitles, the guide and trending.
 - [ ] **8.7 Android TV:** the crate built for Android (ARM64, ARMv7) with cargo-ndk and started over JNI by the Kotlin shell, instead of nodejs-mobile. Same HTTP API, so the pages, `tv.js` and the ExoPlayer side don't change. Switch on the Test channel after Windows has run the Rust server for a release cycle or two, then delete `server.js`.
 
-### Phase 9 (later): macOS and Linux on Tauri
+### Phase 9: macOS and Linux on Tauri (started 2026-11-17)
 
-Start this only when there is demand. Everything the spike found for these platforms is collected here.
+Everything the spike found for these platforms is collected here.
 
-- [ ] **9.1 Re-run the media spike** on both: restore the macOS and Linux jobs in `.github/workflows/media-spike.yml` (see the git history), or run `spike/media/` on a Mac and a Linux desktop. Repeat the popup spike (0.2) on WKWebView and WebKitGTK.
-- [ ] **9.2 Compatibility mode on WebKit (blocking on macOS).**
+**Decisions (owner, 2026-11-17):**
+- macOS stays **unsigned**, as today (ad hoc signature, `signingIdentity: "-"`; people open it with right-click → Open the first time).
+- Linux ships the **AppImage only**, as today.
+- No test devices: macOS and Linux are verified **on CI only** (the media spike and the end-to-end checks), plus whatever testers report from the Test channel.
+- The Tauri app stays on the Test channel until every platform has moved (Phase 7).
+
+- [x] **9.1 Re-run the media spike** on both. The macOS and Linux jobs are back in `.github/workflows/media-spike.yml`; results are in `spike/media/RESULTS.md` ("Phase 9.1 re-run"). Still open: the popup spike (0.2) on WKWebView and WebKitGTK.
+- [x] **9.2 Compatibility mode on WebKit (blocking on macOS).** Done: `player.js` plays the conversion through MSE on macOS WebKit (`tcAttach`, `ManagedMediaSource` where available), and CI plays both conversions on WKWebView. Still to hear on a real Mac: the sound (CI can't measure sound through MSE on WebKit).
   - WKWebView refuses `/api/transcode` as a plain `<video src>` (media error 4, fMP4 included), because the stream has no byte ranges and no length.
-  - Play the conversion through MSE (fetch, then `appendBuffer` into a `SourceBuffer`, or `ManagedMediaSource` on macOS). That works on WebView2 and WebKitGTK but is **not yet verified on macOS**.
+  - Play the conversion through MSE (fetch, then `appendBuffer` into a `SourceBuffer`, or `ManagedMediaSource` on macOS). That works on WebView2 and WebKitGTK, and on macOS since CI run 44196981013.
   - Alternatively, have ffmpeg write HLS (fMP4 segments) and play that natively.
   - The output must be fMP4 on WebKit: Matroska fails there.
-- [ ] **9.3 Multiview on Linux (blocking on Linux).**
+- [x] **9.3 Multiview on Linux (blocking on Linux).** Done: in the Linux Tauri app, `multiview.js` plays tiles from the conversion (no MSE) when ffmpeg is there; 4 such tiles played 4/4 on CI (and 4/4 three times locally). Still to try: 4 real channels on a Linux desktop.
   - WebKitGTK can freeze its whole web process when several MSE players run at once; this reproduced on a clean CI runner.
   - Play tiles from the server's progressive output (`/api/transcode?video=copy`) instead of MSE, and verify that this avoids the freeze. If it doesn't, cap Linux at 1–2 tiles.
-- [ ] **9.4 Mirror.** `video.captureStream()` is missing on both WebKits. Use `canvas.captureStream()` fed from the `<video>` (it works on both; A/V sync and CPU cost are unmeasured), or hide Mirror.
+- [ ] **9.4 Mirror.** (in the next commit) `video.captureStream()` is missing on both WebKits, so `player.js` draws the `<video>` onto a canvas and sends `canvas.captureStream()` to the mirror window (one stream for as long as the mirror is open). The sound stays in the main window there: getting it into the stream would route the player's own sound through Web Audio, which returns silence for MSE on WKWebView. Settings says so instead of offering the choice. Checked in Chromium with `captureStream` removed (moving picture, a channel change, cleaned up on close). Still unmeasured: CPU cost, and whether the picture keeps up while the main window is hidden (the timer that draws then may be slowed down).
 - [ ] **9.5 PiP.** WKWebView has `requestPictureInPicture`; WebKitGTK has no PiP API, so hide the button on Linux unless the opener popup works.
-- [ ] **9.6 Keep-awake.** `navigator.wakeLock` is denied on both, so use the `keepawake` command from 4.6.
+- [x] **9.6 Keep-awake.** `navigator.wakeLock` is denied on both WebKits, so `tauri-shell.js` falls back to the app's `keep_awake` command (`keepawake` crate: a power assertion on macOS; on Linux the session's screensaver inhibit and/or logind's idle inhibit, whichever the system has). Checked on Linux against a stand-in screensaver; on macOS it is compiled and checked with the macOS build (9.8).
 - [ ] **9.7 Window chrome and lifecycle.**
   - macOS: `titleBarStyle: "Overlay"` with a traffic-light inset. Keep Tauri's default app menu (Edit shortcuts, Cmd+Q). Optionally `RunEvent::Reopen` and `prevent_exit()`.
   - Linux: HTML buttons as on Windows.
   - Add `tauri-plugin-clipboard-manager` if `navigator.clipboard` needs a gesture that the app's flows don't give.
-- [ ] **9.8 Packaging.**
+- [ ] **9.8 Packaging.** Linux is built and checked end to end locally, and on CI by `tauri-linux.yml` (its first run found the libsoup clash below, now fixed); macOS is open.
+  - **Linux:** `src-tauri/tauri.linux.conf.json` (AppImage, GStreamer bundled), BtbN's linux64 ffmpeg 8.1 from the same autobuild as Windows (`scripts/tauri-prep.js`; its source joins the same source release, `scripts/ffmpeg-source.sh`). `.github/workflows/tauri-linux.yml` builds it on ubuntu-22.04 and `e2e/tauri-linux.js` checks it: the server and its ffmpeg, H.264/AAC in a plain `<video>` and through MSE inside the bundled WebKitGTK/GStreamer, and nothing left running after closing. On Ubuntu 22.04 the GStreamer plugins that link libsoup 2 are left out (WebKitGTK 4.1 uses libsoup 3; both in one process kill the web process). About 220 MB (Electron's: 157 MB): ffmpeg is 168 MB unpacked, WebKitGTK about 120 MB.
+  - **Linux, licence (open):** the bundled GStreamer includes Ubuntu's `gst-libav` and the libraries it needs (libavcodec, x264/x265 and others, several under the GPL). They come from Ubuntu's packages, so their source is Ubuntu's source packages at those versions. Before the AppImage is released: list the bundled packages and versions in the release job, and publish their sources (`apt-get source`) next to the ffmpeg source, or point to them in About/README. Leaving out `gstreamer1.0-libav` would avoid this, but then H.264/AAC would need the user's own plugins.
+  - **Linux, release (open):** the release job must rename Tauri's `AG Horizon_<v>_amd64.AppImage` to `AG-Horizon-<v>.AppImage` (see below), and the AppImage's updater files come with 9.9.
+  - **macOS (open):** where its ffmpeg comes from (BtbN has no macOS builds). The leading option is to build it in CI from pinned sources, with the same libraries, so its source can be published like the others.
   - Add sidecars for `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu`.
   - Bundle targets: `app`, `dmg` and `appimage`, with `bundle.linux.appimage.bundleMediaFramework: true` (GStreamer; WebKitGTK decodes HEVC/AC-3 only with `gst-libav`/`-bad`).
   - macOS: `signingIdentity: "-"`.
