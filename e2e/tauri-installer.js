@@ -25,7 +25,12 @@ function entries() {
   const out = spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' }).stdout.trim();
   if (!out) return [];
   const list = [].concat(JSON.parse(out));
-  return list.map((e) => ({ ...e, InstallLocation: String(e.InstallLocation || '').replace(/^"|"$/g, ''), electron: /Uninstall AG Horizon\.exe/i.test(e.UninstallString || '') }));
+  return list.map((e) => {
+    const electron = /Uninstall AG Horizon\.exe/i.test(e.UninstallString || '');
+    // electron-builder writes no InstallLocation: take the folder from "<folder>\Uninstall AG Horizon.exe" /currentuser
+    const fromUninstall = path.dirname((/^"([^"]+)"/.exec(e.UninstallString || '') || [])[1] || '');
+    return { ...e, electron, InstallLocation: String(e.InstallLocation || '').replace(/^"|"$/g, '') || fromUninstall };
+  });
 }
 const electronEntry = () => entries().find((e) => e.electron) || null;
 const tauriEntry = () => entries().find((e) => !e.electron) || null;
