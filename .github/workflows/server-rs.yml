@@ -1,5 +1,6 @@
 # MIGRATION_PLAN.md Phase 8: the local server ported to Rust (server-rs/). Its unit tests, then the HTTP parity suite
-# (test/parity/) against server.js and against the Rust server: both must give the same answers.
+# (test/parity/: HTTP, and the downloads / folder sync messages over stdin/stdout) against server.js and against the
+# Rust server: both must give the same answers.
 name: Rust server (migration, phase 8)
 
 on:
@@ -47,8 +48,8 @@ jobs:
           node scripts/tauri-prep.js --skip-server
           echo "AGH_PARITY_FFMPEG=$PWD/src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe" >> "$GITHUB_ENV"
       - name: Parity, server.js
-        run: node --test test/parity/parity.test.js
+        run: node --test test/parity/parity.test.js test/parity/rpc.test.js
         env: { AGH_PARITY_SERVER: node }
       - name: Parity, Rust
-        run: node --test test/parity/parity.test.js
+        run: node --test test/parity/parity.test.js test/parity/rpc.test.js
         env: { AGH_PARITY_SERVER: rust }

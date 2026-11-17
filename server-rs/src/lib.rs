@@ -4,6 +4,7 @@
 //! Every route of server.js is here; test/parity/ checks both servers give the same answers.
 
 mod canon_table;
+pub mod downloads;
 pub mod epg;
 pub mod ffmpeg;
 pub mod local;
@@ -11,6 +12,7 @@ pub mod opensubs;
 pub mod shared;
 pub mod stream;
 pub mod subtitles;
+pub mod sync_folder;
 pub mod tmdb;
 pub mod util;
 
@@ -53,8 +55,8 @@ impl Config {
             tmdb_key: key("TMDB_API_KEY", "tmdbApiKey"),
             tmdb_base: std::env::var("AGH_TMDB_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://api.themoviedb.org/3".into()),
             opensubtitles_base: std::env::var("AGH_OPENSUBTITLES_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://api.opensubtitles.com/api/v1".into()),
-            // until the downloads engine is ported (MIGRATION_PLAN.md 8.5): its downloads.json
-            local_files: std::env::var_os("AGH_DATA_DIR").filter(|s| !s.is_empty()).map(|d| local::from_downloads_json(PathBuf::from(d))),
+            // with a data folder, the downloads engine runs here (main.rs) and hands out its finished files
+            local_files: std::env::var_os("AGH_DATA_DIR").filter(|s| !s.is_empty()).map(|_| -> local::LocalFiles { std::sync::Arc::new(downloads::local_file) }),
         }
     }
 }

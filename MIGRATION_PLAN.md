@@ -215,7 +215,7 @@ All 34 preload members are listed in Appendix A.
 - [x] **3.6 Updater:** still stubbed (`app_info.updater = false`) until Phase 5.
 - [x] **3.7 Tests.**
   - `test/tauri-shell.test.js`: shape against `preload.js`; inert in Electron, Android TV and a browser; operations and arguments; base64 round trip; displays.
-  - `test/sidecar-rpc.test.js`: a real download over the sidecar protocol, played back through `/api/local`; folder-sync round trip; bad vault and device refused; `quit` saves.
+  - `test/sidecar-rpc.test.js` (since grown into `test/parity/rpc.test.js`, run against both servers, 8.5): a real download over the sidecar protocol, played back through `/api/local`; folder-sync round trip; bad vault and device refused; `quit` saves.
   - `npm test`: 74/74, on Linux and Windows.
 - [x] **Gate: passed.** Windows CI `e2e/tauri-windows.js` 18/18 ([run #3](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44124087557)), bridge CI `npm test` 74/74 on Windows, Android TV CI (Node 18 tests and emulator smoke) green, plus Electron.
   - **Tauri on Windows:**
@@ -460,7 +460,27 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
     - a bad address.
 
     `cast.test.js`'s TMDB behaviour was already covered in round 2.
-- [ ] **8.5** Move the downloads engine and folder sync (`desktop/`) and the stdin/stdout RPC to Rust. Then the Windows app's sidecar becomes the Rust binary, and Node leaves the Windows app (about 30–45 MB compressed less).
+- [x] **8.5 (engine)** The downloads engine, folder sync and the stdin/stdout RPC are in Rust (2026-11-17): `server-rs/src/downloads.rs`, `sync_folder.rs`, `main.rs`.
+  - Same commands, replies and `downloads:changed` events as `sidecar/entry.js`. List entries stay JSON objects, so `downloads.json` and the page's snapshot carry the same fields in the same order.
+  - Node's ways kept:
+    - `readdir` order (libuv sorts on Linux and macOS);
+    - `path.join`, `resolve`, `dirname` and `extname`;
+    - `toISOString`;
+    - `mtimeMs`;
+    - `JSON.stringify(…, null, 2)` for `sync.json`.
+  - `/api/local` now asks the engine (in memory) instead of reading `downloads.json`.
+  - `test/parity/rpc.test.js` (9 tests, both servers) covers:
+    - a film with its poster played through `/api/local`, byte for byte;
+    - Plex-style names (episodes, cleaning, reserved names, years, no two downloads in one file);
+    - provider refusals, HLS and web pages, each with its message;
+    - pause and resume from the same byte (Range), and a dropped connection resumed by itself;
+    - held while watching, the option, reordering taking over, one at a time;
+    - removing with and without the file and its subtitles, empty folders (a poster alone doesn't keep one), never the download folder;
+    - orphans found and adopted;
+    - a moved folder hidden, kept and found again;
+    - folder sync (bytes, order, bad names, `sync.json`);
+    - `quit` and stdin closing both save, and a restart carries on.
+- [ ] **8.5 (swap)** The Windows app's sidecar becomes the Rust binary, and Node leaves the Windows app (about 30–45 MB compressed less).
 - [ ] **8.6 Gate (Windows):** both servers pass the same contract tests, the Windows e2e suites pass with the Rust sidecar, and there are no regressions in compatibility mode or Multiview shared mode on real providers.
 - [ ] **8.7 Android TV:** the crate built for Android (ARM64, ARMv7) with cargo-ndk and started over JNI by the Kotlin shell, instead of nodejs-mobile. Same HTTP API, so the pages, `tv.js` and the ExoPlayer side don't change. Switch on the Test channel after Windows has run the Rust server for a release cycle or two, then delete `server.js`.
 

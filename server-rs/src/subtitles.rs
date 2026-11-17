@@ -61,10 +61,9 @@ pub async fn list_srt(video: &Path) -> Vec<Srt> {
     static OS_LANG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^[a-z]{2}(-[a-z]+)?$").unwrap());
     let dir = video.parent().unwrap_or(Path::new("."));
     let base = basename(&base_of(video));
-    let Ok(mut rd) = tokio::fs::read_dir(dir).await else { return Vec::new() };
+    let Ok(names) = readdir_node(dir).await else { return Vec::new() };   // in Node's order: ties keep it
     let mut out = Vec::new();
-    while let Ok(Some(e)) = rd.next_entry().await {
-        let n = e.file_name().to_string_lossy().into_owned();
+    for (n, _) in names {
         if !(n.starts_with(&format!("{base}.")) && n.to_lowercase().ends_with(".srt")) {
             continue;
         }
