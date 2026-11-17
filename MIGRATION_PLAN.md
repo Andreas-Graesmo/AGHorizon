@@ -271,35 +271,33 @@ Most of it lives in `public/js/tauri-shell.js` and `src-tauri/src/main.rs`; `pla
 
 ### Phase 5: Updater, packaging and CI (mixed release)
 
-- [ ] **5.1 Signing.** The key pair already exists from 1.0. `npx tauri signer generate`. Put the pubkey in `plugins.updater.pubkey`, and add the CI secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Document key custody in `RELEASING.md` next to the Android keystore: if the key is lost, updates stop.
-- [ ] **5.2** Set `bundle.createUpdaterArtifacts: true`, and `plugins.updater.windows.installMode: "passive"`.
-- [ ] **5.3 Rust updater commands.** They keep the status shape `{state, version, percent, notes, manual, checkedAt, message}` and push `updater:status` events.
-  - [ ] `updater_check`: `updater_builder().endpoints([url_for(channel)])`.
-  - [ ] `updater_download`: `update.download(on_chunk → percent, …)`, with the bytes kept in managed state.
-  - [ ] `updater_install`: run the exit cleanup (2.11) **first**, because NSIS kills the process. Then `install()`.
-  - [ ] `updater_set_channel`, `updater_status`.
-  - [ ] Install-on-quit: if bytes are pending at `ExitRequested`, call `install()`. This replaces `autoInstallOnAppQuit`.
-  - [ ] `updater:notes`, `manualCheck` and `updater:open` stay plain GitHub REST calls. Port them to Rust with `reqwest`, or reuse the renderer JS in `tv.js:43-116`. Keep `electron/versions.js` semantics (the `semver` crate orders versions the same way) and `test/versions.test.js`.
-- [ ] **5.4 Channels** (decided in 0.6).
-  - **Stable:** `https://github.com/Andreas-Graesmo/AGHorizon/releases/latest/download/latest.json`.
-  - **Test:**
-    1. `GET https://api.github.com/repos/Andreas-Graesmo/AGHorizon/releases?per_page=30` (with `User-Agent: AG-Horizon`).
-    2. Skip drafts and releases without a `latest.json` asset; take the highest version (`semver`, same order as `electron/versions.js`).
-    3. If it is newer than the running version, `updater_builder().endpoints([that asset's URL])`.
-    4. On any error (offline, API limit), use the Stable endpoint.
-  - The default comparator (strictly newer only) keeps "never downgrade", and Test still gets stable releases (`RELEASING.md:72`).
-- [ ] **5.5 Bundle targets:** `nsis` only. **No `msi`**, because WiX rejects `-beta.N` versions. Set `webviewInstallMode: embedBootstrapper` (about +1.8 MB).
-- [ ] **5.6 Rewrite `.github/workflows/release.yml` as a mixed release.**
-  - [ ] **Windows job:**
-    - Rust toolchain: `dtolnay/rust-toolchain@stable`, `swatinem/rust-cache@v2`.
-    - Build the Node SEA server sidecar, and download plus checksum-verify the ffmpeg sidecar.
-    - Run `tauri-apps/tauri-action@v0` with `tagName`/`releaseName` = `github.ref_name`, `releaseDraft: true`, `prerelease: contains(ref_name,'-')` and `includeUpdaterJson: true`.
-  - [ ] **macOS and Linux jobs:** keep electron-builder, but with `--mac` / `--linux` only, so it never builds or publishes a Windows Electron installer or `latest.yml` / `beta.yml`.
-    - It still publishes `latest-mac.yml`, `latest-linux.yml`, `beta-mac.yml` and `beta-linux.yml`, which the Electron updaters on those platforms read.
-  - [ ] **Updater rule:** the Tauri `latest.json` lists only `windows-x86_64`. Old Windows Electron clients see only the bridge release (1.3), and must never find a Windows Electron `latest.yml` in a newer release.
-  - [ ] **Keep:** `npm ci` with retries, `npm test`, `npm run setup` (vendor), the `secrets.json` step, `android-tv` and `publish-test`. Align the release title across all jobs.
-- [ ] **5.7 Asset names.** Use tauri-action `assetNamePattern`, or rename after the build, so the Windows installer stays `AG-Horizon-Setup-<v>.exe`. The website regex (`docs/site.js:18`, `/setup.*\.exe$/`) and `README.md:22-24` then keep working. The macOS and Linux names don't change.
-- [ ] **5.8 `android.yml`:** no change while Electron stays in `package.json`.
+Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/workflows/tauri-update.yml`). The real release path (5.6) is written, but is first used by the first Tauri tag.
+
+- [x] **5.1 Signing.** The release key from 1.0 (`F074C66F1E88511B`) is in `plugins.updater.pubkey`, and the CI secrets are set. Key custody is documented in `RELEASING.md` §8. The tests use a throwaway key made in CI, never the release key.
+- [x] **5.2** `bundle.createUpdaterArtifacts: true` and `plugins.updater.windows.installMode: "passive"`. Builds that don't need updater files (the Phase 6 installer test) turn them off with `--config`.
+- [x] **5.3 Rust updater commands** (`src-tauri/src/updater.rs`). One `updater` command with operations `info`, `status`, `setChannel`, `check`, `download`, `install` and `open`. They keep Electron's status shapes and `updater:status` events, so `ui.js` is unchanged.
+  - `check` builds the updater with the channel's endpoint and `on_before_exit` → `stop_server` (the server and its ffmpeg are gone before NSIS replaces files).
+  - `download` reports progress; the signature is verified there, and a wrong one becomes `error`.
+  - `install` runs on its own thread: stopping the server blocks, and on a runtime thread that panicked ("Cannot start a runtime from within a runtime", found by e2e). NSIS then runs passive and starts the app again.
+  - **Install on quit:** if an update is downloaded when the app exits, it is installed without restarting, like Electron's `autoInstallOnAppQuit`.
+  - Release notes and the Test channel's lookup are plain GitHub REST calls in the adapter (`tauri-shell.js`), as on Android TV. Version order is `tvVersionCompare` (the same rules as `electron/versions.js`).
+  - `AGH_UPDATER_ENDPOINT` replaces the endpoint, for the e2e only.
+- [x] **5.4 Channels** (decided in 0.6).
+  - **Stable:** `releases/latest/download/latest.json`.
+  - **Test:** the adapter lists `/releases?per_page=30`, skips drafts and releases without `latest.json`, takes the highest version, and passes its `latest.json` URL to Rust if it's newer than the running version. Rust accepts only `https://github.com/Andreas-Graesmo/AGHorizon/releases/download/…/latest.json` (unit test), else it uses Stable.
+  - On Stable, a missing `latest.json` (a 404, e.g. while GitHub's latest release is still Electron's) counts as "up to date".
+  - The updater's default comparator means it never downgrades.
+- [x] **5.5 Bundle targets:** `nsis` only, `embedBootstrapper`.
+- [x] **5.6 `.github/workflows/release.yml` rewritten as a mixed release** (not yet run: the first Tauri tag will be the first run).
+  - **`windows` job:**
+    - Rust, the sidecars and `npm test`.
+    - It stops if `TAURI_SIGNING_PRIVATE_KEY` is missing.
+    - It runs `tauri build --bundles nsis` with the API keys compiled in, then `scripts/tauri-release.js`, then uploads to the draft with `gh`.
+    - tauri-action is not used: our own script gives the asset names and `latest.json` exactly.
+  - **`desktop` job (macOS, Linux):** `electron-builder --mac` / `--linux` only, so there is no Windows Electron installer and no `latest.yml` / `beta.yml`.
+  - `android-tv` is unchanged. `publish-test` now needs `windows`, `desktop` and `android-tv`.
+- [x] **5.7 Asset names.** `scripts/tauri-release.js` writes `AG-Horizon-Setup-<v>.exe`, `.exe.sig` and `latest.json`. `latest.json` has both the `windows-x86_64-nsis` and `windows-x86_64` keys, with URLs under this repository's releases, which the Electron hand-over requires. The website regex and README names still match.
+- [x] **5.8 `android.yml`:** no change.
 - [ ] **5.9 Licensing: ffmpeg GPL source with the first Tauri release** (decided in 0.4).
   - [ ] Ship `win32-x64.LICENSE` (GPL v3) next to the ffmpeg sidecar, and name ffmpeg and its licence on the About page and in the README.
   - [ ] Build the **corresponding source archive** once, and attach it to a pinned release `ffmpeg-6.1.1-gyan-essentials-source` that every Tauri release's notes link to:
@@ -308,9 +306,24 @@ Most of it lives in `public/js/tauri-shell.js` and `src-tauri/src/main.rs`; `pla
   - [ ] **Open:** about 8 bundled libraries have **no version** in the README: gnutls, gmp, libxml2, zlib, xz/lzma, bzip2, iconv and fontconfig. Ask gyan.dev for their exact sources or versions.
     - If they can't be had, switch the sidecar to a build whose recipe pins every source, such as BtbN FFmpeg-Builds (option B in the decision). That means re-running the media spike, and decision 0.4 is revisited.
   - [ ] Keep the license file and README hashes from 0.4 with the archive, so it's clear which binary it belongs to.
-- [ ] **Gate:** a `v*-beta` tag produces one draft containing the Windows Tauri installer with `.sig` and `latest.json`, the Electron dmg and AppImage with their `*-mac.yml` / `*-linux.yml`, and the APK.
-  - The Tauri build updates itself from N to N+1 on both channels.
-  - An Electron macOS or Linux build updates itself from N to N+1, and does not see the Windows assets.
+- [x] **Gate, self-update (CI):** `e2e/tauri-update.js`, 14/14. Versions 9.0.0 and 9.0.1 are built with a throwaway key and served locally.
+  - A manifest for the installed version → up to date.
+  - An installer with one byte changed → "The signature verification failed", and nothing is installed.
+  - The real 9.0.1:
+    - downloads with progress and is verified;
+    - the server stops and NSIS installs it;
+    - the app starts again by itself from the install folder;
+    - it reports 9.0.1, its localStorage is kept, and exactly one app and one server are running.
+  - **Not covered by CI:** install-on-quit; the Stable/Test choice against real GitHub releases.
+- [ ] **Gate, first real release:** a `v3.0.0-beta.1` tag from this branch (after the bridge has been out a release cycle) produces one draft containing:
+  - the Windows Tauri installer with its `.sig` and `latest.json`;
+  - the Electron dmg and AppImage with their `*-mac.yml` / `*-linux.yml`;
+  - the APK.
+
+  Then:
+  - a Windows v2.5.0 on the Test channel is offered it and hands over (the Phase 6 manual gate);
+  - a later beta updates the Tauri app N → N+1;
+  - an Electron macOS or Linux build updates itself and doesn't see the Windows assets.
 
 ### Phase 6: Data migration on first Tauri launch (Windows)
 
