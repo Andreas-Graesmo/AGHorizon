@@ -521,7 +521,7 @@ function mvPickChoose(k) {
   const i = pick.i;
   const j = mv.slots.findIndex((s) => s && s.uid === ch.uid);
   if (j === i) return;
-  if (j >= 0) [mv.slots[i], mv.slots[j]] = [mv.slots[j], mv.slots[i]];     // already showing: swap the two pictures
+  if (j >= 0) { [mv.slots[i], mv.slots[j]] = [mv.slots[j], mv.slots[i]]; [mv.pending[i], mv.pending[j]] = [mv.pending[j], mv.pending[i]]; }   // already showing: swap the two pictures
   else { mv.slots[i] = ch; mv.pending[i] = null; }
   if (!mv.slots[mv.focus] && !mv.pending[mv.focus]) mv.focus = i;
   mvSave();

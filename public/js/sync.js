@@ -175,7 +175,7 @@ const lsSetPlain = LS.set;
 LS.set = (k, v) => {
   lsSetPlain(k, v);
   if (!(k in SYNC_WATCH) || sy.applying) return;
-  const playing = k === 'tuner.progress' && state.current && !video.paused;
+  const playing = k === 'tuner.progress' && state.current && (TV || !video.paused);   // a TV plays in ExoPlayer: its <video> stays paused
   syncSoon(playing ? 120000 : SYNC_WATCH[k]);
 };
 setInterval(() => { if (!document.hidden) syncSoon(0); }, 5 * 60e3);

@@ -1,6 +1,6 @@
 # Releasing AG Horizon and updating it from inside the app
 
-How it works: you push a version tag to GitHub → a GitHub Action builds the installers for Windows, macOS and Linux and attaches them to a GitHub *Release* → installed copies of the app find the new release (**Settings → About & updates → Check for updates**, and automatically on start) and update themselves.
+How it works: you push a version tag to GitHub → a GitHub Action builds the installers for Windows, macOS and Linux, and the Android TV app, and attaches them to a GitHub *Release* → installed copies of the app find the new release (**Settings → About & updates → Check for updates**, and automatically on start) and update themselves.
 
 Everything below is done once, except "Releasing a new version" at the end.
 
@@ -96,3 +96,55 @@ When the test version is good, release it to everyone with `npm run release:mino
 - To run the app from source: [Node.js](https://nodejs.org) 18 or newer, then `npm install` (downloads Electron and ffmpeg once) and `npm start`. For Trending, cast photos and OpenSubtitles, put the API keys in a `secrets.json` next to `server.js`: `{ "tmdbApiKey": "…", "opensubtitlesApiKey": "…" }` (it is never committed).
 - To test an installer on your own machine without GitHub: `npm install`, then `npm run dist` (output in `dist/`).
 - If the Action fails, open the failed run in the **Actions** tab and read the red step. The most common causes are forgetting step 3 (workflow permissions) or a tag that doesn't match the version in `package.json`.
+
+## 7. Android TV
+
+The same tag also builds the Android TV app: the *Release* workflow's `android-tv` job adds `AG-Horizon-TV-<version>.apk` to the draft release, next to the desktop installers. It takes its version from `package.json`, like they do. Nothing more to do per release.
+
+### The signing key (once)
+
+Android only installs a new version over the old one when both are signed with the same key. So the app needs a key of its own that never changes, kept as repository secrets. **Until you add it, each build is signed with a throwaway key**: it installs, but the next version won't install over it, from inside the app or by hand (people would have to uninstall first, losing their playlists). The workflow says so with a warning. Do this before you hand the first APK to anyone:
+
+1. Make the key. With Java installed (`keytool` comes with it):
+   ```
+   keytool -genkeypair -v -keystore aghorizon-tv.keystore -alias aghorizon -keyalg RSA -keysize 4096 -validity 20000 -storetype PKCS12 -dname "CN=AG Horizon"
+   ```
+   It asks for a password; remember it. Without Java, in *Git Bash* (it has `openssl`):
+   ```
+   openssl req -x509 -newkey rsa:4096 -nodes -keyout key.pem -out cert.pem -days 20000 -subj "/CN=AG Horizon"
+   openssl pkcs12 -export -inkey key.pem -in cert.pem -name aghorizon -out aghorizon-tv.keystore
+   ```
+2. Turn the file into text: `base64 -w0 aghorizon-tv.keystore` (macOS: `base64 -i aghorizon-tv.keystore`; Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("aghorizon-tv.keystore"))`).
+3. In the repository: **Settings → Secrets and variables → Actions → New repository secret**, three times:
+   - `ANDROID_KEYSTORE_BASE64`: that text
+   - `ANDROID_KEYSTORE_PASSWORD`: the password
+   - `ANDROID_KEY_ALIAS`: `aghorizon`
+4. **Keep the keystore file and its password somewhere safe** (a password manager), and never commit them. If the key is lost, nobody can update the app any more without uninstalling it first. `android/.gitignore` already keeps `*.keystore` and `*.jks` out.
+
+### What people do
+
+They download the `.apk` from the release and install it on the TV once (the README's *Android TV* section says how). From then on the app updates itself much like the desktop app: on start it asks GitHub whether a newer published release (on the Test channel: also a pre-release, see section 4) has an `.apk`, shows a banner, downloads the file and opens Android's installer with it, which asks the person before it installs. The first time, Android also asks whether AG Horizon may install apps. If any of that doesn't work on a TV, the app says where the file is so it can be installed by hand.
+
+### Checking it
+
+- Every push that touches the app's parts runs the *Android TV* workflow: it builds a debug APK and tries it on an emulator (`android/ci/smoke.js`): the app starts, a playlist loads, live TV and a movie play in the TV's player, the remote's keys do what they should, and where a movie stopped is remembered. The APK and the screenshots it took are attached to the run.
+- That emulator is not a TV. Before a release, install the APK on a real one and at least: add your playlist with the on-screen keyboard, watch a channel with AC-3 sound, change channel with ▲ ▼, play and resume a movie.
+
+### Building it yourself
+
+You need [Android Studio](https://developer.android.com/studio) (or the Android SDK with the NDK and CMake) and Java 17. Then, in `android/`:
+
+```
+./gradlew assembleDebug        # → app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The build copies `server.js`, `subtitles.js` and `public/` into the app, and downloads Node.js for Android once (about 100 MB). A debug build's pages can be inspected from Chrome on your computer: `chrome://inspect`. To see the pages in TV mode without a TV, that is the way; in a normal browser they are the desktop app.
+
+### Things to know
+
+- **The server must keep running on Node.js 18 without the Unicode tables.** That is what the app has inside (nodejs-mobile). In `server.js` and `subtitles.js`: no `/\p{…}/u` in a regular expression, no `Intl`, and nothing newer than Node.js 18 without a fallback. The emulator test catches it when the server doesn't start.
+- **Processor types.** The APK holds the app for 64-bit and 32-bit ARM, which is every TV box and set; that makes it about 45 MB.
+- **Test versions** get the same Android version code as the release they lead up to (2.5.0-beta.1 and 2.5.0 are both 20500). Android installs an equal code over the other, so beta → beta → release works; what stops an older version from being offered is the app's own version check.
+- **Not in the Play Store.** Google requires TV apps there to be built for 16 KB memory pages, and Node.js for Android isn't yet; it would also need an app bundle and Google's TV review. Sideloading has none of that.
+- **Old TVs.** The pages need *Android System WebView* 111 or newer (March 2023). TVs update it through their app store; the app says so when it is older.

@@ -2,7 +2,6 @@
 /* AG Horizon – application shell: navigation, themes, player docking, pages, command palette, shortcuts. */
 
 const ui = { route: null, hist: [] };
-const ROUTE_TITLES = { dashboard: 'Dashboard', playlists: 'Playlists', favorites: 'Favorites', recent: 'Recently viewed', search: 'Search', settings: 'Settings', multiview: 'Multi view' };
 const cardIndex = new Map(); // uid -> item or snapshot, filled by cardHtml()
 const ago = (ts) => {
   const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -112,7 +111,7 @@ $('#btnTheme').addEventListener('click', () => {
 /* ─────────────────────────────── navigation ─────────────────────────────── */
 function updateBack() { $('#btnBack').hidden = !(ui.hist.length || (ui.route === 'ws' && ws.detail)); }
 
-function go(route, params = {}, { push = true } = {}) {
+function go(route, { push = true } = {}) {
   if (push && ui.route && (ui.route !== route || route === 'ws')) {
     ui.hist.push({ route: ui.route, ws: ui.route === 'ws' ? { pid: ws.pid, mode: ws.mode, detail: ws.detail ? ws.detail.uid : null } : null });
     if (ui.hist.length > 40) ui.hist.shift();
@@ -135,7 +134,7 @@ async function goBack() {
   if (h.route === 'ws' && h.ws && playlistById(h.ws.pid)) {
     await openWorkspace(h.ws.pid, h.ws.mode, { push: false });
     if (h.ws.detail) { const it = ws.items.find((i) => i.uid === h.ws.detail); if (it) openDetail(it); }
-  } else go(h.route === 'ws' ? 'dashboard' : h.route, {}, { push: false });
+  } else go(h.route === 'ws' ? 'dashboard' : h.route, { push: false });
   updateBack();
 }
 $('#btnBack').addEventListener('click', goBack);
@@ -246,10 +245,18 @@ function updatePlayerChrome() {
   $('#pFav use').setAttribute('href', fav ? '#i-heart-fill' : '#i-heart');
   document.title = playerTitle(c) + ' – AG Horizon';
 }
+// what the player's heart stands for: an episode's series wherever the app has it, else the episode itself
+function playerFavItem(c) {
+  if (c.kind !== 'episode' || !c.seriesUid) return c;
+  if (ws.detail && ws.detail.uid === c.seriesUid) return ws.detail;
+  const own = state.cache[`${c.pid}:series`], base = state.cache[c.pid];
+  const list = (own && own.channels) || (base && base.series) || [];
+  return cardIndex.get(c.seriesUid) || list.find((s) => s.uid === c.seriesUid) || state.favdata[c.seriesUid] || c;
+}
 function uiMirrorChanged() { updatePlayerChrome(); }
 function uiCaps() { if (ui.route === 'settings') renderSettings(); }
 
-$('#pFav').addEventListener('click', () => { const c = state.current; if (c) toggleFavItem(c.kind === 'episode' && ws.detail ? ws.detail : c); });
+$('#pFav').addEventListener('click', () => { const c = state.current; if (c) toggleFavItem(playerFavItem(c)); });
 $('#pMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 $('#pPip').addEventListener('click', togglePip);
 $('#pFull').addEventListener('click', toggleFullscreen);
@@ -284,7 +291,7 @@ async function openItem(it) {
     ws.lv = 'channels';
     ws.q = ''; $('#topInput').value = '';
     // show the channel in a list next to the player: keep the category if it contains the channel, else use its own group
-    const inCat = ws.cat === '*fav' ? state.favs.has(real.uid) : ws.cat === '*recent' ? true : ws.cat === real.group;
+    const inCat = ws.cat === '*fav' ? state.favs.has(real.uid) : ws.cat === real.group;
     if (!inCat) ws.cat = real.group;
     ws.lists = true;
     renderWsChrome();
@@ -368,7 +375,6 @@ function catalogues(mode) {
     return own ? own.channels : base && p.type !== 'xtream' ? base[mode === 'movie' ? 'movies' : 'series'] : null;
   }).filter(Boolean);
 }
-// trending movies and series that are in the playlists, alternating, most popular first
 // trending movies and series that are in the playlists and whose length checks out (below), alternating, most popular first
 function trendingItems() {
   if (!trend.data) return [];
@@ -496,19 +502,6 @@ function renderDashboard() {
 
 /* ─────────────────────────────────── playlists ─────────────────────────────────── */
 const typeLabel = (p) => (p.type === 'xtream' ? 'Xtream' : p.type === 'file' ? 'M3U file' : 'M3U');
-function subLabel(p) {
-  if (p.type === 'xtream') { try { return `${new URL(normServer(p.server)).host} · ${p.username}`; } catch { return p.username; } }
-  if (p.type === 'file') return p.fileName || 'Local file';
-  try { return new URL(p.url).host; } catch { return p.url; }
-}
-function countsLabel(p) {
-  const parts = [];
-  for (const [m, label] of [['live', 'channels'], ['movie', 'movies'], ['series', 'series']]) {
-    const n = cachedCount(p, m);
-    if (n != null) parts.push(`${n.toLocaleString()} ${label}`);
-  }
-  return parts.length ? parts.join(' · ') : 'Not loaded yet';
-}
 /* ── Sources page (all saved playlists) ── */
 const src = { type: 'all', status: 'any', sort: LS.get('tuner.srcSort', 'added-desc'), q: '' };
 const SRC_SORTS = [['added-desc', 'Date added (Newest first)'], ['added-asc', 'Date added (Oldest first)'], ['updated', 'Recently updated'], ['name', 'Name (A–Z)']];
@@ -791,7 +784,7 @@ function updatesCard() {
   else if (st.state === 'current') { line = `You have the latest version${st.checkedAt ? ' · checked ' + ago(st.checkedAt) : ''}.`; }
   else if (st.state === 'available') { line = `Version <b>${esc(st.version || '')}</b> is available.`; btn = '<button class="btn" data-act="upd-download"><svg class="ic"><use href="#i-download"/></svg>Download update</button>'; }
   else if (st.state === 'downloading') { line = `Downloading version ${esc(st.version || '')}… ${st.percent || 0}%<div class="bar upd-bar"><i style="width:${st.percent || 0}%"></i></div>`; btn = '<button class="btn" disabled>Downloading…</button>'; }
-  else if (st.state === 'ready') { line = `Version <b>${esc(st.version || '')}</b> is ready. It also installs automatically when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
+  else if (st.state === 'ready') { line = `Version <b>${esc(st.version || '')}</b> is ready. ${TV ? 'Android asks before it installs it.' : 'It also installs automatically when you close the app.'}`; btn = `<button class="btn" data-act="upd-install">${TV ? 'Install' : 'Restart and install'}</button>`; }
   else if (st.state === 'error') { line = `Couldn’t update: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-check">Try again</button>' + (info.releasesUrl ? ' <button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   const auto = LS.get('tuner.autoUpdate', true);
   const ch = updChannel();
@@ -813,7 +806,7 @@ function renderUpdBanner() {
   if (st.state === 'available' && st.manual) { line = `AG Horizon <b>${v}</b> is available.`; btn = '<button class="btn" data-act="upd-open"><svg class="ic"><use href="#i-download"/></svg>Download from GitHub</button>'; }
   else if (st.state === 'available') { line = `AG Horizon <b>${v}</b> is available.`; btn = '<button class="btn" data-act="upd-download"><svg class="ic"><use href="#i-download"/></svg>Download update</button>'; }
   else if (st.state === 'downloading') { line = `Downloading AG Horizon ${v}… ${st.percent || 0}%<div class="bar upd-bar"><i style="width:${st.percent || 0}%"></i></div>`; }
-  else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready. It also installs when you close the app.`; btn = '<button class="btn" data-act="upd-install">Restart and install</button>'; }
+  else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready.${TV ? '' : ' It also installs when you close the app.'}`; btn = `<button class="btn" data-act="upd-install">${TV ? 'Install' : 'Restart and install'}</button>`; }
   else if (st.state === 'error' && st.version) { line = `Couldn’t download ${v}: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-download">Try again</button>' + (upd.info && upd.info.releasesUrl ? '<button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
   if (!line || LS.get('tuner.updDismissed', '') === st.state + ':' + st.version) { el.hidden = true; return; }
   if (st.version) btn = whatsNewBtn + btn;
@@ -869,7 +862,7 @@ async function setUpdChannel(ch) {
   const d = window.tunerDesktop;
   await d.updater.setChannel(ch).catch(() => {});
   renderSettings();
-  if (upd.info && (upd.info.updater || upd.info.platform === 'darwin')) d.updater.check();   // what this channel offers
+  if (upd.info && (upd.info.updater || upd.info.platform === 'darwin' || TV)) d.updater.check();   // what this channel offers
 }
 function updStatus(s) {
   upd.st = s || { state: 'idle' };
@@ -885,7 +878,7 @@ function initUpdates() {
     renderUpdBanner();
     if (ui.route === 'settings') renderSettings();
     // a Mac only checks for a newer version: it downloads it from GitHub
-    if ((info.updater || info.platform === 'darwin') && LS.get('tuner.autoUpdate', true)) setTimeout(() => d.updater.check(), 6000);
+    if ((info.updater || info.platform === 'darwin' || TV) && LS.get('tuner.autoUpdate', true)) setTimeout(() => d.updater.check(), 6000);
   }).catch(() => {});
 }
 
@@ -905,21 +898,22 @@ function renderSettings() {
       <div class="set-row"><div><b>Theme</b><p class="muted">Dark, light, or follow your system.</p></div>${seg('theme', theme, [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']])}</div>
       <div class="set-row"><div><b>Dark palette</b><p class="muted">Used when the app is dark. OLED black suits OLED screens and dark rooms.</p></div>${palSeg('dark')}</div>
       <div class="set-row"><div><b>Light palette</b><p class="muted">Used when the app is light. Channel logos get a dark backdrop so white logos stay visible.</p></div>${palSeg('light')}</div>
+      ${TV ? `<div class="set-row"><div><b>Size</b><p class="muted">How large everything is on the TV.</p></div>${seg('tvWidth', String(tv.info.width || 1120), [['1280', 'Small'], ['1120', 'Normal'], ['960', 'Large']])}</div>` : ''}
       <div class="set-row"><div><b>Accent colour</b></div><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch${accent === k ? ' on' : ''}" data-set="accent" data-val="${k}" style="--c:${c}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
     </section>`)}
-    ${pane('Playback', 'i-play', 'Compatibility mode, the next episode, Multi view and mirroring.', `<section class="set-card">
-      <div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted.'}</p></div>
+    ${pane('Playback', 'i-play', TV ? 'What happens when an episode ends.' : 'Compatibility mode, the next episode, Multi view and mirroring.', `<section class="set-card">
+      ${TV ? '' : `<div class="set-row"><div><b>Compatibility mode</b><p class="muted">${state.ffmpeg ? 'ffmpeg found. Streams the player can’t handle are converted on the fly: DTS / AC-3 / E-AC-3 sound to AAC, and the picture to H.264 when needed.' : 'ffmpeg was not found, so unsupported streams can’t be converted.'}</p></div>
         <select data-set="compat">${[['auto', 'Automatic (recommended)'], ['always', 'Always convert'], ['off', 'Off']].map(([v, l]) => `<option value="${v}"${compat === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>
+      <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>`}
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
-      <div class="set-row"><div><b>Share one connection in Multi view (experimental)</b><p class="muted">Pictures from the same Xtream playlist take turns on one provider connection instead of using one each, and play about 20 seconds behind. It needs a provider that sends a burst of video on every new connection. Switch it off if pictures freeze or skip.</p></div><label class="switch"><input type="checkbox" data-set="mvShare"${LS.get('tuner.mvShare', false) ? ' checked' : ''}><span></span></label></div>
-      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>
+      ${TV ? '' : `<div class="set-row"><div><b>Share one connection in Multi view (experimental)</b><p class="muted">Pictures from the same Xtream playlist take turns on one provider connection instead of using one each, and play about 20 seconds behind. It needs a provider that sends a burst of video on every new connection. Switch it off if pictures freeze or skip.</p></div><label class="switch"><input type="checkbox" data-set="mvShare"${LS.get('tuner.mvShare', false) ? ' checked' : ''}><span></span></label></div>
+      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>`}
     </section>`)}
     ${pane('Languages', 'i-audio', 'Audio and subtitle languages, and how subtitles look.', `<h3 class="set-sec">Preferred languages</h3>
       <section class="set-card">${audSettingsRow()}${subAutoRow()}</section>
-      <h3 class="set-sec">Subtitles</h3>
-      ${subSettingsCard()}`)}
-    ${pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
+      ${TV ? '' : `<h3 class="set-sec">Subtitles</h3>
+      ${subSettingsCard()}`}`)}
+    ${TV ? '' : pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
     ${pane('Sync', 'i-cloud', 'The same history, progress and favorites on all your computers.', syncSettingsCard())}
     ${pane('About & updates', 'i-info', 'Your version, and what is new.', updatesCard() + tmdbCredit())}
     <p class="muted center">AG Horizon · use only with services you’re entitled to watch.</p></div></div>`;
@@ -963,6 +957,7 @@ document.addEventListener('click', (e) => {
 $('#v-settings').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-set]');
   if (!b) return;
+  if (b.dataset.set === 'tvWidth') { tv.info.width = Number(b.dataset.val); window.AGHorizonTV.setWidth(tv.info.width); renderSettings(); return; }   // the TV shell lays the pages out again
   LS.set('tuner.' + b.dataset.set, b.dataset.val);
   applyTheme();
   if (b.dataset.set === 'mirrorSound') applyMirrorSound();
@@ -986,7 +981,6 @@ $('#views').addEventListener('click', (e) => {
   switch (a.dataset.act) {
     case 'add-pl': openPlaylistDialog(); break;
     case 'pl-edit': e.stopPropagation(); openPlaylistDialog(playlistById(pid)); break;
-    case 'pl-del': e.stopPropagation(); deletePlaylist(pid); break;
     case 'pl-refresh': e.stopPropagation(); refreshPlaylist(pid); break;
     case 'pl-more': e.stopPropagation(); playlistMenu(playlistById(pid), a); break;
     case 'src-type': src.type = a.dataset.val; renderPlaylists(); break;
@@ -1140,7 +1134,7 @@ function onAppKeydown(e) {
   if ((key === ' ' && !onButton && !onVideo) || k === 'k') { e.preventDefault(); togglePlay(); }
   else if (k === 'f') { e.preventDefault(); toggleFullscreen(); }
   else if (k === 'm') toggleMute();
-  else if (k === 'd') toggleFavItem(state.current.kind === 'episode' && ws.detail ? ws.detail : state.current);
+  else if (k === 'd') toggleFavItem(playerFavItem(state.current));
   else if (!onVideo && key === 'ArrowLeft') { e.preventDefault(); seekBy(-5); }
   else if (!onVideo && key === 'ArrowRight') { e.preventDefault(); seekBy(5); }
   else if (!onVideo && key === 'ArrowUp') { e.preventDefault(); changeVolume(0.05); }

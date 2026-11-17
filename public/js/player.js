@@ -387,15 +387,17 @@ function playChannel(ch) {
   const token = ++playToken;
   pushRecent(ch);
   if (!isVod(ch)) loadShortEpg(ch);
-  audStart(ch, token);   // startPlayback, after checking a marked live channel's languages when there's a wish
+  if (TV) tvPlay(ch, token);   // the TV's own player, full screen (tv.js)
+  else audStart(ch, token);   // startPlayback, after checking a marked live channel's languages when there's a wish
   mirrorTitle(ch.name);
-  uiPlayback(true);
+  uiPlayback();
   dlSyncWatching();
   syncMediaSession();
 }
 
 function stopPlayback() {
   playToken++;
+  if (TV) tvStop();
   teardown();
   hideOverlay();
   subOff();
@@ -403,7 +405,7 @@ function stopPlayback() {
   audReset(null);
   closePip();   // after state.current is gone, so the closing window doesn't start the video again
   mirrorTitle('');
-  uiPlayback(true);
+  uiPlayback();
   dlSyncWatching();
   syncMediaSession();
 }
@@ -502,7 +504,7 @@ async function openPipWindow() {
     el.classList.remove('in-pip');
     movePlayer(() => home.parent.insertBefore(el, home.next), { later: true });
     $('#menu').hidden = true;
-    uiPlayback(true);
+    uiPlayback();
   });
 }
 
