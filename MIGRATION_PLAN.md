@@ -136,36 +136,49 @@ It changes nothing a user notices until a Tauri release exists. The code is port
 
 ### Phase 2: Tauri scaffold and server sidecar
 
-- [ ] **2.1** `npm i -D @tauri-apps/cli@^2`, then `npx tauri init`. This creates `src-tauri/`:
+- [x] **2.1** `npm i -D @tauri-apps/cli@^2`, then `npx tauri init`. This creates `src-tauri/`:
   - identifier **`app.aghorizon.desktop`** (the same as electron-builder's `appId`)
   - `"version": "../package.json"`, so there is one version source shared with Electron and Android (`android/app/build.gradle.kts:11-14`)
   - `productName "AG Horizon"`
-- [ ] **2.2** `npx tauri icon build/icon.png`.
-- [ ] **2.3 Sidecars** in `bundle.externalBin`:
+- [x] **2.2** `npx tauri icon build/icon.png`.
+- [x] **2.3 Sidecars** in `bundle.externalBin`:
   - `binaries/aghorizon-server-x86_64-pc-windows-msvc.exe` (Node SEA of `server.js`)
   - `binaries/ffmpeg-x86_64-pc-windows-msvc.exe`: CI downloads `ffmpeg-win32-x64.gz` from `ffmpeg-static` release `b6.1.1` and checks the sha256 recorded in 0.4. Not via `npm install`: `ffmpeg-static` leaves the Windows build.
   - Other targets are added in Phase 9.
-- [ ] **2.4 `server.js` changes.** Each must stay Node 18 compatible (Android) and keep working in-process under Electron (macOS and Linux).
+- [x] **2.4 `server.js` changes.** Each must stay Node 18 compatible (Android) and keep working in-process under Electron (macOS and Linux).
   - [x] Read `PUBLIC_DIR` from env, defaulting to the current `__dirname/public` (`server.js:21`; done in 0.3).
-  - [ ] Make `ffmpeg-static` optional, using `FFMPEG_PATH` first. That code path already exists at `server.js:647`.
+  - [x] Make `ffmpeg-static` optional, using `FFMPEG_PATH` first. That code path already exists at `server.js:647`.
   - [x] CLI entry `sidecar/entry.js`: `READY <port>` / `ERROR <code>` on stdout (done in 0.3).
   - [x] Exit when stdin closes; this also covers a killed parent on Windows (102 ms in 0.3).
-- [ ] **2.5 Rust `setup()`.**
+- [x] **2.5 Rust `setup()`.**
   - Spawn the server sidecar (`tauri-plugin-shell`), passing env: port 47831 (`TUNER_PORT` override), `PUBLIC_DIR` = resource dir, `FFMPEG_PATH` = resolved sidecar path, `TMPDIR`, and the API keys.
   - Wait for `READY` before creating the window.
   - On `EADDRINUSE`, show a `tauri-plugin-dialog` error and `app.exit(1)`, as `main.js:197-205` does.
   - Keep the sidecar's stdin piped and never close it while the app runs: its end is how the server notices the app has gone (0.3). A Windows Job Object is optional extra safety, and it also covers ffmpeg children if the server itself is killed.
-- [ ] **2.6** Bundle `public/**` as `bundle.resources`. Keep `npm run setup` (vendored hls.js and mpegts.js) as a pre-build step.
-- [ ] **2.7 Main window** from `WebviewWindowBuilder`:
+- [x] **2.6** Bundle `public/**` as `bundle.resources`. Keep `npm run setup` (vendored hls.js and mpegts.js) as a pre-build step.
+- [x] **2.7 Main window** from `WebviewWindowBuilder`:
   - `WebviewUrl::External("http://127.0.0.1:47831/")`
   - `visible:false`, 1280×800, min 760×520, background `#0c0e12`
   - `drag_drop_enabled(false)`. **This is required**, so that HTML5 `.m3u` drops (`boot.js:15-42`) and drag-reordering (`downloads.js:387-394`) keep working.
   - `additional_browser_args`: `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=PlatformHEVCDecoderSupport --enable-blink-features=AudioVideoTracks --autoplay-policy=no-user-gesture-required`. Tauri's own defaults come first, because setting this replaces them. This exact string was tested in spike 0.1.
-- [ ] **2.8 Capabilities.** `src-tauri/capabilities/main.json` for window `main` with `remote.urls: ["http://127.0.0.1:47831/*"]` (Appendix B; the pattern is proven in `spike/media/tauri/`). Give `pip` and `mirror` a separate minimal capability.
-- [ ] **2.9** `on_navigation`: block navigation away from the origin and send http(s) URLs to `tauri-plugin-opener`, replacing `main.js:143-145`.
-- [ ] **2.10** Register `tauri-plugin-single-instance` **first**. Its callback calls unminimize, show and set_focus on `main` (replaces `main.js:27-30,154-156`).
-- [ ] **2.11 Exit handling** (`RunEvent::ExitRequested` / `Exit`): stop the sidecar gracefully, and flush downloads to the "queued" state, replacing `downloads.js:410` and `main.js:215`.
-- [ ] **Gate:** on Windows the app starts, the dashboard renders, live TV plays through `/api/stream`, compatibility mode transcodes through the ffmpeg sidecar, and there are no orphan processes after quit or kill. The Electron build on macOS and Linux still passes `npm test` and a smoke run.
+- [x] **2.8 Capabilities.** `src-tauri/capabilities/main.json` for window `main` with `remote.urls: ["http://127.0.0.1:47831/*"]` (Appendix B; the pattern is proven in `spike/media/tauri/`). Give `pip` and `mirror` a separate minimal capability.
+- [x] **2.9** `on_navigation`: block navigation away from the origin and send http(s) URLs to `tauri-plugin-opener`, replacing `main.js:143-145`.
+- [x] **2.10** Register `tauri-plugin-single-instance` **first**. Its callback calls unminimize, show and set_focus on `main` (replaces `main.js:27-30,154-156`).
+- [x] **2.11 Exit handling** (`RunEvent::ExitRequested` / `Exit`): stop the sidecar gracefully, and flush downloads to the "queued" state, replacing `downloads.js:410` and `main.js:215`.
+- [x] **Gate: passed** (Tauri app on Windows CI, [run #1](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44119246878), `e2e/tauri-windows.js`, 9/9). Driven through WebView2's DevTools port (`AGH_DEVTOOLS_PORT`):
+  - the page comes from the app's own server, with the Tauri bridge, and the dashboard renders; the server finds the ffmpeg sidecar;
+  - **a live MPEG-TS channel with AC-3 sound plays, converted by ffmpeg** through `/api/transcode` (the app's own codec check chose that);
+  - with the server and ffmpeg running, **`taskkill /F` on the app (no `/T`) ends both**, through the job object;
+  - the app starts again afterwards, and **closing the window quits with exit 0, leaving nothing running**.
+  - Locally (Linux): a busy port gives Electron's message once, with exit 1; `kill -9` leaves no server.
+  - **Electron is unaffected:** `npm test` 67/67; the Electron app still renders the dashboard with its preload's bridge, and still writes `migration.json`.
+
+**How Phase 2 was built** (`src-tauri/`, `scripts/tauri-prep.js`, `public/js/tauri-shell.js`):
+- `scripts/tauri-prep.js` fills `src-tauri/binaries/` with the server `.exe` (`sidecar/build.js`) and the pinned ffmpeg, refused unless its sha256 matches (0.4).
+- The shell is 7.9 MB (Linux release build).
+- **Moved ahead from Phase 3:** a minimal `public/js/tauri-shell.js`, because the renderer can't load without `window.tunerDesktop` (found in 0.7). Window functions work; updater, downloads and folder sync answer "not available yet". It does nothing in Electron, on Android TV, or in a plain browser.
+- The window is shown by the page's `ready()` (`core:window:allow-show`), or after 5 s.
+- `window.open` is refused for now (PiP and Mirror are 4.3/4.4), except outside http(s) links, which open in the browser (4.7 done early).
 
 ### Phase 3: Bridge adapter and IPC commands
 
