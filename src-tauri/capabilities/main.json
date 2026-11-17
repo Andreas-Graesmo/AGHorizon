@@ -9,6 +9,10 @@
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "core:window:allow-available-monitors",
+    "core:window:allow-primary-monitor",
+    "allow-downloads",
+    "allow-sync"
   ]
 }

@@ -4,6 +4,8 @@
  * MIGRATION_PLAN.md Phase 2 gate, on Windows: the built Tauri app (src-tauri/target/release) starts its server and
  * ffmpeg sidecars, shows the dashboard, plays a live channel whose AC-3 sound WebView2 can't decode (so the app
  * converts it with ffmpeg), and leaves nothing running after being killed or closed.
+ * Phase 3: downloads (a real one, played back through /api/local, kept across a restart), the sync code in Windows
+ * Credential Manager, folder sync with binary data, and the monitor list.
  * The page is driven through WebView2's DevTools port (AGH_DEVTOOLS_PORT, see src-tauri/src/main.rs).
  * Usage (Windows, after `node scripts/tauri-prep.js` and `cargo build --release` in src-tauri): node e2e/tauri-windows.js
  */
@@ -34,6 +36,7 @@ function provider(clip) {
   const buf = fs.readFileSync(clip);
   const SECONDS = 40;
   return http.createServer((req, res) => {
+    if (req.url.startsWith('/film.mp4')) { res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': buf.length }); return res.end(buf); }   // a "film" to download, all at once
     if (!req.url.startsWith('/live.ts')) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': 'video/mp2t' });
     const tick = Math.ceil(buf.length / SECONDS / 10);
@@ -72,6 +75,15 @@ async function launch() {
   const liveUrl = `http://127.0.0.1:${prov.address().port}/live.ts`;
   check('nothing running before the test', Object.values(running()).every((n) => n === 0), JSON.stringify(running()));
 
+  // the app's data folder (%APPDATA%\app.aghorizon.desktop): downloads and folder sync into temp folders
+  const dataDir = path.join(process.env.APPDATA, 'app.aghorizon.desktop');
+  const dlDir = path.join(tmp, 'Downloads');
+  const cloudDir = path.join(tmp, 'Cloud');
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'downloads.json'), JSON.stringify({ folder: dlDir, pauseWhileWatching: false, items: [] }));
+  fs.writeFileSync(path.join(dataDir, 'sync.json'), JSON.stringify({ folder: cloudDir }));
+  const filmUrl = `http://127.0.0.1:${prov.address().port}/film.mp4`;
+
   /* 1: start, dashboard, a live channel converted with ffmpeg, then killed */
   let { child, browser, page } = await launch();
   await page.waitForFunction(() => typeof state === 'object' && typeof ui === 'object', null, { timeout: 30000 });
@@ -92,6 +104,51 @@ async function launch() {
   const during = running();
   check('server and ffmpeg running while it plays', during.server === 1 && during.ffmpeg >= 1, JSON.stringify(during));
 
+  /* Phase 3: downloads, sync, displays */
+  const dl = await page.evaluate(async (url) => {
+    const td = window.tunerDesktop;
+    const first = await td.downloads.list();
+    const events = [];
+    td.downloads.onChange((s) => events.push(s));
+    const added = await td.downloads.add([{ kind: 'movie', uid: 'e2e:movie:1', pid: null, url, ext: 'mp4', title: 'E2E Film', year: '2024' }]);
+    let done = null;
+    for (let i = 0; i < 120 && !done; i++) {
+      done = events.flatMap((e) => e.items).find((it) => it.state === 'done') || null;
+      if (!done) await new Promise((r) => setTimeout(r, 250));
+    }
+    const local = done ? await fetch(`/api/local/${done.id}`) : null;
+    const bytes = local ? (await local.arrayBuffer()).byteLength : 0;
+    return { folder: first.folder, added, events: events.length, done: done && { size: done.size, state: done.state }, localStatus: local && local.status, bytes };
+  }, filmUrl);
+  const clipSize = fs.statSync(clip).size;
+  check('downloads: the folder from downloads.json', dl.folder === dlDir, dl.folder);
+  check('downloads: a film downloads, with progress events', dl.added === 1 && dl.done && dl.done.size === clipSize && dl.events > 0, JSON.stringify({ added: dl.added, events: dl.events, done: dl.done }));
+  check('downloads: the file plays back through /api/local', dl.localStatus === 200 && dl.bytes === clipSize, `HTTP ${dl.localStatus}, ${dl.bytes} bytes`);
+  check('downloads: the file is in the Plex-style folder', fs.existsSync(path.join(dlDir, 'Movies', 'E2E Film (2024)', 'E2E Film (2024).mp4')));
+
+  const sy = await page.evaluate(async () => {
+    const s = window.tunerDesktop.sync;
+    const info = await s.info();
+    await s.setCode('e2e-code-0123');
+    const back = await s.getCode();
+    const vault = 'cd'.repeat(32), device = 'fedcba9876543210';
+    const bytes = new Uint8Array(4096); for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7) & 255;
+    await s.folderPut(vault, device, bytes);
+    const list = await s.folderList(vault);
+    const same = list.length === 1 && list[0].device === device && list[0].blob.length === bytes.length && list[0].blob.every((b, i) => b === bytes[i]);
+    await s.folderRemove(vault, device);
+    const after = await s.folderList(vault);
+    return { info, back, same, emptyAfter: after.length === 0 };
+  });
+  const cred = spawnSync('cmdkey', ['/list'], { encoding: 'utf8' }).stdout || '';
+  check('sync: code saved and read back, keychain = Windows Credential Manager', sy.back === 'e2e-code-0123' && sy.info.keychain === true && /AG Horizon/.test(cred), `${JSON.stringify(sy.info)}, in cmdkey: ${/AG Horizon/.test(cred)}`);
+  await page.evaluate(() => window.tunerDesktop.sync.setCode(''));
+  const credAfter = spawnSync('cmdkey', ['/list'], { encoding: 'utf8' }).stdout || '';
+  check('sync: clearing the code removes it from Credential Manager', !/AG Horizon/.test(credAfter));
+  check('sync: folder files carry the bytes exactly', sy.same && sy.emptyAfter && sy.info.folder === cloudDir, `folder ${sy.info.folder}`);
+  const disp = await page.evaluate(() => window.tunerDesktop.displays());
+  check('displays: the monitors are listed', disp.length >= 1 && disp.some((d) => d.primary) && disp[0].width > 0, JSON.stringify(disp));
+
   await browser.close().catch(() => {});
   spawnSync('taskkill', ['/F', '/PID', String(child.pid)]);   // no /T: the job object must take the children
   await sleep(3000);
@@ -102,6 +159,8 @@ async function launch() {
   ({ child, browser, page } = await launch());
   await page.waitForFunction(() => typeof state === 'object', null, { timeout: 30000 });
   check('starts again after a kill (port free again)', true);
+  const kept = await page.evaluate(async () => (await window.tunerDesktop.downloads.list()).items.map((it) => `${it.title}:${it.state}`));
+  check('downloads: the finished film is still listed after the restart', kept.includes('E2E Film:done'), JSON.stringify(kept));
   const exited = new Promise((r) => child.on('exit', (code) => r(code)));
   await page.evaluate(() => window.__TAURI__.window.getCurrentWindow().close()).catch(() => {});
   const code = await Promise.race([exited, sleep(15000).then(() => 'still running')]);

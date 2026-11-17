@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['sidecar/**', 'server.js', 'subtitles.js', 'unicode-ln.js', '!**/*.md', '.github/workflows/sidecar.yml']
+    paths: ['desktop/**', 'sidecar/**', 'server.js', 'subtitles.js', 'unicode-ln.js', '!**/*.md', '.github/workflows/sidecar.yml']
 
 permissions:
   contents: read

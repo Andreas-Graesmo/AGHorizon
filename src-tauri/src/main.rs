@@ -3,8 +3,13 @@
 // page, http://127.0.0.1:47831, in the main window: the same origin as the Electron app, so the page works unchanged.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
+
+use serde_json::{json, Value};
+use tokio::sync::oneshot;
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
@@ -26,6 +31,13 @@ const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreen
 
 struct Server(Mutex<Option<CommandChild>>);
 
+// Requests to the sidecar over its stdin, answered on its stdout (sidecar/entry.js): id → who waits for the answer.
+#[derive(Default)]
+struct Rpc {
+    next: AtomicU64,
+    pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
+}
+
 fn port() -> u16 {
     std::env::var("TUNER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(DEFAULT_PORT)
 }
@@ -38,6 +50,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Server(Mutex::new(None)))
+        .manage(Rpc::default())
+        .invoke_handler(tauri::generate_handler![downloads, sync])
         .setup(|app| {
             start_server(app.handle().clone())?;
             Ok(())
@@ -68,9 +82,15 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let exe_dir = std::env::current_exe()?.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let ffmpeg = exe_dir.join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
 
+    // the downloads list and the sync folder setting live in the app's data folder (MIGRATION_PLAN.md 3.4/3.5)
+    let data_dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&data_dir)?;
+    let documents = app.path().document_dir().unwrap_or_else(|_| data_dir.clone());
     let mut envs: Vec<(String, String)> = vec![
         ("PUBLIC_DIR".into(), public.to_string_lossy().into_owned()),
         ("FFMPEG_PATH".into(), ffmpeg.to_string_lossy().into_owned()),
+        ("AGH_DATA_DIR".into(), data_dir.to_string_lossy().into_owned()),
+        ("AGH_DOCUMENTS_DIR".into(), documents.to_string_lossy().into_owned()),
     ];
     // API keys: set at build time by CI from its secrets (as release.yml writes secrets.json for Electron)
     if let Some(k) = option_env!("TMDB_API_KEY") {
@@ -99,6 +119,18 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 CommandEvent::Stdout(line) => {
                     let line = String::from_utf8_lossy(&line).trim().to_string();
+                    if let Some(rest) = line.strip_prefix("RPC ") {
+                        answer(&app2, rest);
+                        continue;
+                    }
+                    if let Some(rest) = line.strip_prefix("EVENT ") {
+                        if let Ok(ev) = serde_json::from_str::<Value>(rest) {
+                            if let Some(name) = ev["name"].as_str() {
+                                let _ = tauri::Emitter::emit_to(&app2, "main", name, ev["payload"].clone());
+                            }
+                        }
+                        continue;
+                    }
                     if flag.load(std::sync::atomic::Ordering::SeqCst) {
                         continue;
                     }
@@ -141,9 +173,187 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn stop_server(app: &AppHandle) {
+    // first ask: the downloads engine marks what was downloading to carry on next time, saves, and exits
+    let asked = tauri::async_runtime::block_on(async {
+        tokio::time::timeout(Duration::from_millis(1500), rpc(app, "quit", json!([]))).await
+    });
+    if asked.is_err() {
+        eprintln!("[server] did not answer quit in time");
+    }
     if let Some(child) = app.state::<Server>().0.lock().unwrap().take() {
         let _ = child.kill();
     }
+}
+
+/* ───────────────────────── talking to the sidecar ───────────────────────── */
+
+async fn rpc(app: &AppHandle, cmd: &str, args: Value) -> Result<Value, String> {
+    let state = app.state::<Rpc>();
+    let id = state.next.fetch_add(1, Ordering::SeqCst) + 1;
+    let (tx, rx) = oneshot::channel();
+    state.pending.lock().unwrap().insert(id, tx);
+    let msg = format!("{}\n", json!({ "id": id, "cmd": cmd, "args": args }));
+    {
+        let mut server = app.state::<Server>().inner().0.lock().unwrap();
+        let child = server.as_mut().ok_or("the app's server is not running")?;
+        child.write(msg.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    match tokio::time::timeout(Duration::from_secs(60), rx).await {
+        Ok(Ok(answer)) => answer,
+        Ok(Err(_)) => Err("no answer from the app's server".into()),
+        Err(_) => {
+            state.pending.lock().unwrap().remove(&id);
+            Err("the app's server did not answer in time".into())
+        }
+    }
+}
+
+fn answer(app: &AppHandle, text: &str) {
+    let Ok(m) = serde_json::from_str::<Value>(text) else { return };
+    let Some(id) = m["id"].as_u64() else { return };
+    let waiting = app.state::<Rpc>().pending.lock().unwrap().remove(&id);
+    if let Some(tx) = waiting {
+        let result = if m["ok"].as_bool() == Some(true) {
+            Ok(m["result"].clone())
+        } else {
+            Err(m["error"].as_str().unwrap_or("error").to_string())
+        };
+        let _ = tx.send(result);
+    }
+}
+
+async fn pick_folder(app: &AppHandle, title: &str, start: Option<String>) -> Option<String> {
+    let (tx, rx) = oneshot::channel();
+    let mut dialog = app.dialog().file().set_title(title).set_can_create_directories(true);
+    if let Some(dir) = start.filter(|d| std::path::Path::new(d).is_dir()) {
+        dialog = dialog.set_directory(dir);
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&w);
+    }
+    dialog.pick_folder(move |p| {
+        let _ = tx.send(p.and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned()));
+    });
+    rx.await.ok().flatten()
+}
+
+/* ───────────────────────── commands for the page (public/js/tauri-shell.js) ───────────────────────── */
+
+// Downloads (electron/preload.js `downloads.*`). The engine runs in the sidecar (desktop/downloads-core.js); the
+// folder dialog and Explorer are here. Only these operations exist: the page can't reach anything else.
+#[tauri::command]
+async fn downloads(app: AppHandle, op: String, args: Vec<Value>) -> Result<Value, String> {
+    match op.as_str() {
+        "list" | "orphans" | "adopt" | "add" | "pause" | "resume" | "reorder" | "remove" | "setOption" | "setWatching" => {
+            rpc(&app, &format!("downloads.{op}"), Value::Array(args)).await
+        }
+        "chooseFolder" => {
+            let current = rpc(&app, "downloads.currentFolder", json!([])).await?;
+            match pick_folder(&app, "Choose the download folder", current.as_str().map(String::from)).await {
+                Some(folder) => rpc(&app, "downloads.setFolder", json!([folder])).await,
+                None => Ok(Value::Null),
+            }
+        }
+        "reveal" => {
+            let target = rpc(&app, "downloads.revealTarget", Value::Array(args)).await?;
+            let result = match target["file"].as_str() {
+                Some(file) => app.opener().reveal_item_in_dir(file),
+                None => app.opener().open_path(target["folder"].as_str().unwrap_or_default(), None::<&str>),
+            };
+            result.map(|_| Value::Null).map_err(|e| e.to_string())
+        }
+        "openFolder" => {
+            let folder = rpc(&app, "downloads.ensureFolder", json!([])).await?;
+            // as Electron's shell.openPath: '' when it worked, else the error text
+            Ok(json!(app.opener().open_path(folder.as_str().unwrap_or_default(), None::<&str>).err().map(|e| e.to_string()).unwrap_or_default()))
+        }
+        _ => Err(format!("unknown downloads operation {op}")),
+    }
+}
+
+// Sync (electron/preload.js `sync.*`): the code in the system's keychain, the folder through the sidecar
+// (desktop/sync-folder.js). The encrypted files travel as base64.
+#[tauri::command]
+async fn sync(app: AppHandle, op: String, args: Vec<Value>) -> Result<Value, String> {
+    match op.as_str() {
+        "info" => {
+            let mut info = rpc(&app, "sync.info", json!([])).await?;
+            info["keychain"] = json!(code_store::secure());
+            Ok(info)
+        }
+        "getCode" => code_store::get(&app).map(Value::String),
+        "setCode" => code_store::set(&app, args.first().and_then(|v| v.as_str()).unwrap_or_default()).map(|_| Value::Null),
+        "chooseFolder" => {
+            let current = rpc(&app, "sync.info", json!([])).await?;
+            match pick_folder(&app, "Choose a folder to sync through", current["folder"].as_str().map(String::from)).await {
+                Some(folder) => rpc(&app, "sync.setFolder", json!([folder])).await,
+                None => Ok(json!("")),
+            }
+        }
+        "folderList" | "folderPut" | "folderRemove" => rpc(&app, &format!("sync.{op}"), Value::Array(args)).await,
+        _ => Err(format!("unknown sync operation {op}")),
+    }
+}
+
+// The sync code: Windows Credential Manager. Elsewhere (development builds until MIGRATION_PLAN.md Phase 9) a file in
+// the app's data folder, as the Electron app does when it has no keychain.
+mod code_store {
+    use tauri::AppHandle;
+    #[cfg(not(windows))]
+    use tauri::Manager;
+
+    #[cfg(windows)]
+    fn entry() -> Result<keyring::Entry, String> {
+        keyring::Entry::new("AG Horizon", "sync-code").map_err(|e| e.to_string())
+    }
+
+    pub fn secure() -> bool {
+        cfg!(windows)
+    }
+
+    #[cfg(windows)]
+    pub fn get(_app: &AppHandle) -> Result<String, String> {
+        match entry()?.get_password() {
+            Ok(code) => Ok(code),
+            Err(keyring::Error::NoEntry) => Ok(String::new()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn set(_app: &AppHandle, code: &str) -> Result<(), String> {
+        let e = entry()?;
+        if code.is_empty() {
+            match e.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(err) => Err(err.to_string()),
+            }
+        } else {
+            e.set_password(code).map_err(|e| e.to_string())
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn file(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+        Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("sync-code"))
+    }
+
+    #[cfg(not(windows))]
+    pub fn get(app: &AppHandle) -> Result<String, String> {
+        Ok(std::fs::read_to_string(file(app)?).unwrap_or_default())
+    }
+
+    #[cfg(not(windows))]
+    pub fn set(app: &AppHandle, code: &str) -> Result<(), String> {
+        let f = file(app)?;
+        if code.is_empty() {
+            let _ = std::fs::remove_file(f);
+            Ok(())
+        } else {
+            std::fs::write(f, code).map_err(|e| e.to_string())
+        }
+    }
+
 }
 
 // As electron/main.js: tell the person, then quit. AGH_NO_DIALOG=1 (tests): just print it.
