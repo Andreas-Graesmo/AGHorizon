@@ -234,6 +234,25 @@ async function mpegtsTest(name, file) {
   } catch (e) { record('mpegts.js', name, 'fail', `${err ? `${err}; ` : ''}${e.message}${info ? `; ${info}` : ''}`); } finally { if (p) killPlayer(p); dispose(v); }
 }
 
+// The same N pictures without MSE (progressive mp4) and with hls.js: tells a media-stack limit from an mpegts.js one.
+async function multiviewOther(n, kind) {
+  const name = `${n} ${kind} pictures at once`;
+  if (kind === 'hls.js' && !(window.Hls && Hls.isSupported())) return record('multiview', name, 'skip', 'no hls.js');
+  const vs = []; const hs = [];
+  try {
+    for (let i = 0; i < n; i++) {
+      const v = newVideo(); vs.push(v);
+      if (kind === 'native mp4') v.src = `${FX}h264_aac.mp4?n=${i}`;
+      else { const h = new Hls(); hs.push(h); h.loadSource(`${location.origin}/api/stream?url=${enc(FX + 'hls/index.m3u8')}&n=${i}`); h.attachMedia(v); }
+    }
+    vs.forEach((v) => startPlay(v));
+    const rs = await Promise.allSettled(vs.map((v) => watch(v, { timeout: 30000 })));
+    const ok = rs.filter((r) => r.status === 'fulfilled').length;
+    const why = rs.map((r, i) => (r.status === 'rejected' ? `#${i + 1}: ${r.reason.message}` : '')).filter(Boolean).join('; ');
+    record('multiview', name, ok === n ? 'pass' : 'fail', `${ok}/${n} playing${why ? ` — ${why}` : ''}`);
+  } finally { hs.forEach((h) => { try { h.destroy(); } catch { /* */ } }); vs.forEach(dispose); }
+}
+
 async function multiviewTest(n) {
   if (!(window.mpegts && mpegts.isSupported())) return record('multiview', `${n} mpegts.js pictures at once`, 'skip', 'no mpegts.js');
   const vs = [];
@@ -350,6 +369,8 @@ async function apiTests() {
     ['mpegts eac3', () => mpegtsTest('TS H.264 + E-AC-3 via /api/stream', 'h264_eac3.ts')],
     ['multiview 2', () => multiviewTest(2)],
     ['multiview 4', () => multiviewTest(4)],
+    ['mvnative 4', () => multiviewOther(4, 'native mp4')],
+    ['mvhls 4', () => multiviewOther(4, 'hls.js')],
     ['tc copy', () => transcodeTest('copy: TS H.264 + AC-3 → fMP4 H.264 + AAC', 'h264_ac3.ts', 'copy')],
     ['tc h264', () => transcodeTest('h264: HEVC → fMP4 H.264 + AAC', 'hevc_aac.mp4', 'h264')],
     ['tc hevc mp4', () => transcodeTest('hevc: HEVC kept → Matroska HEVC + AAC', 'hevc_aac.mp4', 'hevc')],
