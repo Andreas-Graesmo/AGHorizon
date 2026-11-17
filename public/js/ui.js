@@ -2,7 +2,6 @@
 /* AG Horizon – application shell: navigation, themes, player docking, pages, command palette, shortcuts. */
 
 const ui = { route: null, hist: [] };
-const ROUTE_TITLES = { dashboard: 'Dashboard', playlists: 'Playlists', favorites: 'Favorites', recent: 'Recently viewed', search: 'Search', settings: 'Settings', multiview: 'Multi view' };
 const cardIndex = new Map(); // uid -> item or snapshot, filled by cardHtml()
 const ago = (ts) => {
   const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -112,7 +111,7 @@ $('#btnTheme').addEventListener('click', () => {
 /* ─────────────────────────────── navigation ─────────────────────────────── */
 function updateBack() { $('#btnBack').hidden = !(ui.hist.length || (ui.route === 'ws' && ws.detail)); }
 
-function go(route, params = {}, { push = true } = {}) {
+function go(route, { push = true } = {}) {
   if (push && ui.route && (ui.route !== route || route === 'ws')) {
     ui.hist.push({ route: ui.route, ws: ui.route === 'ws' ? { pid: ws.pid, mode: ws.mode, detail: ws.detail ? ws.detail.uid : null } : null });
     if (ui.hist.length > 40) ui.hist.shift();
@@ -135,7 +134,7 @@ async function goBack() {
   if (h.route === 'ws' && h.ws && playlistById(h.ws.pid)) {
     await openWorkspace(h.ws.pid, h.ws.mode, { push: false });
     if (h.ws.detail) { const it = ws.items.find((i) => i.uid === h.ws.detail); if (it) openDetail(it); }
-  } else go(h.route === 'ws' ? 'dashboard' : h.route, {}, { push: false });
+  } else go(h.route === 'ws' ? 'dashboard' : h.route, { push: false });
   updateBack();
 }
 $('#btnBack').addEventListener('click', goBack);
@@ -246,10 +245,18 @@ function updatePlayerChrome() {
   $('#pFav use').setAttribute('href', fav ? '#i-heart-fill' : '#i-heart');
   document.title = playerTitle(c) + ' – AG Horizon';
 }
+// what the player's heart stands for: an episode's series wherever the app has it, else the episode itself
+function playerFavItem(c) {
+  if (c.kind !== 'episode' || !c.seriesUid) return c;
+  if (ws.detail && ws.detail.uid === c.seriesUid) return ws.detail;
+  const own = state.cache[`${c.pid}:series`], base = state.cache[c.pid];
+  const list = (own && own.channels) || (base && base.series) || [];
+  return cardIndex.get(c.seriesUid) || list.find((s) => s.uid === c.seriesUid) || state.favdata[c.seriesUid] || c;
+}
 function uiMirrorChanged() { updatePlayerChrome(); }
 function uiCaps() { if (ui.route === 'settings') renderSettings(); }
 
-$('#pFav').addEventListener('click', () => { const c = state.current; if (c) toggleFavItem(c.kind === 'episode' && ws.detail ? ws.detail : c); });
+$('#pFav').addEventListener('click', () => { const c = state.current; if (c) toggleFavItem(playerFavItem(c)); });
 $('#pMirror').addEventListener('click', (e) => mirrorButton(e.currentTarget));
 $('#pPip').addEventListener('click', togglePip);
 $('#pFull').addEventListener('click', toggleFullscreen);
@@ -284,7 +291,7 @@ async function openItem(it) {
     ws.lv = 'channels';
     ws.q = ''; $('#topInput').value = '';
     // show the channel in a list next to the player: keep the category if it contains the channel, else use its own group
-    const inCat = ws.cat === '*fav' ? state.favs.has(real.uid) : ws.cat === '*recent' ? true : ws.cat === real.group;
+    const inCat = ws.cat === '*fav' ? state.favs.has(real.uid) : ws.cat === real.group;
     if (!inCat) ws.cat = real.group;
     ws.lists = true;
     renderWsChrome();
@@ -368,7 +375,6 @@ function catalogues(mode) {
     return own ? own.channels : base && p.type !== 'xtream' ? base[mode === 'movie' ? 'movies' : 'series'] : null;
   }).filter(Boolean);
 }
-// trending movies and series that are in the playlists, alternating, most popular first
 // trending movies and series that are in the playlists and whose length checks out (below), alternating, most popular first
 function trendingItems() {
   if (!trend.data) return [];
@@ -496,19 +502,6 @@ function renderDashboard() {
 
 /* ─────────────────────────────────── playlists ─────────────────────────────────── */
 const typeLabel = (p) => (p.type === 'xtream' ? 'Xtream' : p.type === 'file' ? 'M3U file' : 'M3U');
-function subLabel(p) {
-  if (p.type === 'xtream') { try { return `${new URL(normServer(p.server)).host} · ${p.username}`; } catch { return p.username; } }
-  if (p.type === 'file') return p.fileName || 'Local file';
-  try { return new URL(p.url).host; } catch { return p.url; }
-}
-function countsLabel(p) {
-  const parts = [];
-  for (const [m, label] of [['live', 'channels'], ['movie', 'movies'], ['series', 'series']]) {
-    const n = cachedCount(p, m);
-    if (n != null) parts.push(`${n.toLocaleString()} ${label}`);
-  }
-  return parts.length ? parts.join(' · ') : 'Not loaded yet';
-}
 /* ── Sources page (all saved playlists) ── */
 const src = { type: 'all', status: 'any', sort: LS.get('tuner.srcSort', 'added-desc'), q: '' };
 const SRC_SORTS = [['added-desc', 'Date added (Newest first)'], ['added-asc', 'Date added (Oldest first)'], ['updated', 'Recently updated'], ['name', 'Name (A–Z)']];
@@ -988,7 +981,6 @@ $('#views').addEventListener('click', (e) => {
   switch (a.dataset.act) {
     case 'add-pl': openPlaylistDialog(); break;
     case 'pl-edit': e.stopPropagation(); openPlaylistDialog(playlistById(pid)); break;
-    case 'pl-del': e.stopPropagation(); deletePlaylist(pid); break;
     case 'pl-refresh': e.stopPropagation(); refreshPlaylist(pid); break;
     case 'pl-more': e.stopPropagation(); playlistMenu(playlistById(pid), a); break;
     case 'src-type': src.type = a.dataset.val; renderPlaylists(); break;
@@ -1142,7 +1134,7 @@ function onAppKeydown(e) {
   if ((key === ' ' && !onButton && !onVideo) || k === 'k') { e.preventDefault(); togglePlay(); }
   else if (k === 'f') { e.preventDefault(); toggleFullscreen(); }
   else if (k === 'm') toggleMute();
-  else if (k === 'd') toggleFavItem(state.current.kind === 'episode' && ws.detail ? ws.detail : state.current);
+  else if (k === 'd') toggleFavItem(playerFavItem(state.current));
   else if (!onVideo && key === 'ArrowLeft') { e.preventDefault(); seekBy(-5); }
   else if (!onVideo && key === 'ArrowRight') { e.preventDefault(); seekBy(5); }
   else if (!onVideo && key === 'ArrowUp') { e.preventDefault(); changeVolume(0.05); }
