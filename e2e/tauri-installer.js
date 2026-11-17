@@ -19,13 +19,13 @@ const exportFile = path.join(oldDir, 'migration.json');
 const results = [];
 const check = (name, ok, note = '') => { results.push(!!ok); console.log(`${ok ? 'pass' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`); };
 
-// the per-user uninstall entries named "AG Horizon": the Electron app's and/or this app's
+// the per-user uninstall entries named "AG Horizon…" (electron-builder adds the version): the Electron app's and/or this app's
 function entries() {
-  const ps = "Get-ItemProperty HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object DisplayName -eq 'AG Horizon' | Select-Object PSChildName,InstallLocation,UninstallString,DisplayVersion | ConvertTo-Json -Compress";
+  const ps = "Get-ItemProperty HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'AG Horizon*' } | Select-Object PSChildName,DisplayName,InstallLocation,UninstallString,DisplayVersion | ConvertTo-Json -Compress";
   const out = spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' }).stdout.trim();
   if (!out) return [];
   const list = [].concat(JSON.parse(out));
-  return list.map((e) => ({ ...e, electron: /Uninstall AG Horizon\.exe/i.test(e.UninstallString || '') }));
+  return list.map((e) => ({ ...e, InstallLocation: String(e.InstallLocation || '').replace(/^"|"$/g, ''), electron: /Uninstall AG Horizon\.exe/i.test(e.UninstallString || '') }));
 }
 const electronEntry = () => entries().find((e) => e.electron) || null;
 const tauriEntry = () => entries().find((e) => !e.electron) || null;
@@ -39,7 +39,8 @@ check('Electron installer runs silently', run(electronSetup, ['/S']) === 0);
 kill();
 const el = electronEntry();
 const elExe = el && path.join(el.InstallLocation, 'AG Horizon.exe');
-check('Electron app installed (uninstall entry, program)', !!el && fs.existsSync(elExe), el ? el.InstallLocation : 'no entry');
+check('Electron app installed (uninstall entry, program)', !!el && fs.existsSync(elExe), el ? el.InstallLocation : `no entry: ${JSON.stringify(entries())}`);
+if (!el) { console.error('cannot go on without the Electron app installed'); process.exit(1); }
 fs.mkdirSync(oldDir, { recursive: true });
 fs.writeFileSync(path.join(oldDir, 'Preferences'), '{}');   // stands in for the Electron profile
 
