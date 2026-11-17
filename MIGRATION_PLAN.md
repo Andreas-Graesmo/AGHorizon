@@ -94,14 +94,16 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
     - The injection breaks `node.exe`'s Authenticode signature ("signature seems corrupted"). Strip it in CI before injecting (`signtool remove /s`), and sign the result if the app is ever signed.
     - Pin the Node version used to build (currently 22).
     - The downloads engine (`setLocalFiles`, `/api/local`) isn't wired into the sidecar yet; that's 3.5.
-- [ ] **0.4 Decide on ffmpeg.** *Proposed in [`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#04-which-ffmpeg-to-ship): keep today's gyan.dev 6.1.1 build, pinned and checksummed. Awaiting approval.* Keep the GPL static build (libx264 is needed by `-c:v libx264`) as a sidecar. Ship the GPL licence and a source link with each release.
-- [ ] **0.5 Decide on the title bar.** *Proposed in [`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#05-title-bar): HTML caption buttons in the existing top bar. Awaiting approval.* `decorations:false` plus HTML window buttons. Optionally use `tauri-plugin-decorum` for Win11 snap layouts.
-- [ ] **0.6 Choose the beta update channel design.** *Proposed in [`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#06-beta-update-channel): the app picks the newest published release through the GitHub API, as `manualCheck` does today. Awaiting approval.* Task 5.4 still describes the earlier idea, a rolling `updater-beta` release; it gets rewritten once this is approved.
+- [x] **0.4 ffmpeg: approved. Keep today's build.** That's the gyan.dev "essentials" FFmpeg 6.1.1 (GPL v3, libx264, gnutls), from `github.com/eugeneware/ffmpeg-static` release `b6.1.1`, pinned by checksum ([`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#04-which-ffmpeg-to-ship)). The GPL source archive ships **with the first Tauri release** (5.9).
+  - `ffmpeg-win32-x64.gz` sha256 `8883a3dffbd0a16cf4ef95206ea05283f78908dbfb118f73c83f4951dcc06d77`; unpacked `ffmpeg.exe` sha256 `04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00` (79.0 MB).
+  - `win32-x64.LICENSE` sha256 `8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903`; `win32-x64.README` sha256 `a636a7183c58006351acbaf35303c0ed85c6e1320fd4e80de453ba6157de6311`.
+- [x] **0.5 Title bar: approved.** A frameless window (`decorations(false)`, `shadow(true)`) with HTML minimise/maximise/close buttons in the existing 42 px top bar, shown only under Tauri. There's no Windows 11 snap-layout hover menu; `tauri-plugin-decorum` can add it later if people ask ([`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#05-title-bar)). → 4.2.
+- [x] **0.6 Beta channel: approved.** Stable reads `releases/latest/download/latest.json`. Test finds the newest published release (beta or stable) through the GitHub API, as `manualCheck` does today, uses that release's `latest.json`, and falls back to Stable on any error ([`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#06-beta-update-channel)). → 5.4.
 - [x] **0.7 Quick win in the shared code (ship it in Electron now).** Done in `public/js/player.js` (`armKeptHevcCheck`, `tcHevcToH264`). Checked with `spike/media/check-hevc-watchdog.js`: before the change the film stays on `transcode video=hevc` with no picture; after it, it switches to H.264 at about 8.5 s and shows the picture. An H.264 film still plays natively.
   - Add a watchdog for silent decode failures in `player.js`: "playing, but `videoWidth` still 0 after ~4 s" counts as an error, so the HEVC → H.264 fallback runs.
   - Today the fallback only listens for `video.onerror`, which Chromium never fires for undecodable HEVC.
   - This helps every platform today, independent of the migration.
-- [ ] **Gate:** go/no-go for Windows (media: go), and decisions 0.2–0.6 recorded. Any feature that cannot reach parity gets a documented degradation (Appendix E).
+- [x] **Gate: passed for Windows.** Media go (0.1), popups go (0.2), server sidecar proven (0.3), decisions 0.4–0.6 approved. Any feature that cannot reach parity gets a documented degradation (Appendix E).
 
 ### Phase 1: Bridge Electron release for Windows (ships *before* any Tauri build)
 
@@ -132,7 +134,7 @@ The code is portable and harmless on macOS and Linux. There it only writes the e
 - [ ] **2.2** `npx tauri icon build/icon.png`.
 - [ ] **2.3 Sidecars** in `bundle.externalBin`:
   - `binaries/aghorizon-server-x86_64-pc-windows-msvc.exe` (Node SEA of `server.js`)
-  - `binaries/ffmpeg-x86_64-pc-windows-msvc.exe`
+  - `binaries/ffmpeg-x86_64-pc-windows-msvc.exe`: CI downloads `ffmpeg-win32-x64.gz` from `ffmpeg-static` release `b6.1.1` and checks the sha256 recorded in 0.4. Not via `npm install`: `ffmpeg-static` leaves the Windows build.
   - Other targets are added in Phase 9.
 - [ ] **2.4 `server.js` changes.** Each must stay Node 18 compatible (Android) and keep working in-process under Electron (macOS and Linux).
   - [x] Read `PUBLIC_DIR` from env, defaulting to the current `__dirname/public` (`server.js:21`; done in 0.3).
@@ -201,10 +203,15 @@ All 34 preload members are listed in Appendix A.
 ### Phase 4: Windows, title bar and OS integration
 
 - [ ] **4.1 Window state.** Use `tauri-plugin-window-state` with `SIZE|POSITION|MAXIMIZED` (not `VISIBLE`, so `app_ready` still controls showing the window). Denylist `pip` and `mirror`. Import the legacy `%APPDATA%\Tuner IPTV\window-state.json` once.
-- [ ] **4.2 Title bar.**
-  - Add HTML min/max/close buttons, shown only under Tauri. Electron on macOS and Linux keeps its native title bar overlay.
-  - Use `data-tauri-drag-region` alongside the existing `-webkit-app-region: drag` (`public/style.css:101-104,835-836,939`, `public/mirror.html:21`), so both shells can drag the window.
-  - Under Tauri, replace the `env(titlebar-area-*)` padding.
+- [ ] **4.2 Title bar** (decided in 0.5; details in [`MIGRATION_DECISIONS.md`](MIGRATION_DECISIONS.md#05-title-bar)).
+  - `main`: `decorations(false)`, `shadow(true)`.
+  - Three buttons at the right of `#topbar`, 46×42 px, rendered only under Tauri (the adapter sets a class on `<html>`; Electron on macOS/Linux keeps its native overlay).
+    - Theme hover colours; close turns red on hover.
+    - `minimize()` / `toggleMaximize()` / `close()`; the maximise icon swaps to "restore" while maximised.
+    - `aria-label`s, and reachable by keyboard.
+  - `data-tauri-drag-region` on `#topbar` next to the existing `-webkit-app-region: drag` (`public/style.css:101-104,835-836,939`, `public/mirror.html:21`). It drags, and double-click maximises (Tauri 2.12 `drag.js`).
+  - Under Tauri, replace the `env(titlebar-area-*)` padding with the buttons' width. `tunerDesktop.titleBar` is a no-op.
+  - Check in the gate: resizing from every edge and corner, Aero Snap by dragging and with Win+arrows, maximising on a second monitor, and that dragging never starts on a button.
 - [ ] **4.3 PiP** (`player.js:465-534`, Electron options `main.js:86-95,117-124`). The design is proven by spike 0.2.
   - [ ] **`on_new_window` on `main`:** for `about:blank`, build `WebviewWindowBuilder::new(app, "pip", WebviewUrl::External("about:blank"))` with `.window_features(features)` (required: it gives the popup the opener's WebView2 environment), `decorations(false)`, `always_on_top(true)`, `inner_size(480, 270)` and `min_inner_size(260, 146)`. Return `NewWindowResponse::Create`. Deny any other URL that isn't the app's own `/mirror.html`.
   - [ ] **Close:** `window.close()` leaves the Tauri window on screen (spike 0.2), so destroy the `pip` window from Rust when the page closes it. The adapter calls a `close_popup("pip")` command on the window's `pagehide`; Rust can also do it on the webview's close request. Without this the next PiP can't be created either, because the label is taken.
@@ -242,10 +249,14 @@ All 34 preload members are listed in Appendix A.
   - [ ] `updater_set_channel`, `updater_status`.
   - [ ] Install-on-quit: if bytes are pending at `ExitRequested`, call `install()`. This replaces `autoInstallOnAppQuit`.
   - [ ] `updater:notes`, `manualCheck` and `updater:open` stay plain GitHub REST calls. Port them to Rust with `reqwest`, or reuse the renderer JS in `tv.js:43-116`. Keep `electron/versions.js` semantics (the `semver` crate orders versions the same way) and `test/versions.test.js`.
-- [ ] **5.4 Channels.**
-  - Stable endpoint: `https://github.com/Andreas-Graesmo/AGHorizon/releases/latest/download/latest.json`.
-  - Test endpoint: a rolling `updater-beta` release whose `beta.json` CI rewrites to the newer of {latest stable, newest beta}, which keeps "Test also gets stable" (`RELEASING.md:72`).
-  - The default comparator (strict `>`) keeps "never downgrade".
+- [ ] **5.4 Channels** (decided in 0.6).
+  - **Stable:** `https://github.com/Andreas-Graesmo/AGHorizon/releases/latest/download/latest.json`.
+  - **Test:**
+    1. `GET https://api.github.com/repos/Andreas-Graesmo/AGHorizon/releases?per_page=30` (with `User-Agent: AG-Horizon`).
+    2. Skip drafts and releases without a `latest.json` asset; take the highest version (`semver`, same order as `electron/versions.js`).
+    3. If it is newer than the running version, `updater_builder().endpoints([that asset's URL])`.
+    4. On any error (offline, API limit), use the Stable endpoint.
+  - The default comparator (strictly newer only) keeps "never downgrade", and Test still gets stable releases (`RELEASING.md:72`).
 - [ ] **5.5 Bundle targets:** `nsis` only. **No `msi`**, because WiX rejects `-beta.N` versions. Set `webviewInstallMode: embedBootstrapper` (about +1.8 MB).
 - [ ] **5.6 Rewrite `.github/workflows/release.yml` as a mixed release.**
   - [ ] **Windows job:**
@@ -258,7 +269,14 @@ All 34 preload members are listed in Appendix A.
   - [ ] **Keep:** `npm ci` with retries, `npm test`, `npm run setup` (vendor), the `secrets.json` step, `android-tv` and `publish-test`. Align the release title across all jobs.
 - [ ] **5.7 Asset names.** Use tauri-action `assetNamePattern`, or rename after the build, so the Windows installer stays `AG-Horizon-Setup-<v>.exe`. The website regex (`docs/site.js:18`, `/setup.*\.exe$/`) and `README.md:22-24` then keep working. The macOS and Linux names don't change.
 - [ ] **5.8 `android.yml`:** no change while Electron stays in `package.json`.
-- [ ] **5.9 Licensing.** Ship the ffmpeg GPL licence text and a source link in the bundle resources and the release notes.
+- [ ] **5.9 Licensing: ffmpeg GPL source with the first Tauri release** (decided in 0.4).
+  - [ ] Ship `win32-x64.LICENSE` (GPL v3) next to the ffmpeg sidecar, and name ffmpeg and its licence on the About page and in the README.
+  - [ ] Build the **corresponding source archive** once, and attach it to a pinned release `ffmpeg-6.1.1-gyan-essentials-source` that every Tauri release's notes link to:
+    - FFmpeg at commit `e38092ef93` (`win32-x64.README`);
+    - the 33 libraries whose exact versions that README lists (x264 `v0.164.3172`, x265 `3.5-153-gce8642f22`, libvpx `v1.13.1-601-g655da33b8`, aom, opus, lame, …), fetched by a script at those versions.
+  - [ ] **Open:** about 8 bundled libraries have **no version** in the README: gnutls, gmp, libxml2, zlib, xz/lzma, bzip2, iconv and fontconfig. Ask gyan.dev for their exact sources or versions.
+    - If they can't be had, switch the sidecar to a build whose recipe pins every source, such as BtbN FFmpeg-Builds (option B in the decision). That means re-running the media spike, and decision 0.4 is revisited.
+  - [ ] Keep the license file and README hashes from 0.4 with the archive, so it's clear which binary it belongs to.
 - [ ] **Gate:** a `v*-beta` tag produces one draft containing the Windows Tauri installer with `.sig` and `latest.json`, the Electron dmg and AppImage with their `*-mac.yml` / `*-linux.yml`, and the APK.
   - The Tauri build updates itself from N to N+1 on both channels.
   - An Electron macOS or Linux build updates itself from N to N+1, and does not see the Windows assets.

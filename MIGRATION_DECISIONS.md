@@ -1,6 +1,8 @@
 # Phase 0 decisions: ffmpeg, title bar and beta updates
 
-These are recommendations for `MIGRATION_PLAN.md` tasks 0.4, 0.5 and 0.6. They are written for the Windows-first scope, and each one ends with the question that needs your answer. Nothing here is built yet.
+These are recommendations for `MIGRATION_PLAN.md` tasks 0.4, 0.5 and 0.6, written for the Windows-first scope.
+
+**Status: all three approved on 2026-11-17.** The GPL source archive ships with the first Tauri release. The plan carries the details: tasks 2.3, 4.2, 5.4 and 5.9.
 
 ---
 
@@ -41,7 +43,9 @@ Shipping a GPL program next to the MIT app is fine: it runs as a separate progra
 
 Today's Electron installer already contains the ffmpeg `.LICENSE` file (it comes with `node_modules/ffmpeg-static`), but **no source offer**. That gap exists now, independent of the migration. This isn't legal advice; if compliance matters commercially, have it checked.
 
-**Decision needed:** approve A (keep gyan.dev 6.1.1, pinned and checksummed), and say whether to add the source archive to releases now or with the first Tauri release.
+**Decision: approved (A).** The source archive ships with the first Tauri release.
+
+One thing turned up after approval. The build's README pins exact versions for 33 of its libraries, but not for about 8 (gnutls, gmp, libxml2, zlib, xz, bzip2, iconv, fontconfig). Plan task 5.9 records it: get those from gyan.dev, or else switch to a build whose recipe pins every source.
 
 ---
 
@@ -77,7 +81,7 @@ It keeps the app looking exactly as it does now, it's fully under our control, a
 - The `app:titlebar` call becomes a no-op in the adapter.
 - To check in the Phase 4 gate: resizing from every edge and corner, Aero Snap, maximise on a second monitor, and that the window can't be dragged by its buttons.
 
-**Decision needed:** approve A (HTML buttons, no snap-layout menu for now), or ask for B from the start.
+**Decision: approved (A).**
 
 ---
 
@@ -122,14 +126,14 @@ Tauri's updater has no channels. It reads one JSON file (`latest.json`, made per
 - **Never downgrade:** keep the updater's default comparator (strictly newer only). Switching from Test 2.6.0-beta.2 back to Stable then waits for 2.6.0, as today.
 - **During the mixed period:** only the Windows build reads `latest.json`. The Electron macOS/Linux builds keep reading `latest-mac.yml` / `beta-linux.yml` etc. (plan 5.6).
 
-**Decision needed:** approve C (the app chooses the Test release through the GitHub API, with a Stable fallback).
+**Decision: approved (C).**
 
 ---
 
 ## In short
 
-| Task | Recommendation | Needs from you |
+| Task | Decision | Notes |
 |---|---|---|
-| 0.4 ffmpeg | Keep today's gyan.dev 6.1.1 GPL build, pinned and checksummed, as the Tauri sidecar | Approve; and when to add the GPL source archive to releases (now, or with Tauri) |
-| 0.5 Title bar | Frameless window with HTML caption buttons in the existing top bar; no snap-layout hover menu for now | Approve, or ask for the decorum plugin from the start |
-| 0.6 Beta channel | The app finds the newest published release through the GitHub API (as `manualCheck` does today), falling back to Stable | Approve |
+| 0.4 ffmpeg | Keep today's gyan.dev 6.1.1 GPL build, pinned and checksummed, as the Tauri sidecar | Approved; GPL source archive with the first Tauri release (plan 5.9) |
+| 0.5 Title bar | Frameless window with HTML caption buttons in the existing top bar; no snap-layout hover menu for now | Approved; decorum plugin only if people miss the snap-layout menu |
+| 0.6 Beta channel | The app finds the newest published release through the GitHub API (as `manualCheck` does today), falling back to Stable | Approved |
