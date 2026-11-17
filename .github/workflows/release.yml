@@ -79,7 +79,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
 
   # macOS and Linux: still the Electron app until MIGRATION_PLAN.md Phase 9. --mac / --linux only, so electron-builder
-  # never builds or publishes anything for Windows; it publishes latest-mac.yml, latest-linux.yml and their beta-*.yml,
+  # never builds anything for Windows; it makes latest-mac.yml, latest-linux.yml and their beta-*.yml,
   # which the Electron updaters there read.
   desktop:
     strategy:
@@ -132,10 +132,17 @@ jobs:
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-      - name: Build and upload installers
-        run: npx electron-builder ${{ matrix.platform }} --publish always
+      - name: Build the installers
+        run: npx electron-builder ${{ matrix.platform }} --publish never
+      # not electron-builder's own publishing: it skips every file once the Windows job has made the draft a
+      # pre-release (a test version) and still reports success, which left v3.1.0-beta.1 without its Mac files
+      - name: Add them to the draft release
+        shell: bash
+        run: scripts/release-upload-electron.sh
         env:
+          TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
 
   # The Android TV app: one APK, added to the same draft release. It doesn't wait for the desktop builds (a Mac
   # build can sit in GitHub's queue for a long time): by the time the APK is built, the Linux or Windows build has
