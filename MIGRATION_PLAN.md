@@ -304,6 +304,14 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
     - FFmpeg at commit `e38092ef93` (`win32-x64.README`);
     - the 33 libraries whose exact versions that README lists (x264 `v0.164.3172`, x265 `3.5-153-gce8642f22`, libvpx `v1.13.1-601-g655da33b8`, aom, opus, lame, …), fetched by a script at those versions.
   - [ ] **Open:** about 8 bundled libraries have **no version** in the README: gnutls, gmp, libxml2, zlib, xz/lzma, bzip2, iconv and fontconfig. Ask gyan.dev for their exact sources or versions.
+    - **Read from the binary itself (2026-11-17, sha256 `04e13079…`):** zlib **1.2.13** ("deflate 1.2.13"), bzip2 **1.0.8** ("1.0.8, 13-Jul-2019"), GnuTLS **3.6.16** ("Enabled GnuTLS 3.6.16 logging"), xz/liblzma **5.2.9**.
+      - libxml2 reports `LIBXML_VERSION` **21300**: a development snapshot between 2.12 and 2.13 (built from git), not a release. The exact commit is unknown.
+      - gmp, libiconv and fontconfig carry no version text.
+      - The configure line is in the binary too: `--enable-gpl --enable-version3 --enable-static … --enable-fontconfig --enable-iconv --enable-gnutls --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-zlib …`.
+    - **Probable recipe:** media-autobuild_suite on MSYS2. Its `build/media-suite_compile.sh` fetches GnuTLS as a pinned release tarball, takes gmp and xz from MSYS2 packages (`do_pacman_install`), and builds libxml2 from git.
+      - MSYS2 keeps the source of every past package (`repo.msys2.org/mingw/sources/`). So with the build date, the versions of gmp, libiconv and fontconfig can be looked up there, and that suite's history at that date gives its pins.
+      - The libxml2 commit stays a guess without gyan.
+      - Still worth asking gyan: the build date, the media-autobuild_suite commit, and the libxml2 commit.
     - If they can't be had, switch the sidecar to a build whose recipe pins every source, such as BtbN FFmpeg-Builds (option B in the decision). That means re-running the media spike, and decision 0.4 is revisited.
   - [ ] Keep the license file and README hashes from 0.4 with the archive, so it's clear which binary it belongs to.
 - [x] **Gate, self-update (CI):** `e2e/tauri-update.js`, 14/14. Versions 9.0.0 and 9.0.1 are built with a throwaway key and served locally.
