@@ -253,6 +253,24 @@ async function multiviewOther(n, kind) {
   } finally { hs.forEach((h) => { try { h.destroy(); } catch { /* */ } }); vs.forEach(dispose); }
 }
 
+// Phase 9.3 (the Linux Multiview freeze): the same N pictures from the server's progressive conversion
+// (/api/transcode?video=copy: fragmented MP4, no MSE), which WebKitGTK has never frozen on.
+async function multiviewTranscode(n) {
+  const name = `${n} compatibility-mode pictures at once (progressive fMP4, no MSE)`;
+  const vs = [];
+  try {
+    for (let i = 0; i < n; i++) {
+      const v = newVideo(); vs.push(v);
+      v.src = `${location.origin}/api/transcode?url=${enc(FX + 'h264_aac.ts')}&video=copy&n=${i}`;
+    }
+    vs.forEach((v) => startPlay(v));
+    const rs = await Promise.allSettled(vs.map((v) => watch(v, { timeout: 30000 })));
+    const ok = rs.filter((r) => r.status === 'fulfilled').length;
+    const why = rs.map((r, i) => (r.status === 'rejected' ? `#${i + 1}: ${r.reason.message}` : '')).filter(Boolean).join('; ');
+    record('multiview', name, ok === n ? 'pass' : 'fail', `${ok}/${n} playing${why ? ` — ${why}` : ''}`);
+  } finally { vs.forEach(dispose); }
+}
+
 async function multiviewTest(n) {
   if (!(window.mpegts && mpegts.isSupported())) return record('multiview', `${n} mpegts.js pictures at once`, 'skip', 'no mpegts.js');
   const vs = [];
@@ -404,6 +422,7 @@ async function apiTests() {
     ['multiview 2', () => multiviewTest(2)],
     ['multiview 4', () => multiviewTest(4)],
     ['mvnative 4', () => multiviewOther(4, 'native mp4')],
+    ['mvtranscode 4', () => multiviewTranscode(4)],
     ['mvhls 4', () => multiviewOther(4, 'hls.js')],
     ['tc copy', () => transcodeTest('copy: TS H.264 + AC-3 → fMP4 H.264 + AAC', 'h264_ac3.ts', 'copy')],
     ['tc h264', () => transcodeTest('h264: HEVC → fMP4 H.264 + AAC', 'hevc_aac.mp4', 'h264')],

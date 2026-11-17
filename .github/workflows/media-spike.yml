@@ -38,6 +38,11 @@ jobs:
         include:
           - { os: windows-latest, label: windows-webview2 }
           - { os: windows-latest, label: windows-webview2-noflags, noflags: '1' }
+          # MIGRATION_PLAN.md Phase 9: macOS (WKWebView) and Linux (WebKitGTK) again
+          - { os: macos-latest, label: macos-wkwebview }
+          - { os: ubuntu-22.04, label: linux-webkitgtk }
+          # 9.3: the Linux Multiview mitigation on its own, so a freeze in another test can't hide its result
+          - { os: ubuntu-22.04, label: linux-webkitgtk-mvtranscode, url: 'http://127.0.0.1:47831/spike/?exit=1&only=mvtranscode' }
           # plan task 0.2: PiP and Mirror popups (window.open in deny / allow / create mode)
           - { os: windows-latest, label: windows-webview2-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
     runs-on: ${{ matrix.os }}
@@ -51,8 +56,21 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: spike-fixtures, path: spike/media/fixtures }
 
+      - name: Linux packages (WebKitGTK, GStreamer, ffmpeg, a virtual display and a null sound card)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xvfb pulseaudio ffmpeg \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-gl
+          echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+      - name: ffmpeg (macOS, Homebrew's)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg
+          echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
       # The ffmpeg the Tauri app ships (scripts/tauri-prep.js: BtbN 8.1, MIGRATION_PLAN.md 5.9), for /api/probe and /api/transcode
-      - name: ffmpeg (as shipped)
+      - name: ffmpeg (Windows, as shipped)
+        if: runner.os == 'Windows'
         run: |
           node scripts/tauri-prep.js --skip-server
           echo "FFMPEG_PATH=$PWD/src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe" >> "$GITHUB_ENV"
@@ -78,7 +96,15 @@ jobs:
           [ -z "$SPIKE_NO_FLAGS" ] && unset SPIKE_NO_FLAGS
           node spike/media/serve.js --label "${{ matrix.label }}" > serve.log 2>&1 &
           sleep 2
-          spike/media/tauri/target/release/aghorizon-media-spike.exe > app.log 2>&1 || echo "app exit $?"
+          APP=spike/media/tauri/target/release/aghorizon-media-spike
+          case "$RUNNER_OS" in
+            Linux)
+              pulseaudio --start --exit-idle-time=-1 || true
+              pactl load-module module-null-sink sink_name=null >/dev/null 2>&1 && pactl set-default-sink null || true
+              xvfb-run -a -s "-screen 0 1280x1024x24" "$APP" > app.log 2>&1 || echo "app exit $?" ;;
+            Windows) "$APP.exe" > app.log 2>&1 || echo "app exit $?" ;;
+            *) "$APP" > app.log 2>&1 || echo "app exit $?" ;;
+          esac
           sleep 1
           echo "::group::server log"; cat serve.log; echo "::endgroup::"
           echo "::group::app log (tail)"; tail -50 app.log; echo "::endgroup::"
