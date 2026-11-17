@@ -99,8 +99,10 @@ The language button (next to the CC button, right of the volume) lists the sound
 
 The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
 
-- The app **bundles ffmpeg** (via the `ffmpeg-static` package, installed by `npm install`).
-- The bundled ffmpeg build is GPL-licensed; that matters only if you redistribute installers to other people.
+- The app **bundles ffmpeg**, which is licensed under the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.html):
+  - **Windows (from 3.x, the Tauri app):** ffmpeg 8.1, the win64 GPL build by [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (autobuild 2026-10-31), checked by SHA-256 when the app is built (`scripts/tauri-prep.js`). Its complete source code, every library in it included, is published as [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source) (`scripts/ffmpeg-source.sh` makes it).
+  - **macOS and Linux (the Electron app):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
+- The licence matters only if you redistribute installers to other people.
 
 ## How it works
 
@@ -153,3 +155,5 @@ Navigation icons (Live TV, Series, Movies) are from [Font Awesome Free](https://
 Cast photos come from [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 The Android TV app runs its server with [nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile) and plays with [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media); sound the TV can't decode is decoded by ffmpeg, as built by the [Jellyfin project](https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder) (GPL-licensed, like the desktop app's ffmpeg: that matters only if you redistribute the app).
+
+The desktop app's ffmpeg is [ffmpeg](https://ffmpeg.org) (GPL v3); see *Compatibility mode* above for which build each system gets and where its source is.
