@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['desktop/**', 'electron/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'sidecar/**', 'server.js', 'public/**', 'e2e/tauri-migration.js', 'e2e/tauri-installer.js', 'package.json', '!**/*.md', '.github/workflows/tauri-migration.yml']
+    paths: ['desktop/**', 'electron/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'sidecar/**', 'server-rs/**', 'server.js', 'public/**', 'e2e/tauri-migration.js', 'e2e/tauri-installer.js', 'package.json', '!**/*.md', '.github/workflows/tauri-migration.yml']
 
 permissions:
   contents: read
@@ -29,11 +29,14 @@ jobs:
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
-      - name: Sidecars (server .exe, pinned ffmpeg)
-        run: node scripts/tauri-prep.js
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
-        with: { workspaces: 'src-tauri -> target' }
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
       - name: Build the app
         working-directory: src-tauri
         run: cargo build --release

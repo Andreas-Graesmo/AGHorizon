@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['src-tauri/**', 'scripts/tauri-prep.js', 'scripts/tauri-release.js', 'sidecar/**', 'server.js', 'public/js/tauri-shell.js', 'e2e/tauri-update.js', '.github/workflows/tauri-update.yml']
+    paths: ['src-tauri/**', 'scripts/tauri-prep.js', 'scripts/tauri-release.js', 'sidecar/**', 'server-rs/**', 'server.js', 'public/js/tauri-shell.js', 'e2e/tauri-update.js', '.github/workflows/tauri-update.yml']
 
 permissions:
   contents: read
@@ -32,11 +32,14 @@ jobs:
         env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
-      - name: Sidecars (server .exe, pinned ffmpeg)
-        run: node scripts/tauri-prep.js
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
-        with: { workspaces: 'src-tauri -> target' }
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
       - name: Throwaway signing key, and a config that uses it (and allows the local http server)
         run: |
           npx --yes @tauri-apps/cli@2.12.4 signer generate --ci -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" -w "$RUNNER_TEMP/e2e.key"

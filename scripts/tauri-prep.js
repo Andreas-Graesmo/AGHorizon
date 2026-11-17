@@ -2,13 +2,15 @@
 'use strict';
 /*
  * Fills src-tauri/binaries/ before a Tauri build (MIGRATION_PLAN.md 2.3):
- *   aghorizon-server-<triple>[.exe]   server.js as a single executable (sidecar/build.js)
+ *   aghorizon-server-<triple>[.exe]   the local server: the Rust one (server-rs/, MIGRATION_PLAN.md 8.5), built here
+ *                                     with cargo; or, with --node-server, server.js as a Node single executable
+ *                                     (sidecar/build.js), as the app shipped until 8.5
  *   ffmpeg-<triple>[.exe] + ffmpeg.LICENSE
  *       Windows: BtbN's ffmpeg 8.1 GPL build from their October 2026 month-end autobuild (kept by BtbN until
  *       2028-10), refused unless the zip and the unpacked ffmpeg.exe match their SHA-256 (MIGRATION_PLAN.md 5.9,
  *       Option B: every library in it is pinned in BtbN's public scripts, so its source can be published).
  *       Other systems (development only, until MIGRATION_PLAN.md Phase 9): FFMPEG_PATH or `ffmpeg`.
- * Usage: node scripts/tauri-prep.js [--skip-server]
+ * Usage: node scripts/tauri-prep.js [--skip-server] [--node-server]
  */
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
@@ -57,11 +59,16 @@ async function fetchChecked(name, want) {
 (async () => {
   fs.mkdirSync(out, { recursive: true });
 
-  if (!process.argv.includes('--skip-server')) {
+  if (!process.argv.includes('--skip-server') && process.argv.includes('--node-server')) {
     execFileSync(process.execPath, [path.join(root, 'sidecar', 'build.js')], { stdio: 'inherit' });
     const built = path.join(root, 'sidecar', 'dist', `aghorizon-server-${triple}${ext}`);
     fs.copyFileSync(built, path.join(out, `aghorizon-server-${triple}${ext}`));
-    console.log(`server sidecar → src-tauri/binaries/aghorizon-server-${triple}${ext}`);
+    console.log(`server sidecar (Node) → src-tauri/binaries/aghorizon-server-${triple}${ext}`);
+  } else if (!process.argv.includes('--skip-server')) {
+    // the same name the Node one had: tauri.conf.json's externalBin and src-tauri/src/main.rs don't change
+    execFileSync('cargo', ['build', '--release', '--manifest-path', path.join(root, 'server-rs', 'Cargo.toml')], { stdio: 'inherit' });
+    fs.copyFileSync(path.join(root, 'server-rs', 'target', 'release', `aghorizon-server-rs${ext}`), path.join(out, `aghorizon-server-${triple}${ext}`));
+    console.log(`server sidecar (Rust) → src-tauri/binaries/aghorizon-server-${triple}${ext}`);
   }
 
   const ffOut = path.join(out, `ffmpeg-${triple}${ext}`);
