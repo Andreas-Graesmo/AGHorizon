@@ -185,11 +185,12 @@ async function launch() {
     if (!w) return null;
     return { decorated: await w.isDecorated(), onTop: await w.isAlwaysOnTop(), visible: await w.isVisible(), fullscreen: await w.isFullscreen() };
   }, label);
-  await page.click('#pPip');
+  // the PiP button runs togglePip() (ui.js:261); from the dashboard the film plays in the mini player, which hides it
+  await page.evaluate(() => togglePip());
   await sleep(2500);
   const pip = await winInfo('pip');
   const inPip = await page.evaluate(() => { const v = document.querySelector('#video'); return { inPip: v.ownerDocument !== document, w: v.videoWidth, paused: v.paused }; });
-  check('PiP: the PiP button opens a frameless window on top', pip && pip.decorated === false && pip.onTop === true && pip.visible, JSON.stringify(pip));
+  check('PiP: opens a frameless window on top', pip && pip.decorated === false && pip.onTop === true && pip.visible, JSON.stringify(pip));
   check('PiP: the player moved into it and plays', inPip.inPip && inPip.w > 0 && !inPip.paused, JSON.stringify(inPip));
   await page.evaluate(() => togglePip());
   await sleep(2000);
