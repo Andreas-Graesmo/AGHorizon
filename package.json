@@ -32,6 +32,7 @@
     "productName": "AG Horizon",
     "files": [
       "electron/**",
+      "desktop/**",
       "public/**",
       "server.js",
       "subtitles.js",
