@@ -1,0 +1,53 @@
+# Builds one platform's Electron app from an existing release tag and adds its files to that release (published or
+# not), for a release whose build ran but whose files never reached it. Runs when this file changes on
+# migration/tauri (the tag below), or by hand with any tag.
+name: Add missing files to a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag: { description: 'Release tag, e.g. v3.1.0-beta.1', required: true }
+      platform: { description: 'mac or linux', required: true, default: mac }
+  push:
+    branches: [migration/tauri]
+    paths: ['.github/workflows/release-backfill.yml']
+
+permissions:
+  contents: write
+
+env:
+  # v3.1.0-beta.1: its Mac build skipped every upload (see scripts/release-upload-electron.sh)
+  TAG: ${{ inputs.tag || 'v3.1.0-beta.1' }}
+  PLATFORM: ${{ inputs.platform || 'mac' }}
+
+jobs:
+  build:
+    runs-on: ${{ (inputs.platform || 'mac') == 'linux' && 'ubuntu-latest' || 'macos-latest' }}
+    timeout-minutes: 60
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: '${{ env.TAG }}' }
+      - name: The upload script (from this branch; older tags don't have it)
+        uses: actions/checkout@v6
+        with: { path: .backfill, sparse-checkout: scripts/release-upload-electron.sh, sparse-checkout-cone-mode: false }
+      - uses: actions/setup-node@v6
+        with: { node-version: 24 }
+      - name: Install
+        run: for i in 1 2 3; do npm ci && exit 0; sleep 30; done; exit 1
+      - name: Video libraries
+        run: for i in 1 2 3; do npm run setup && exit 0; sleep 30; done; exit 1
+      - name: The API keys
+        run: |
+          node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '', tmdbApiKey: process.env.TMDB_API_KEY || '' }))"
+        env:
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      - name: Build
+        run: npx electron-builder --$PLATFORM --publish never
+      - name: Add the files to the release
+        run: bash .backfill/scripts/release-upload-electron.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
