@@ -99,4 +99,4 @@ Then run the spike app:
 cd spike/media/tauri && cargo run --release
 ```
 
-The table prints in the server log, and the raw JSON is written to `spike/media/results/`. Use `SPIKE_URL='http://127.0.0.1:47831/spike/?exit=1&only=multiview'` to run a subset. Push changes under `spike/media/` to run all webviews on CI.
+The table prints in the server log, and the raw JSON is written to `spike/media/results/`. Use `SPIKE_URL='http://127.0.0.1:47831/spike/?exit=1&only=multiview'` to run a subset. Push changes under `spike/media/` to `migration/tauri` to run the Windows jobs on CI. The migration is Windows-first, so CI no longer runs macOS and Linux. The workflow with those jobs is at commit `c34f854`; restore them for Phase 9 of the plan.

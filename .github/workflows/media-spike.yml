@@ -1,5 +1,6 @@
-# MIGRATION_PLAN.md Phase 0.1: what each Tauri webview can play, through the app's real server.js.
-# Windows (WebView2, with and without the planned browser flags), macOS (WKWebView), Linux (WebKitGTK).
+# MIGRATION_PLAN.md Phase 0.1: what the Tauri webview can play, through the app's real server.js.
+# Windows only (WebView2, with and without the planned browser flags): the migration is Windows-first.
+# The macOS (WKWebView) and Linux (WebKitGTK) jobs are in this file at commit c34f854; restore them for Phase 9.
 # Results: the job log (between SPIKE-RESULTS markers), the job summary, and the "media-spike-*" artifacts.
 name: Media spike (Tauri migration, phase 0.1)
 
@@ -37,8 +38,6 @@ jobs:
         include:
           - { os: windows-latest, label: windows-webview2 }
           - { os: windows-latest, label: windows-webview2-noflags, noflags: '1' }
-          - { os: macos-latest, label: macos-wkwebview }
-          - { os: ubuntu-22.04, label: linux-webkitgtk }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -49,13 +48,6 @@ jobs:
         with: { node-version: 22 }
       - uses: actions/download-artifact@v4
         with: { name: spike-fixtures, path: spike/media/fixtures }
-
-      - name: Linux packages (WebKitGTK, GStreamer, a virtual display and a null sound card)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xvfb pulseaudio \
-            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-gl
 
       # The ffmpeg the desktop app ships today (ffmpeg-static), for /api/probe and /api/transcode
       - name: ffmpeg-static
@@ -82,15 +74,7 @@ jobs:
           [ -z "$SPIKE_NO_FLAGS" ] && unset SPIKE_NO_FLAGS
           node spike/media/serve.js --label "${{ matrix.label }}" > serve.log 2>&1 &
           sleep 2
-          APP=spike/media/tauri/target/release/aghorizon-media-spike
-          case "$RUNNER_OS" in
-            Linux)
-              pulseaudio --start --exit-idle-time=-1 || true
-              pactl load-module module-null-sink sink_name=null >/dev/null 2>&1 && pactl set-default-sink null || true
-              xvfb-run -a -s "-screen 0 1280x1024x24" "$APP" > app.log 2>&1 || echo "app exit $?" ;;
-            Windows) "$APP.exe" > app.log 2>&1 || echo "app exit $?" ;;
-            *) "$APP" > app.log 2>&1 || echo "app exit $?" ;;
-          esac
+          spike/media/tauri/target/release/aghorizon-media-spike.exe > app.log 2>&1 || echo "app exit $?"
           sleep 1
           echo "::group::server log"; cat serve.log; echo "::endgroup::"
           echo "::group::app log (tail)"; tail -50 app.log; echo "::endgroup::"
