@@ -132,6 +132,10 @@
 
   // 4.5 element fullscreen (player, Multiview tiles) fills only the webview in WebView2: make the window fullscreen too
   document.addEventListener('fullscreenchange', () => { win().setFullscreen(!!document.fullscreenElement).catch(() => {}); });
+  // Escape leaves fullscreen, as in Electron's Chromium (WebView2 in Tauri doesn't do it by itself: found by e2e)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }, true);
 
   // 4.6 the screen stays on while a video plays (Electron did this by itself; WebView2 grants the Wake Lock API)
   let wake = null;
