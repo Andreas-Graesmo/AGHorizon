@@ -437,7 +437,9 @@ async function handleStream(req, res, q) {
  * The rules were tried against a real provider with scripts/burst-probe.js first.
  */
 const shareTuning = {
-  revisit: 3,    // seconds before a picture is worth another visit: it can only gain what was broadcast meanwhile
+  // seconds before a picture is worth another visit: it can only gain what was broadcast meanwhile
+  // (AGH_SHARE_REVISIT: shorter, for the test suite only, which would otherwise take half a minute)
+  revisit: Number(process.env.AGH_SHARE_REVISIT) || 3,
   visitMax: 4,   // seconds a visit may last while another picture waits
 };
 const shareNow = () => performance.now() / 1000;
