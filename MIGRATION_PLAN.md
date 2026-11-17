@@ -394,9 +394,15 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
 
 ### Phase 7: Windows rollout
 
-- [ ] **7.1** Ship Tauri for Windows on the **test channel** first (`3.0.0-beta.N`), for at least 2 beta cycles.
+**Decision (owner, 2026-11-17): the Tauri app stays on the Test channel until every platform has moved (Phase 9).** Stable is promoted once, for all systems together, instead of Windows first. Until then:
+- Stable users stay on the Electron bridge (v2.5.0) on every system.
+- **Stable fixes come from `main`**: Electron for every system, built as 2.5.0 was, with the bridge kept. Then `main` is merged into `migration/tauri`, so the betas keep them.
+- **Never tag a version without `-beta` (or another pre-release suffix) on `migration/tauri`.** Its `release.yml` builds the Tauri app for Windows, and Stable users would be moved before the other systems are ready.
+- A stable 2.x from `main` doesn't reach Tauri beta users: it's older than 3.x, and has no `latest.json`. Windows Electron users who switch to Test are handed over to the Tauri betas and don't come back, since the Tauri app never downgrades.
+
+- [x] **7.1** Ship Tauri for Windows on the **test channel** first. v3.1.0-beta.0 and v3.1.0-beta.1 (with the Rust server, 8.5) are out, and each passed the owner's manual check.
 - [ ] **7.2** Watch for media regressions on real hardware (HEVC, AC-3, GPUs), WebView2 runtime issues and upgrade problems.
-- [ ] **7.3** Promote to stable: publish the stable Tauri release, and point the stable bridge release's handover at it.
+- [ ] **7.3** Promote to stable: **deferred until after Phase 9**, together with macOS and Linux (see the decision above). Then: publish the stable Tauri release; the stable bridge's hand-over finds it by itself.
 - [ ] **7.4** Update `README.md` ("Windows: built with Tauri; macOS and Linux: Electron, moving later"), `RELEASING.md` (mixed release) and `docs/`.
 - [ ] **Gate:** two weeks of stable on Windows with no data-loss reports.
 
