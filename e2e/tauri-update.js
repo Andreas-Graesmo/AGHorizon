@@ -33,6 +33,10 @@ function entry() {
   const e = [].concat(JSON.parse(out))[0];
   return { dir: String(e.InstallLocation || '').replace(/^"|"$/g, ''), version: e.DisplayVersion };
 }
+const appPaths = () => {
+  const out = spawnSync('powershell', ['-NoProfile', '-Command', "Get-Process ag-horizon -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }"], { encoding: 'utf8' }).stdout || '';
+  return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+};
 const processes = () => {
   const out = spawnSync('tasklist', ['/FO', 'CSV', '/NH'], { encoding: 'utf8' }).stdout || '';
   const names = out.split(/\r?\n/).map((l) => (l.split('","')[0] || '').replace(/^"/, '').toLowerCase());
@@ -124,9 +128,17 @@ async function connect() {
   let after = null;
   for (let i = 0; i < 240; i++) { after = entry(); if (after && after.version === latest.version) break; await sleep(500); }
   check('3: the installer put N+1 in place', after && after.version === latest.version, JSON.stringify(after));
+  // The installer starts the app again through Explorer (as the person, not as the installer), so that copy doesn't
+  // have this test's environment (no DevTools port): see that it runs from the install folder, then start it here.
+  let restarted = [];
+  for (let i = 0; i < 120 && !restarted.length; i++) { restarted = appPaths(); if (!restarted.length) await sleep(500); }
+  check('3: the app started again by itself, from the install folder', restarted.length === 1 && restarted[0].toLowerCase() === path.join(after.dir, 'ag-horizon.exe').toLowerCase(), JSON.stringify(restarted));
+  for (const n of ['ag-horizon.exe', 'aghorizon-server.exe']) spawnSync('taskkill', ['/F', '/IM', n], { stdio: 'ignore' });
+  await sleep(1500);
+  spawn(path.join(after.dir, 'ag-horizon.exe'), [], { env: { ...process.env, AGH_DEVTOOLS_PORT: String(DEVTOOLS), AGH_NO_DIALOG: '1' }, stdio: 'ignore', detached: true }).unref();
   ({ browser, page } = await connect());
   const back = await page.evaluate(async () => ({ version: (await window.tunerDesktop.appInfo()).version, kept: LS.get('tuner.e2eUpdate', null) }));
-  check('3: the app started again by itself, as N+1', back.version === latest.version, JSON.stringify(back));
+  check('3: it is N+1', back.version === latest.version, JSON.stringify(back));
   check('3: the page\'s data was kept', back.kept === 'kept');
   await sleep(1500);
   const p = processes();
