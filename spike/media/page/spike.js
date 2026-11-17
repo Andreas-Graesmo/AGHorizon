@@ -287,6 +287,37 @@ async function transcodeTest(name, file, mode, extra = '') {
   } catch (e) { record('transcode', name, 'fail', e.message); } finally { dispose(v); }
 }
 
+// The same conversion fed through MSE (fetch → SourceBuffer) instead of <video src>: the candidate fix for a webview
+// whose progressive player refuses a stream without byte ranges (Accept-Ranges: none, no length).
+async function transcodeMseTest(name, file, mode) {
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  const type = 'video/mp4; codecs="avc1.64001e, mp4a.40.2"';
+  if (!MS || !MS.isTypeSupported(type)) return record('transcode', name, 'skip', 'no MSE for fMP4 H.264+AAC');
+  const v = newVideo();
+  const ac = new AbortController();
+  try {
+    const ms = new MS();
+    if (window.ManagedMediaSource && MS === window.ManagedMediaSource) v.disableRemotePlayback = true;   // required for ManagedMediaSource
+    v.src = URL.createObjectURL(ms);
+    await new Promise((r) => ms.addEventListener('sourceopen', r, { once: true }));
+    const sb = ms.addSourceBuffer(type);
+    sb.mode = 'sequence';
+    (async () => {
+      const r = await fetch(`${location.origin}/api/transcode?url=${enc(FX + file)}&video=${mode}`, { signal: ac.signal });
+      const rd = r.body.getReader();
+      for (;;) {
+        const { done, value } = await rd.read();
+        if (done) { if (ms.readyState === 'open') { while (sb.updating) await sleep(20); ms.endOfStream(); } return; }
+        while (sb.updating) await sleep(20);
+        sb.appendBuffer(value);
+      }
+    })().catch(() => {});
+    startPlay(v);
+    const r = await addSound(v, await watch(v, { timeout: 30000 }));
+    record('transcode', name, okStatus(r), playNote(r), r);
+  } catch (e) { record('transcode', name, 'fail', e.message); } finally { ac.abort(); dispose(v); }
+}
+
 // What player.js really does for an HEVC film: keep HEVC (Matroska) if MSE says hvc1 works, and on a media error
 // convert the picture to H.264 instead (player.js video.onerror). Reports which way it ended up playing.
 async function appHevcDecision() {
@@ -333,8 +364,11 @@ async function apiTests() {
     try { await v.requestFullscreen(); record(G, 'element requestFullscreen() without a gesture', 'info', `opened; window ${innerWidth}x${innerHeight}, screen ${screen.width}x${screen.height}`); await document.exitFullscreen().catch(() => {}); } catch (e) { record(G, 'element requestFullscreen() without a gesture', 'info', `${e.name}: ${e.message}`); }
   } catch (e) { record(G, 'captureStream / PiP / fullscreen (needs mp4 playback)', 'fail', e.message); } finally { dispose(v); }
 
-  try { const l = await navigator.wakeLock.request('screen'); record(G, 'navigator.wakeLock.request("screen")', 'pass', 'granted'); await l.release(); } catch (e) { record(G, 'navigator.wakeLock.request("screen")', 'fail', e ? `${e.name}: ${e.message}` : 'missing'); }
-  try { await navigator.clipboard.writeText('ag-horizon spike'); record(G, 'navigator.clipboard.writeText() without a gesture', 'pass', 'written'); } catch (e) { record(G, 'navigator.clipboard.writeText() without a gesture', 'info', e ? `${e.name}: ${e.message}` : 'missing'); }
+  try { const l = await Promise.race([navigator.wakeLock.request('screen'), sleep(5000).then(() => { throw new Error('no answer in 5 s'); })]); record(G, 'navigator.wakeLock.request("screen")', 'pass', 'granted'); await l.release(); } catch (e) { record(G, 'navigator.wakeLock.request("screen")', 'fail', e ? `${e.name}: ${e.message}` : 'missing'); }
+  try {
+    const r = await Promise.race([navigator.clipboard.writeText('ag-horizon spike').then(() => 'written'), sleep(5000).then(() => 'no answer in 5 s (a permission prompt?)')]);
+    record(G, 'navigator.clipboard.writeText() without a gesture', r === 'written' ? 'pass' : 'info', r);
+  } catch (e) { record(G, 'navigator.clipboard.writeText() without a gesture', 'info', e ? `${e.name}: ${e.message}` : 'missing'); }
 
   // /api reachable from this origin (the same-origin guard in server.js)
   try { const c = await (await fetch('/api/capabilities')).json(); record(G, 'GET /api/capabilities (same-origin guard)', c.ffmpeg ? 'pass' : 'fail', JSON.stringify(c)); } catch (e) { record(G, 'GET /api/capabilities (same-origin guard)', 'fail', e.message); }
@@ -376,6 +410,8 @@ async function apiTests() {
     ['tc hevc mp4', () => transcodeTest('hevc: HEVC kept → Matroska HEVC + AAC', 'hevc_aac.mp4', 'hevc')],
     ['tc hevc ts', () => transcodeTest('hevc: HEVC from TS kept → Matroska', 'hevc_aac.ts', 'hevc')],
     ['tc app', appHevcDecision],
+    ['tc mse copy', () => transcodeMseTest('copy via MSE: TS H.264 + AC-3 → fMP4 → SourceBuffer', 'h264_ac3.ts', 'copy')],
+    ['tc mse h264', () => transcodeMseTest('h264 via MSE: HEVC → fMP4 → SourceBuffer', 'hevc_aac.mp4', 'h264')],
     ['shell', apiTests],
   ];
   for (const [label, fn] of TESTS) {
