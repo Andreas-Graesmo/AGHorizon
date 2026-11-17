@@ -39,8 +39,8 @@ jobs:
         working-directory: server-rs
         run: cargo build --release
       - name: Parity, server.js
-        run: node --test test/parity/
+        run: node --test test/parity/parity.test.js
         env: { AGH_PARITY_SERVER: node }
       - name: Parity, Rust
-        run: node --test test/parity/
+        run: node --test test/parity/parity.test.js
         env: { AGH_PARITY_SERVER: rust }
