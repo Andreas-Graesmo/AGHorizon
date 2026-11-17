@@ -6,7 +6,7 @@ name: Media spike (Tauri migration, phase 0.1)
 on:
   workflow_dispatch:
   push:
-    branches: [fix/code-review]
+    branches: [migration/tauri]
     paths: ['spike/media/**', '.github/workflows/media-spike.yml']
 
 permissions:
