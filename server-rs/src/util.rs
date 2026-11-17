@@ -186,3 +186,132 @@ impl Query {
 pub fn now_ms() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)
 }
+
+/* ───────────── JavaScript's ways with values, where the answers depend on them ───────────── */
+
+/// A number as JSON.stringify writes it: 10 not 10.0; NaN and Infinity as null.
+pub fn js_num(x: f64) -> serde_json::Value {
+    if !x.is_finite() {
+        return serde_json::Value::Null;
+    }
+    if x.fract() == 0.0 && x.abs() < 9.007_199_254_740_992e15 {
+        return serde_json::json!(x as i64);
+    }
+    serde_json::json!(x)
+}
+
+/// String(number): 12, 12.5, 0.001
+pub fn js_num_str(x: f64) -> String {
+    match js_num(x) {
+        serde_json::Value::Null => if x.is_nan() { "NaN".into() } else if x > 0.0 { "Infinity".into() } else { "-Infinity".into() },
+        v => v.to_string(),
+    }
+}
+
+/// Number(string): trimmed; "" is 0; decimal, exponent, 0x/0o/0b, Infinity; anything else NaN. Number(null) is 0.
+pub fn js_number(s: Option<&str>) -> f64 {
+    let Some(s) = s else { return 0.0 };
+    let t = s.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
+    if t.is_empty() {
+        return 0.0;
+    }
+    let radix = |p: &str, r: u32| u64::from_str_radix(p, r).map(|n| n as f64).unwrap_or(f64::NAN);
+    if let Some(h) = t.strip_prefix("0x").or(t.strip_prefix("0X")) {
+        return radix(h, 16);
+    }
+    if let Some(o) = t.strip_prefix("0o").or(t.strip_prefix("0O")) {
+        return radix(o, 8);
+    }
+    if let Some(b) = t.strip_prefix("0b").or(t.strip_prefix("0B")) {
+        return radix(b, 2);
+    }
+    match t {
+        "Infinity" | "+Infinity" => return f64::INFINITY,
+        "-Infinity" => return f64::NEG_INFINITY,
+        _ => {}
+    }
+    // Rust accepts "inf", "nan", "1_0"…: only JavaScript's StrDecimalLiteral
+    let ok = t.bytes().all(|b| b.is_ascii_digit() || b"+-.eE".contains(&b)) && t.bytes().any(|b| b.is_ascii_digit());
+    if !ok {
+        return f64::NAN;
+    }
+    t.parse::<f64>().unwrap_or(f64::NAN)
+}
+
+/// Number.prototype.toFixed(digits): on an exact tie, the larger of the two (Rust's {:.N} rounds half to even)
+pub fn js_to_fixed(x: f64, digits: usize) -> String {
+    let scale = 10f64.powi(digits as i32);
+    let scaled = x * scale;
+    if (scaled - scaled.trunc()).abs() == 0.5 && (x * scale * 2.0).fract() == 0.0 {
+        let up = if x >= 0.0 { scaled.trunc() + 1.0 } else { scaled.trunc() };
+        return format!("{:.*}", digits, up / scale);
+    }
+    format!("{:.*}", digits, x)
+}
+
+/// truthiness of a JSON value
+pub fn truthy(v: Option<&serde_json::Value>) -> bool {
+    use serde_json::Value;
+    match v {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(n)) => n.as_f64().map(|x| x != 0.0 && !x.is_nan()).unwrap_or(true),
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(_) => true,
+    }
+}
+
+/// a || b for JSON values
+pub fn js_or(a: Option<&serde_json::Value>, b: serde_json::Value) -> serde_json::Value {
+    if truthy(a) { a.unwrap().clone() } else { b }
+}
+
+/// String(value) for what JSON can hold
+pub fn js_string(v: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => "null".into(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.as_f64().map(js_num_str).unwrap_or_else(|| n.to_string()),
+        Value::Array(a) => a.iter().map(|x| if x.is_null() { String::new() } else { js_string(x) }).collect::<Vec<_>>().join(","),
+        Value::Object(_) => "[object Object]".into(),
+    }
+}
+
+/// .slice(0, n) counts UTF-16 units
+pub fn slice_utf16(s: &str, max: usize) -> String {
+    let mut n = 0;
+    let mut out = String::new();
+    for ch in s.chars() {
+        n += ch.len_utf16();
+        if n > max {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+#[cfg(test)]
+mod js_tests {
+    use super::*;
+    #[test]
+    fn numbers_as_javascript_has_them() {
+        assert_eq!(js_num(10.0).to_string(), "10");
+        assert_eq!(js_num(10.5).to_string(), "10.5");
+        assert_eq!(js_num(f64::NAN), serde_json::Value::Null);
+        assert_eq!(js_num_str(3.0), "3");
+        assert_eq!(js_number(Some(" 12 ")), 12.0);
+        assert_eq!(js_number(Some("")), 0.0);
+        assert_eq!(js_number(None), 0.0);
+        assert_eq!(js_number(Some("0x10")), 16.0);
+        assert!(js_number(Some("abc")).is_nan());
+        assert!(js_number(Some("inf")).is_nan());
+        assert_eq!(js_number(Some("1e2")), 100.0);
+        assert_eq!(js_to_fixed(1.0625, 3), "1.063"); // (1.0625).toFixed(3) in JavaScript
+        assert_eq!(js_to_fixed(2.5, 0), "3");
+        assert_eq!(js_to_fixed(12.0, 3), "12.000");
+        assert_eq!(js_to_fixed(1.005, 2), "1.00"); // 1.005 is really 1.00499…
+    }
+}

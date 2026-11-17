@@ -413,9 +413,13 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
   - [x] the request guard, static files (WHATWG URL parsing via the `url` crate, as `new URL` does, so the same dot-segment and percent rules), `/api/capabilities`, `/api/fetch`;
   - [x] `/api/stream` (M3U8 rewriting, pass-through with Range, the TS sniffer) and `/api/tracks`;
   - [x] `/api/epg`. The same piece-by-piece parsing rules and regular expressions as `server.js` (regex crate; one branch per quote style instead of back-references), not quick-xml, so edge cases match. That includes JavaScript's object key order, which decides which channel a shared name goes to.
-  - [ ] `/api/local` (Range) and local subtitles, `/api/tmdb`, `/api/trending`;
-  - [ ] `/api/probe`, `/api/keyframe`, `/api/transcode`, `/api/tcsubs` (`tokio::process`, `kill_on_drop`, at most 4 conversions);
-  - [ ] `/api/subs/*` (OpenSubtitles);
+  - [x] `/api/local` (Range, HEAD, empty files) and local subtitles. These include extracting built-in text subtitles to `.srt` once, and the sort order that depends on `Intl.getCanonicalLocales`: a 434-entry alias table generated from Node 22's ICU (`server-rs/src/canon_table.rs`).
+    - Until the downloads engine is ported, the Rust server reads `<AGH_DATA_DIR>/downloads.json` for each lookup, as `localFile()` answers. It doesn't relocate moved folders yet.
+  - [x] `/api/tmdb`, `/api/trending` (cache, a failed fetch tried again);
+  - [x] `/api/probe`, `/api/keyframe`, `/api/transcode`, `/api/tcsubs`: `tokio::process` with `kill_on_drop` (the player hanging up ends ffmpeg), at most 4 conversions, and the first bytes deciding between the video and "Conversion failed: <ffmpeg's last line>".
+  - [x] `/api/subs/*` (OpenSubtitles): one login per account, logged in again once when a token expires. The User-Agent takes the app's version from `package.json` at build time.
+  - JavaScript-compatible values throughout (`util.rs`): numbers written as JSON writes them (`10`, not `10.0`), `Number()`, `toFixed()` (ties up), `String()`, `||`, and UTF-16 `slice`.
+  - Both servers take `AGH_TMDB_BASE` / `AGH_OPENSUBTITLES_BASE` (test-only; the real addresses otherwise), so the suite can stand in for TMDB and OpenSubtitles.
   - [ ] `/api/shared` with the PCR stitcher (last).
 - [ ] **8.4 Contract tests against both.** `test/parity/parity.test.js` talks HTTP to whichever server `AGH_PARITY_SERVER` names (`node`, the default and part of `npm test`, or `rust`), with a fake provider. Both servers pass all of it. CI: `.github/workflows/server-rs.yml`, Linux and Windows.
   - Covered so far:
@@ -427,7 +431,22 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
     - HLS rewriting (keys, data: URIs, absolute and parent paths, redirects, src);
     - pass-through and Range;
     - tracks (PAT/PMT, private-data AC-3, language, visually impaired, HLS segments under src, no sniffing on Range).
-  - [ ] Still to bring over: `shared.test.js` and `cast.test.js` behaviour, and each new route as it is ported.
+  - Round 2 (2026-11-17), 18 tests now. Added:
+    - downloads with Range, HEAD, posters and every 404;
+    - subtitles extracted, sorted, Latin-1 and cleaned;
+    - `tcsubs`;
+    - TMDB runtime, cast and cache;
+    - trending;
+    - OpenSubtitles login, search (sorted lower-case parameters), download with a token expiring, saving next to a download, quota and credential errors;
+    - probe (tracks, subtitles, quick);
+    - keyframe;
+    - transcode: MP4, Matroska, live subtitles, the failure message, and four conversions running so a fifth gets 429, freed when the player hangs up.
+
+    The fixtures are made with ffmpeg; without it `npm test` skips the suite. CI uses the distribution's ffmpeg on Linux and the shipped BtbN 8.1 on Windows.
+    - Two differences are allowed:
+      - a 416 for an empty file carries no Content-Length from `server.js`, and `Content-Length: 0` from Rust;
+      - an oversized request body makes `server.js` drop the connection, where Rust answers 413.
+  - [ ] Still to bring over: `shared.test.js` and `cast.test.js` behaviour, with `/api/shared`.
 - [ ] **8.5** Move the downloads engine and folder sync (`desktop/`) and the stdin/stdout RPC to Rust. Then the Windows app's sidecar becomes the Rust binary, and Node leaves the Windows app (about 30–45 MB compressed less).
 - [ ] **8.6 Gate (Windows):** both servers pass the same contract tests, the Windows e2e suites pass with the Rust sidecar, and there are no regressions in compatibility mode or Multiview shared mode on real providers.
 - [ ] **8.7 Android TV:** the crate built for Android (ARM64, ARMv7) with cargo-ndk and started over JNI by the Kotlin shell, instead of nodejs-mobile. Same HTTP API, so the pages, `tv.js` and the ExoPlayer side don't change. Switch on the Test channel after Windows has run the Rust server for a release cycle or two, then delete `server.js`.

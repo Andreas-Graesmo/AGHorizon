@@ -1,11 +1,17 @@
 //! AG Horizon's local server in Rust (MIGRATION_PLAN.md Phase 8): the same HTTP API as server.js, so the same pages
 //! work against either. No Tauri dependency: the Windows app runs it as its sidecar, and Android TV can link it.
 //!
-//! Ported so far: the request guard, static files, /api/capabilities, /api/fetch, /api/epg, /api/stream,
-//! /api/tracks. The other /api routes answer 501 until they are ported (test/parity/ lists what is covered).
+//! Ported so far: everything but /api/shared (Multi view's shared connection), which answers 501 until it is
+//! ported (test/parity/ lists what is covered).
 
+mod canon_table;
 pub mod epg;
+pub mod ffmpeg;
+pub mod local;
+pub mod opensubs;
 pub mod stream;
+pub mod subtitles;
+pub mod tmdb;
 pub mod util;
 
 use bytes::Bytes;
@@ -24,6 +30,11 @@ pub struct Config {
     pub ffmpeg_path: Option<String>,
     pub opensubtitles_key: String,
     pub tmdb_key: String,
+    /// AGH_TMDB_BASE / AGH_OPENSUBTITLES_BASE: the test suite's fakes; the real services otherwise
+    pub tmdb_base: String,
+    pub opensubtitles_base: String,
+    /// finished downloads by id (server.js: setLocalFiles); None: /api/local answers "Not downloaded"
+    pub local_files: Option<local::LocalFiles>,
 }
 
 impl Config {
@@ -40,6 +51,10 @@ impl Config {
             ffmpeg_path: std::env::var("FFMPEG_PATH").ok().filter(|s| !s.is_empty()),
             opensubtitles_key: key("OPENSUBTITLES_API_KEY", "opensubtitlesApiKey"),
             tmdb_key: key("TMDB_API_KEY", "tmdbApiKey"),
+            tmdb_base: std::env::var("AGH_TMDB_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://api.themoviedb.org/3".into()),
+            opensubtitles_base: std::env::var("AGH_OPENSUBTITLES_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://api.opensubtitles.com/api/v1".into()),
+            // until the downloads engine is ported (MIGRATION_PLAN.md 8.5): its downloads.json
+            local_files: std::env::var_os("AGH_DATA_DIR").filter(|s| !s.is_empty()).map(|d| local::from_downloads_json(PathBuf::from(d))),
         }
     }
 }
@@ -224,6 +239,8 @@ async fn handle_fetch(q: &Query) -> ApiResult<Resp> {
     Ok(send(200, buf, &[("content-type", "text/plain; charset=utf-8")]))
 }
 
+static LOCAL_SUBS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"^/api/local/[a-f0-9]{8,32}/subs").unwrap());
+
 pub async fn handle(cfg: Arc<Config>, req: Request<Incoming>) -> Resp {
     if !request_allowed(&req) {
         return send(403, "Forbidden", &[]);
@@ -257,12 +274,22 @@ pub async fn handle(cfg: Arc<Config>, req: Request<Incoming>) -> Resp {
             200,
             &json!({ "ffmpeg": ffmpeg(&cfg).await.is_some(), "opensubtitles": !cfg.opensubtitles_key.is_empty(), "tmdb": !cfg.tmdb_key.is_empty() }),
         )),
+        ("/api/tmdb", &Method::GET) => tmdb::handle_tmdb(&cfg.tmdb_base, &cfg.tmdb_key, &q).await,
+        ("/api/trending", &Method::GET) => tmdb::handle_trending(&cfg.tmdb_base, &cfg.tmdb_key).await,
+        ("/api/probe", &Method::GET) => ffmpeg::probe(ffmpeg(&cfg).await, &q).await,
+        ("/api/keyframe", &Method::GET) => ffmpeg::keyframe(ffmpeg(&cfg).await, &q).await,
+        ("/api/transcode", &Method::GET) => ffmpeg::transcode(ffmpeg(&cfg).await, &q).await,
         // not ported yet (MIGRATION_PLAN.md Phase 8): say so plainly rather than 404
-        ("/api/shared" | "/api/shared/stats" | "/api/tmdb" | "/api/trending" | "/api/probe" | "/api/keyframe" | "/api/transcode", &Method::GET) => {
-            Err(ApiError::new(501, "Not available in this build yet"))
+        ("/api/shared" | "/api/shared/stats", &Method::GET) => Err(ApiError::new(501, "Not available in this build yet")),
+        // the same order as server.js: a download's subtitles, a conversion's subtitles, then the download itself
+        (p, &Method::GET) if LOCAL_SUBS.is_match(p) => local::handle_local_subs(cfg.local_files.as_ref(), ffmpeg(&cfg).await, p, &q).await,
+        (p, &Method::GET) if p.starts_with("/api/tcsubs/") => local::handle_tc_subs(p).await,
+        (p, &Method::GET | &Method::HEAD) if p.starts_with("/api/local/") => local::handle_local(cfg.local_files.as_ref(), p, method == Method::HEAD, range.as_deref()).await,
+        (p, &Method::POST) if p.starts_with("/api/subs/") => async {
+            let body = parse_json_body(&read_body(req.into_body(), 64 * 1024).await?)?;
+            opensubs::handle(opensubs::Os { base: &cfg.opensubtitles_base, key: &cfg.opensubtitles_key }, cfg.local_files.as_ref(), p, body).await
         }
-        (p, &Method::GET | &Method::HEAD) if p.starts_with("/api/local/") || p.starts_with("/api/tcsubs/") => Err(ApiError::new(501, "Not available in this build yet")),
-        (p, &Method::POST) if p.starts_with("/api/subs/") => Err(ApiError::new(501, "Not available in this build yet")),
+        .await,
         _ => Ok(send(404, "Not found", &[])),
     };
     result.unwrap_or_else(|e| error_json(&e))
@@ -271,6 +298,7 @@ pub async fn handle(cfg: Arc<Config>, req: Request<Incoming>) -> Resp {
 /// Serves until the process ends. Returns the port actually used (0: any free port) once listening.
 pub async fn start(cfg: Config, port: u16) -> std::io::Result<(u16, tokio::task::JoinHandle<()>)> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    subtitles::tc_sub_sweep();
     let port = listener.local_addr()?.port();
     let cfg = Arc::new(cfg);
     let task = tokio::spawn(async move {
