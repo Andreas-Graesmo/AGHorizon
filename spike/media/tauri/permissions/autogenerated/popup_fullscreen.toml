@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-popup-fullscreen"
+description = "Enables the popup_fullscreen command without any pre-configured scope."
+commands.allow = ["popup_fullscreen"]
+
+[[permission]]
+identifier = "deny-popup-fullscreen"
+description = "Denies the popup_fullscreen command without any pre-configured scope."
+commands.deny = ["popup_fullscreen"]
