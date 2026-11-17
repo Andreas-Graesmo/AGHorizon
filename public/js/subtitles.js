@@ -472,7 +472,7 @@ function subSample() {
 $('#v-settings').addEventListener('change', (e) => {
   const k = e.target.dataset.sub;
   if (!k) return;
-  LS.set(SUB_KEY, { ...subCfg(), [k]: e.target.value.trim() });
+  LS.set(SUB_KEY, { ...subCfg(), [k]: k === 'password' ? e.target.value : e.target.value.trim() });   // a password is kept as typed
 });
 $('#v-settings').addEventListener('click', async (e) => {
   if (!e.target.closest('[data-act="sub-test"]')) return;
