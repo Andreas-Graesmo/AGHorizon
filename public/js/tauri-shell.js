@@ -167,21 +167,35 @@
     if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }, true);
 
-  // 4.6 the screen stays on while a video plays (Electron did this by itself; WebView2 grants the Wake Lock API)
-  let wake = null;
+  // 4.6 the screen stays on while a video plays (Electron did this by itself). WebView2 grants the Wake Lock API;
+  // WebKit (macOS, Linux) denies it, so there the app holds it natively (keep_awake in main.rs, MIGRATION_PLAN.md 9.6)
+  let wake = null, native = false, busy = false;
   const videos = () => [...document.querySelectorAll('video'), ...Object.values(popupsOpen).flatMap((w) => { try { return [...w.document.querySelectorAll('video')]; } catch { return []; } })];
   async function syncWake() {
-    const want = document.visibilityState === 'visible' && videos().some((v) => !v.paused && !v.ended && v.readyState > 2);
-    if (want && !wake && navigator.wakeLock) {
-      try { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } catch { /* not now */ }
-    } else if (!want && wake) { const l = wake; wake = null; l.release().catch(() => {}); }
+    if (busy) return;
+    busy = true;
+    try {
+      const want = document.visibilityState === 'visible' && videos().some((v) => !v.paused && !v.ended && v.readyState > 2);
+      if (want && !wake && !native) {
+        try {
+          if (!navigator.wakeLock) throw new Error('no Wake Lock API');
+          wake = await navigator.wakeLock.request('screen');
+          wake.addEventListener('release', () => { wake = null; });
+        } catch {
+          native = await invoke('keep_awake', { on: true }).catch(() => false);
+        }
+      } else if (!want) {
+        if (wake) { const l = wake; wake = null; l.release().catch(() => {}); }
+        if (native) { native = false; await invoke('keep_awake', { on: false }).catch(() => {}); }
+      }
+    } finally { busy = false; }
   }
   for (const t of ['playing', 'pause', 'ended', 'emptied']) document.addEventListener(t, syncWake, true);
   document.addEventListener('visibilitychange', syncWake);
   setInterval(syncWake, 10000);
 
   // for e2e/tauri-windows.js
-  window.__aghShell = { wakeLockHeld: () => !!wake };
+  window.__aghShell = { wakeLockHeld: () => !!wake || native };
 
   // MIGRATION_PLAN.md 6.2: the first start imported the Electron app's storage (initialization script from main.rs);
   // tell the app it went through, so it is never offered again

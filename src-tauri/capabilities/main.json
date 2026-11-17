@@ -22,6 +22,7 @@
     "allow-sync",
     "allow-popups",
     "allow-migration",
-    "allow-updater"
+    "allow-updater",
+    "allow-keep-awake"
   ]
 }

@@ -52,6 +52,58 @@ fn port() -> u16 {
 
 mod updater;
 
+// MIGRATION_PLAN.md 9.6: the screen stays on while a video plays. tauri-shell.js asks for the Wake Lock API first
+// (WebView2 grants it); WebKit (macOS, Linux) denies it, so the page falls back to this. Held until released or quit.
+#[derive(Default)]
+struct KeepAwake(#[cfg(not(windows))] Mutex<Option<keepawake::KeepAwake>>);
+
+#[tauri::command]
+fn keep_awake(#[allow(unused_variables)] state: tauri::State<'_, KeepAwake>, on: bool) -> Result<bool, String> {
+    #[cfg(not(windows))]
+    {
+        let mut held = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        if on && held.is_none() {
+            *held = Some(hold_awake()?);
+        } else if !on {
+            if let Some(k) = held.take() {
+                // dropping it lets the screen sleep again; keepawake's Linux release unwraps the D-Bus answer, and a
+                // screensaver that went away in between must not take the app down
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(k)));
+            }
+        }
+        Ok(held.is_some())
+    }
+    #[cfg(windows)]
+    {
+        let _ = on;
+        Err("not used on Windows: WebView2 grants the Wake Lock API".into())
+    }
+}
+
+// The screen on and no idle sleep. On Linux these are two services (the session's screensaver, logind on the system
+// bus) and keepawake fails as a whole if either is missing, so take what the system has.
+#[cfg(not(windows))]
+fn hold_awake() -> Result<keepawake::KeepAwake, String> {
+    let mut last = String::new();
+    for (display, idle) in [(true, true), (true, false), (false, true)] {
+        let made = std::panic::catch_unwind(|| {
+            keepawake::Builder::default()
+                .display(display)
+                .idle(idle)
+                .reason("Playing video")
+                .app_name("AG Horizon")
+                .app_reverse_domain("app.aghorizon.desktop")
+                .create()
+        });
+        match made {
+            Ok(Ok(k)) => return Ok(k),
+            Ok(Err(e)) => last = e.to_string(),
+            Err(_) => last = "keepawake panicked".into(),
+        }
+    }
+    Err(last)
+}
+
 fn main() {
     tauri::Builder::default()
         // first, as its docs ask: a second launch focuses this one (two copies would fight over the port)
@@ -71,7 +123,8 @@ fn main() {
         .manage(Rpc::default())
         .manage(Migration::default())
         .manage(updater::Updater::default())
-        .invoke_handler(tauri::generate_handler![downloads, sync, popups, migration, updater::updater])
+        .manage(KeepAwake::default())
+        .invoke_handler(tauri::generate_handler![downloads, sync, popups, migration, keep_awake, updater::updater])
         .setup(|app| {
             updater::init(app.handle());
             start_server(app.handle().clone())?;

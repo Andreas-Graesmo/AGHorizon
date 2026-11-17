@@ -3,7 +3,7 @@
 /*
  * MIGRATION_PLAN.md 9.8: the Linux AppImage starts, its server answers with the bundled ffmpeg, video plays in its
  * WebKitGTK through the GStreamer it bundles (a plain <video> and Media Source Extensions, the path hls.js and
- * mpegts.js take), and closing it leaves nothing running.
+ * mpegts.js take), the native keep-awake (9.6) answers the page, and closing it leaves nothing running.
  * The AppImage is unpacked and its page swapped for a test page that reports to a listener here; everything else is
  * the shipped app. Needs xvfb-run.
  * Usage: node e2e/tauri-linux.js <AppImage> <ffmpeg to make the test clips>
@@ -24,6 +24,10 @@ const rep = (k, v) => fetch('http://127.0.0.1:${REPORT_PORT}/' + k + '?' + encod
 const MS = window.ManagedMediaSource || window.MediaSource;
 const CODECS = 'avc1.64001e,mp4a.40.2';
 rep('support', { mse: !!MS, avc: !!MS && MS.isTypeSupported('video/mp4; codecs="' + CODECS + '"') });
+// 9.6 the native keep-awake is reachable from the page (a CI runner may have no screensaver service to ask)
+window.__TAURI__.core.invoke('keep_awake', { on: true })
+  .then((r) => rep('keepawake', { held: r }), (e) => rep('keepawake', { err: String(e) }))
+  .then(() => window.__TAURI__.core.invoke('keep_awake', { on: false })).catch(() => {});
 const v = document.getElementById('v');
 v.src = '/e2e-plain.mp4';
 v.onerror = () => rep('plain', { err: v.error && v.error.code, msg: v.error && v.error.message });
@@ -90,8 +94,11 @@ setTimeout(() => rep('plain', { t: v.currentTime, w: v.videoWidth }), 6000);
     if (!caps) fail.push('the server never answered on 127.0.0.1:47831');
     else if (caps.ffmpeg !== true) fail.push('the server has no ffmpeg');
 
-    for (let i = 0; i < 60 && !(reports.plain && reports.mse); i++) await sleep(500);
+    for (let i = 0; i < 60 && !(reports.plain && reports.mse && reports.keepawake); i++) await sleep(500);
     if (!reports.support || !reports.support.mse || !reports.support.avc) fail.push(`no MSE or no H.264 in MSE: ${JSON.stringify(reports.support)}`);
+    const ka = reports.keepawake;
+    if (!ka) fail.push('keep_awake: no answer');
+    else if (ka.err && /not allowed|permission|not found|unknown/i.test(ka.err)) fail.push(`keep_awake is not reachable from the page: ${ka.err}`);
     for (const k of ['plain', 'mse']) {
       const r = reports[k];
       if (!r || !(r.t > 2) || !(r.w > 0)) fail.push(`${k} playback: ${JSON.stringify(r)}`);
