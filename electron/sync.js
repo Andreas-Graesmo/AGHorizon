@@ -36,6 +36,21 @@ async function saveCode(code) {
   fs.writeFileSync(secretFile(), data, { mode: 0o600 });
 }
 
+// The sync code in plain text, or '' (none, or the keychain can't decrypt it any more). Also used by handover.js,
+// which passes it to the new app.
+async function readCode() {
+  let raw;
+  try { raw = fs.readFileSync(secretFile()); } catch { return ''; }
+  if (raw.subarray(0, 4).toString() !== 'enc:') return raw.toString('utf8');
+  let code;
+  try {
+    const r = await safeStorage.decryptStringAsync(raw.subarray(4));
+    code = r.result;
+    if (r.shouldReEncrypt) await saveCode(code).catch(() => {});   // the keychain has a newer key: keep the code under that one
+  } catch { return ''; }   // e.g. the keychain was reset
+  return code;
+}
+
 function init() {
   ipcMain.handle('sync:info', async () => ({
     host: os.hostname().replace(/\.(local|lan|home)$/i, ''),
@@ -44,18 +59,7 @@ function init() {
   }));
 
   /* the sync code */
-  ipcMain.handle('sync:code:get', async () => {
-    let raw;
-    try { raw = fs.readFileSync(secretFile()); } catch { return ''; }
-    if (raw.subarray(0, 4).toString() !== 'enc:') return raw.toString('utf8');
-    let code;
-    try {
-      const r = await safeStorage.decryptStringAsync(raw.subarray(4));
-      code = r.result;
-      if (r.shouldReEncrypt) await saveCode(code).catch(() => {});   // the keychain has a newer key: keep the code under that one
-    } catch { return ''; }   // e.g. the keychain was reset
-    return code;
-  });
+  ipcMain.handle('sync:code:get', () => readCode());
   ipcMain.handle('sync:code:set', async (_e, code) => {
     code = String(code || '');
     if (!code) { fs.rmSync(secretFile(), { force: true }); return; }
@@ -105,4 +109,4 @@ function init() {
   });
 }
 
-module.exports = { init };
+module.exports = { init, readCode };

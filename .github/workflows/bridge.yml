@@ -1,0 +1,37 @@
+# MIGRATION_PLAN.md Phase 1: the last Electron release for Windows (the bridge to Tauri).
+# Unit tests (handover signature checks, release choice), then the real Electron app on Windows writes
+# %APPDATA%\Tuner IPTV\migration.json with what the page stored.
+name: Bridge release checks (Tauri migration, phase 1)
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [migration/tauri, bridge/handover]
+    paths: ['desktop/**', 'electron/**', 'public/js/**', 'spike/migration/**', 'test/**', '.gitattributes', '!**/*.md', '.github/workflows/bridge.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: npm ci
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+      - run: npm test
+      - name: Playwright (its Electron driver only; no browsers)
+        run: npm install --no-save --no-audit --no-fund playwright@1.63.0
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      - name: The Electron app writes migration.json
+        run: node spike/migration/check-electron-export.js
