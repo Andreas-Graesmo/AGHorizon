@@ -13,6 +13,15 @@ This is the media spike from `MIGRATION_PLAN.md` Phase 0.1. It tests what each T
   - `gen-fixtures.js`: 12 s test clips.
   - `.github/workflows/media-spike.yml`: the CI job.
 
+## Phase 9.1 re-run (2026-11-17)
+
+CI [run 44196981013](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44196981013) (`aeb6008`): macOS (WKWebView, arm64) and Linux (WebKitGTK, Ubuntu 22.04), plus a Linux job running only the Multiview conversion test. All jobs finished. The results confirm the two Phase 9 fixes:
+
+- **macOS, compatibility mode through MSE works (finding 1, plan 9.2).** Both conversions appended to a `SourceBuffer` play: "copy via MSE" (TS H.264 + AC-3 → fMP4) and "h264 via MSE" (HEVC → fMP4), at 640×360. The same conversions as a plain `<video src>` still fail with media error 4, as do 4 progressive conversion tiles (0/4). That is the path `player.js` now takes on macOS (`tcAttach`). Sound through MSE is unmeasured on macOS, as for hls.js and mpegts.js (see below).
+- **Linux, Multiview tiles from the progressive conversion play (finding 8, plan 9.3).** 4 compatibility-mode pictures at once played 4/4 in the full Linux run and 4/4 in the dedicated job. 2 and 4 mpegts.js pictures and 4 hls.js pictures also passed in this run. `multiview.js` now plays Linux tiles from the conversion when ffmpeg is there.
+- **Unchanged:** `video.captureStream()` is missing on both, `canvas.captureStream()` works on both (9.4), and `navigator.wakeLock` is denied on both (9.6).
+- **The shipped AppImage:** `e2e/tauri-linux.js` (`.github/workflows/tauri-linux.yml`) checks that H.264/AAC plays inside the AppImage through the GStreamer it bundles, both as a plain `<video>` and through MSE.
+
 ## How far to trust these numbers
 
 - **CI machines are not users' machines.** They are VMs with no GPU, no HEVC extension or Dolby decoder on Windows, Xvfb and software GL on Linux, and a virtualised Mac. Hardware decoding (HEVC on Windows) cannot show up here. Treat "plays on CI" as *the path works*, and "fails on CI" as *check on real hardware* unless the cause is structural (for example, an API is missing).
@@ -80,8 +89,8 @@ This is the media spike from `MIGRATION_PLAN.md` Phase 0.1. It tests what each T
 - Sound on WKWebView for hls.js, mpegts.js and native HLS (expected to work; the harness can't hear MSE on Mac).
 - HEVC and AC-3 on a real Windows PC with the HEVC Video Extensions and a GPU.
 - Element fullscreen and PiP with a real click (all webviews refuse them without a gesture, which is correct).
-- Multiview with 4 or more real channels on a real Linux desktop (see finding 8).
-- The MSE fix for compatibility mode on macOS (finding 1): re-run CI when a macOS runner is free, or run the spike on a Mac.
+- Multiview with 4 or more real channels on a real Linux desktop (see finding 8; CI now passes with the conversion tiles).
+- Sound of compatibility mode through MSE on a real Mac (the picture plays on CI; finding 1).
 
 ## Re-running
 
@@ -99,7 +108,7 @@ Then run the spike app:
 cd spike/media/tauri && cargo run --release
 ```
 
-The table prints in the server log, and the raw JSON is written to `spike/media/results/`. Use `SPIKE_URL='http://127.0.0.1:47831/spike/?exit=1&only=multiview'` to run a subset. Push changes under `spike/media/` to `migration/tauri` to run the Windows jobs on CI. The migration is Windows-first, so CI no longer runs macOS and Linux. The workflow with those jobs is at commit `c34f854`; restore them for Phase 9 of the plan.
+The table prints in the server log, and the raw JSON is written to `spike/media/results/`. Use `SPIKE_URL='http://127.0.0.1:47831/spike/?exit=1&only=multiview'` to run a subset. Push changes under `spike/media/` to `migration/tauri` to run the Windows jobs on CI. The workflow runs macOS and Linux again since Phase 9.1.
 
 ## Phase 0.2: popups
 

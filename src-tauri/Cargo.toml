@@ -21,6 +21,9 @@ tokio = { version = "1", features = ["sync", "time"] }
 tauri-plugin-updater = "2"
 semver = "1"
 
+[target.'cfg(not(windows))'.dependencies]
+keepawake = "0.5"   # 9.6 the screen stays on during playback: WebKit denies the Wake Lock API (WebView2 grants it)
+
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6", features = ["windows-native"] }   # the sync code, in Windows Credential Manager
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
