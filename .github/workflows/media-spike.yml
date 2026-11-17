@@ -25,8 +25,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: node spike/media/gen-fixtures.js ffmpeg
+      # the pinned BtbN ffmpeg (one checked download): apt's mirrors once kept this job waiting for over ten minutes
+      - name: ffmpeg
+        timeout-minutes: 10
+        run: node scripts/tauri-prep.js --skip-server
+      - run: node spike/media/gen-fixtures.js src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
       - uses: actions/upload-artifact@v4
         with: { name: spike-fixtures, path: spike/media/fixtures, retention-days: 3 }
 
@@ -58,6 +61,7 @@ jobs:
 
       - name: Linux packages (WebKitGTK, GStreamer, ffmpeg, a virtual display and a null sound card)
         if: runner.os == 'Linux'
+        timeout-minutes: 20
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xvfb pulseaudio ffmpeg \
