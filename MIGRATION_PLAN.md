@@ -43,7 +43,17 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
 
 ### Phase 0: Spikes and decisions (go/no-go)
 
-- [ ] **0.1 Media spike on all three webviews.** Make a throwaway Tauri app that loads `http://127.0.0.1:47831` from a running `node server.js`. Test on Windows 10/11, macOS 14+ (arm64) and Ubuntu 22.04 (AppImage):
+- [x] **0.1 Media spike on all three webviews.** Done on CI VMs (Windows WebView2, macOS WKWebView, Ubuntu 22.04 WebKitGTK) and locally (Ubuntu 24.04). The harness is in `spike/media/` and the results in [`spike/media/RESULTS.md`](spike/media/RESULTS.md). Outcomes that change this plan:
+  - **Go on all three.** Every webview plays H.264/AAC through native, hls.js and mpegts.js; autoplay works; and `invoke` from the `remote.urls` origin works (Windows confirmation pending in CI run #3).
+  - **New, blocking on macOS:** WKWebView rejects every `/api/transcode` stream, fMP4 included, so compatibility mode is dead there as built. Fix it by feeding the conversion through MSE on WebKit (being verified on macOS), or by having ffmpeg output HLS. → task 2.12.
+  - **New:** undecodable HEVC gives sound with no picture and no `error` event (Chromium/WebView2), so the H.264 fallback in `player.js` never fires. → task 2.13.
+  - **Confirmed:** keep `--enable-blink-features=AudioVideoTracks` (without it `audioTracks` is missing on WebView2).
+  - **Confirmed:** `navigator.wakeLock` is denied on both WebKits, so use `keepawake` (4.6).
+  - **Confirmed:** no PiP API at all on WebKitGTK (4.3).
+  - **Confirmed:** `canvas.captureStream()` works everywhere, so the Mirror fallback is viable (4.4).
+  - **Open:** Multiview with 4 MSE pictures on Linux was flaky in a software-GL container (but 4/4 on CI). Retest on a real Linux desktop, and add a per-tile retry. Manual checks still open: sound on WKWebView for MSE streams, and HEVC/AC-3 on real Windows hardware.
+
+  The original checklist for this spike:
   - [ ] hls.js and mpegts.js playback (MSE), including the mpegts Worker (`player.js:191-192`)
   - [ ] Native HLS on WKWebView (`player.js:158`)
   - [ ] H.264/AAC, HEVC, AC-3/E-AC-3 detection, and the existing ffmpeg fallback (`/api/transcode`)
@@ -66,7 +76,7 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
   - Windows/Linux: `decorations:false` plus HTML window buttons (optionally `tauri-plugin-decorum` for Win11 snap layouts).
   - macOS: `titleBarStyle: "Overlay"`.
 - [ ] **0.6 Choose the beta update channel design** (§3.2 option a, a rolling `updater-beta` release, is recommended).
-- [ ] **Gate:** a written go/no-go per OS. Any feature that cannot reach parity gets a documented degradation (see Appendix E).
+- [ ] **Gate:** a written go/no-go per OS (media: go on all three, see 0.1; still to do: 0.2-0.6). Any feature that cannot reach parity gets a documented degradation (see Appendix E).
 
 ### Phase 1: Bridge Electron release (ships *before* any Tauri build)
 
@@ -118,6 +128,15 @@ This is the last Electron version, for example `2.9.0`, on **both** the stable a
 - [ ] **2.9** `on_navigation`: block navigation away from the origin and send http(s) URLs to `tauri-plugin-opener`, replacing `main.js:143-145`.
 - [ ] **2.10** Register `tauri-plugin-single-instance` **first**. Its callback calls unminimize, show and set_focus on `main` (replaces `main.js:27-30,154-156`).
 - [ ] **2.11 Exit handling** (`RunEvent::ExitRequested` / `Exit`): stop the sidecar gracefully, and flush downloads to the "queued" state, replacing `downloads.js:410` and `main.js:215`.
+- [ ] **2.12 Compatibility mode on WebKit** (found by spike 0.1).
+  - WKWebView refuses `/api/transcode` as a plain `<video src>`, because the stream has no byte ranges and no length.
+  - On WebKit, play the conversion through MSE: fetch it, then `appendBuffer` into a `SourceBuffer`, or `ManagedMediaSource` on macOS.
+  - Alternatively, have ffmpeg write HLS (fMP4 segments) and play that natively.
+  - Keep `<video src>` on WebView2, where it works.
+  - The output must be fMP4 on WebKit: Matroska fails there.
+- [ ] **2.13 Watchdog for silent decode failures** (found by spike 0.1; also fixes Electron).
+  - In `player.js`, treat "playing but `videoWidth` still 0 after ~4 s" as an error, so the HEVC → H.264 fallback runs.
+  - Today it only listens for `video.onerror`, which Chromium never fires for undecodable HEVC.
 - [ ] **Gate:** the app starts on all three OSes, the dashboard renders, live TV plays through `/api/stream`, compatibility mode transcodes through the ffmpeg sidecar, and there are no orphan processes after quit or kill.
 
 ### Phase 3: Bridge adapter and IPC commands
