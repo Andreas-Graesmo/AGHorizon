@@ -1,4 +1,4 @@
-# MIGRATION_PLAN.md Phase 0.1: what the Tauri webview can play, through the app's real server.js.
+# MIGRATION_PLAN.md Phase 0.1 (media) and 0.2 (popups) in the Tauri webview, with the app's real server.js.
 # Windows only (WebView2, with and without the planned browser flags): the migration is Windows-first.
 # The macOS (WKWebView) and Linux (WebKitGTK) jobs are in this file at commit c34f854; restore them for Phase 9.
 # Results: the job log (between SPIKE-RESULTS markers), the job summary, and the "media-spike-*" artifacts.
@@ -38,6 +38,8 @@ jobs:
         include:
           - { os: windows-latest, label: windows-webview2 }
           - { os: windows-latest, label: windows-webview2-noflags, noflags: '1' }
+          # plan task 0.2: PiP and Mirror popups (window.open in deny / allow / create mode)
+          - { os: windows-latest, label: windows-webview2-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -70,6 +72,7 @@ jobs:
         env:
           SPIKE_TIMEOUT: '900'
           SPIKE_NO_FLAGS: ${{ matrix.noflags }}
+          SPIKE_URL: ${{ matrix.url || 'http://127.0.0.1:47831/spike/?exit=1' }}
         run: |
           [ -z "$SPIKE_NO_FLAGS" ] && unset SPIKE_NO_FLAGS
           node spike/media/serve.js --label "${{ matrix.label }}" > serve.log 2>&1 &

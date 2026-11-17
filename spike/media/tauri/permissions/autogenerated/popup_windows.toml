@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-popup-windows"
+description = "Enables the popup_windows command without any pre-configured scope."
+commands.allow = ["popup_windows"]
+
+[[permission]]
+identifier = "deny-popup-windows"
+description = "Denies the popup_windows command without any pre-configured scope."
+commands.deny = ["popup_windows"]

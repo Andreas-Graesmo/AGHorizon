@@ -9,6 +9,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# spike only: let a script open windows without a click (WebKitGTK blocks that; the app opens them on a click)
+webkit2gtk = "=2.0.2"
 
 [profile.release]
 opt-level = 1

@@ -4,5 +4,5 @@
   "description": "The spike page is served by the app's own server, a remote origin to Tauri.",
   "windows": ["main"],
   "remote": { "urls": ["http://127.0.0.1:47831/*"] },
-  "permissions": ["core:default", "allow-spike-ping", "allow-spike-done"]
+  "permissions": ["core:default", "allow-spike-ping", "allow-spike-done", "allow-popup-mode", "allow-popup-windows", "allow-popup-fullscreen", "allow-monitors"]
 }
