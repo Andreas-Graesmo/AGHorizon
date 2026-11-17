@@ -35,35 +35,10 @@ const EXPORT_SCRIPT = `(async () => {
   return { origin: location.origin, localStorage: ls, indexedDB: { tuner: { files } } };
 })()`;
 
-// In the new app's page, before core.js reads storage (Phase 6.2). Keys that already exist are left alone: the
-// person may have used the new app before importing. Returns what it did.
-const IMPORT_SCRIPT = (data) => `(async (data) => {
-  let ls = 0, skipped = 0, files = 0;
-  for (const [k, v] of Object.entries(data.localStorage || {})) {
-    if (localStorage.getItem(k) != null) { skipped++; continue; }
-    localStorage.setItem(k, v); ls++;
-  }
-  const records = ((data.indexedDB || {}).tuner || {}).files || [];
-  if (records.length) {
-    await new Promise((resolve, reject) => {
-      const open = indexedDB.open('tuner', 1);
-      open.onupgradeneeded = () => open.result.createObjectStore('files');
-      open.onerror = () => reject(open.error);
-      open.onsuccess = () => {
-        const db = open.result;
-        const tx = db.transaction('files', 'readwrite');
-        const store = tx.objectStore('files');
-        for (const r of records) {
-          const get = store.getKey(r.key);
-          get.onsuccess = () => { if (get.result === undefined) { store.put(r.value, r.key); files++; } };
-        }
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => reject(tx.error);
-      };
-    });
-  }
-  return { localStorage: ls, skipped, files };
-})(${JSON.stringify(data)})`;
+// In the new app's page, before core.js reads storage (Phase 6.2): desktop/migration-import.js, shared with the
+// Tauri app, which runs it as an initialization script.
+const IMPORT_FN = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'migration-import.js'), 'utf8').replace(/^\/\/.*\n/gm, '').trim();
+const IMPORT_SCRIPT = (data) => `${IMPORT_FN}(${JSON.stringify(data)})`;
 
 // Writes migration.json next to the app's other files, atomically. extra: fields such as the sync code, which is only
 // added right before handing over to the new app (handover.js), never on an ordinary start.

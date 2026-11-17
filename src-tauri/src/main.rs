@@ -32,6 +32,13 @@ const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreen
 
 struct Server(Mutex<Option<CommandChild>>);
 
+// What the first start brings over from the Electron app (MIGRATION_PLAN.md Phase 6), decided before the window opens.
+#[derive(Default)]
+struct Migration {
+    script: Mutex<Option<String>>, // initialization script that imports migration.json into the page
+    notice: Mutex<bool>,           // an Electron profile without migration.json: tell the person once
+}
+
 // Requests to the sidecar over its stdin, answered on its stdout (sidecar/entry.js): id → who waits for the answer.
 #[derive(Default)]
 struct Rpc {
@@ -59,7 +66,8 @@ fn main() {
         )
         .manage(Server(Mutex::new(None)))
         .manage(Rpc::default())
-        .invoke_handler(tauri::generate_handler![downloads, sync, popups])
+        .manage(Migration::default())
+        .invoke_handler(tauri::generate_handler![downloads, sync, popups, migration])
         .setup(|app| {
             start_server(app.handle().clone())?;
             Ok(())
@@ -93,6 +101,8 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // the downloads list and the sync folder setting live in the app's data folder (MIGRATION_PLAN.md 3.4/3.5)
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
+    // before the server reads downloads.json and sync.json
+    from_electron(&app, &data_dir);
     let documents = app.path().document_dir().unwrap_or_else(|_| data_dir.clone());
     let mut envs: Vec<(String, String)> = vec![
         ("PUBLIC_DIR".into(), public.to_string_lossy().into_owned()),
@@ -425,6 +435,9 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
             }
             NewWindowResponse::Deny
         });
+    if let Some(script) = app.state::<Migration>().script.lock().unwrap().clone() {
+        builder = builder.initialization_script(&script);
+    }
     if let Some(b) = &legacy {
         builder = builder.inner_size(b.width, b.height);
         if let (Some(x), Some(y)) = (b.x, b.y) {
@@ -457,11 +470,113 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
             }
         }
     });
+    if *app.state::<Migration>().notice.lock().unwrap() {
+        notice_no_export(app);
+    }
     tauri::async_runtime::spawn(async move {
         tokio_sleep(Duration::from_secs(5)).await;
         let _ = window.show();
     });
     Ok(())
+}
+
+/* ───────────────────────── the first start after the Electron app (MIGRATION_PLAN.md Phase 6) ───────────────────────── */
+
+const IMPORT_MARKER: &str = "electron-import.json";
+const NOTICE_MARKER: &str = "electron-import-notice";
+
+// The Electron app's data folder: <appData>/Tuner IPTV (Windows %APPDATA%\Tuner IPTV), next to this app's config dir.
+fn electron_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_config_dir().ok()?.parent()?.join("Tuner IPTV");
+    dir.is_dir().then_some(dir)
+}
+
+fn from_electron(app: &AppHandle, data_dir: &std::path::Path) {
+    let Some(old) = electron_dir(app) else { return };
+    // 6.1 plain files, only where this app has none yet; the downloaded films stay where they are
+    for f in ["downloads.json", "sync.json"] {
+        let (from, to) = (old.join(f), data_dir.join(f));
+        if from.is_file() && !to.exists() {
+            if let Err(e) = std::fs::copy(&from, &to) {
+                eprintln!("migration: could not copy {f}: {e}");
+            }
+        }
+    }
+    let export = old.join("migration.json");
+    let Ok(text) = std::fs::read_to_string(&export) else {
+        // 6.4 an Electron profile but no export (the bridge version was never run): say so once
+        let never_imported = !data_dir.join(IMPORT_MARKER).exists() && !data_dir.join(NOTICE_MARKER).exists();
+        if never_imported && old.join("Local Storage").is_dir() {
+            *app.state::<Migration>().notice.lock().unwrap() = true;
+        }
+        return;
+    };
+    let Ok(mut data) = serde_json::from_str::<Value>(&text) else {
+        eprintln!("migration: migration.json is not readable JSON");
+        return;
+    };
+    // 6.3 the sync code, put there by the hand-over: into Credential Manager (unless this app has one), then out of the file
+    if let Some(code) = data.get("syncCode").and_then(|c| c.as_str()).map(String::from) {
+        if !code.is_empty() && code_store::get(app).map(|c| c.is_empty()).unwrap_or(false) {
+            if let Err(e) = code_store::set(app, &code) {
+                eprintln!("migration: could not store the sync code: {e}");
+                return; // keep it in the file: next start tries again
+            }
+        }
+        if let Some(obj) = data.as_object_mut() {
+            obj.remove("syncCode");
+        }
+        let tmp = export.with_extension("json.tmp");
+        if std::fs::write(&tmp, data.to_string()).and_then(|_| std::fs::rename(&tmp, &export)).is_err() {
+            eprintln!("migration: could not remove the sync code from migration.json");
+        }
+    }
+    // 6.2 the page's storage: once, by an initialization script that runs before the page's own scripts
+    if data_dir.join(IMPORT_MARKER).exists() || data.get("format").and_then(|f| f.as_u64()) != Some(1) {
+        return;
+    }
+    let payload = json!({ "localStorage": data["localStorage"], "indexedDB": data["indexedDB"] });
+    let script = format!(
+        "if (location.origin === 'http://127.0.0.1:{}' && !window.__aghMigrating) window.__aghMigrating = {}({});",
+        port(),
+        include_str!("../../desktop/migration-import.js").lines().filter(|l| !l.starts_with("//")).collect::<Vec<_>>().join("\n"),
+        payload
+    );
+    *app.state::<Migration>().script.lock().unwrap() = Some(script);
+}
+
+fn notice_no_export(app: &AppHandle) {
+    if let Ok(dir) = app.path().app_data_dir() {
+        let _ = std::fs::write(dir.join(NOTICE_MARKER), "shown\n");
+    }
+    if std::env::var("AGH_NO_DIALOG").is_ok() {
+        eprintln!("migration: no export from the previous version");
+        return;
+    }
+    app.dialog()
+        .message("Your playlists, favourites and history from the previous version of AG Horizon could not be brought over yet. Start the previous version once (it is still installed), close it, and then start this one again. Or restore them from sync.")
+        .title("AG Horizon")
+        .kind(MessageDialogKind::Info)
+        .show(|_| {});
+}
+
+// The page reports the import (tauri-shell.js): from now on it isn't offered again.
+#[tauri::command]
+fn migration(app: AppHandle, op: String, result: Option<Value>) -> Result<Value, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    match op.as_str() {
+        "done" => {
+            let record = json!({ "importedAt": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0), "result": result });
+            std::fs::write(dir.join(IMPORT_MARKER), record.to_string()).map_err(|e| e.to_string())?;
+            *app.state::<Migration>().script.lock().unwrap() = None;
+            Ok(Value::Null)
+        }
+        "status" => Ok(json!({
+            "imported": dir.join(IMPORT_MARKER).exists(),
+            "noticeShown": dir.join(NOTICE_MARKER).exists(),
+        })),
+        _ => Err(format!("unknown migration operation {op}")),
+    }
 }
 
 // The Electron app's last window bounds (<appData>/Tuner IPTV/window-state.json, logical pixels), used once: until
