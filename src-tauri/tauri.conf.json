@@ -3,19 +3,45 @@
   "productName": "AG Horizon",
   "version": "../package.json",
   "identifier": "app.aghorizon.desktop",
-  "build": { "frontendDist": "loading" },
+  "build": {
+    "frontendDist": "loading"
+  },
   "app": {
     "withGlobalTauri": true,
     "windows": [],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
-    "externalBin": ["binaries/aghorizon-server", "binaries/ffmpeg"],
-    "resources": { "../public/": "public/", "binaries/ffmpeg.LICENSE": "ffmpeg.LICENSE" },
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/aghorizon-server",
+      "binaries/ffmpeg"
+    ],
+    "resources": {
+      "../public/": "public/",
+      "binaries/ffmpeg.LICENSE": "ffmpeg.LICENSE"
+    },
     "category": "Entertainment",
-    "windows": { "webviewInstallMode": { "type": "embedBootstrapper" } }
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    }
   }
 }

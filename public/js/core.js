@@ -30,7 +30,10 @@ const LS = {
 
 /* IndexedDB – used for playlists loaded from a local file (too big for localStorage) */
 const idb = {
-  open() {
+  async open() {
+    // The Tauri app's first start brings over the Electron app's data (desktop/migration-import.js): its
+    // IndexedDB part finishes a moment after the page starts, so wait for it. Nothing to wait for anywhere else.
+    if (window.__aghMigrating) await window.__aghMigrating.catch(() => {});
     return new Promise((res, rej) => {
       const r = indexedDB.open('tuner', 1);
       r.onupgradeneeded = () => r.result.createObjectStore('files');

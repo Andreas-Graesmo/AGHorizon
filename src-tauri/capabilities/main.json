@@ -20,6 +20,7 @@
     "core:window:allow-set-size",
     "allow-downloads",
     "allow-sync",
-    "allow-popups"
+    "allow-popups",
+    "allow-migration"
   ]
 }

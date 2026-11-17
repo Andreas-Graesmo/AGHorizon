@@ -153,5 +153,14 @@
   // for e2e/tauri-windows.js
   window.__aghShell = { wakeLockHeld: () => !!wake };
 
+  // MIGRATION_PLAN.md 6.2: the first start imported the Electron app's storage (initialization script from main.rs);
+  // tell the app it went through, so it is never offered again
+  if (window.__aghMigrating) {
+    window.__aghMigrating.then(
+      (result) => invoke('migration', { op: 'done', result }),
+      (e) => console.error('migration import failed:', e),
+    ).catch(() => {});
+  }
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', titleBar); else titleBar();
 })();
