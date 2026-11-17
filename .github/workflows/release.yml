@@ -41,11 +41,14 @@ jobs:
             echo "Download failed (try $i of 3), trying again in 30 seconds"; sleep 30
           done
           exit 1
-      - name: Sidecars (the server as a program, the pinned ffmpeg)
-        run: node scripts/tauri-prep.js
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
-        with: { workspaces: 'src-tauri -> target' }
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
       - name: The signing key is there
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
