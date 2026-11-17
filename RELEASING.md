@@ -148,3 +148,14 @@ The build copies `server.js`, `subtitles.js` and `public/` into the app, and dow
 - **Test versions** get the same Android version code as the release they lead up to (2.5.0-beta.1 and 2.5.0 are both 20500). Android installs an equal code over the other, so beta → beta → release works; what stops an older version from being offered is the app's own version check.
 - **Not in the Play Store.** Google requires TV apps there to be built for 16 KB memory pages, and Node.js for Android isn't yet; it would also need an app bundle and Google's TV review. Sideloading has none of that.
 - **Old TVs.** The pages need *Android System WebView* 111 or newer (March 2023). TVs update it through their app store; the app says so when it is older.
+
+## 8. Windows: the Tauri app's update key
+
+On the `migration/tauri` branch, Windows is built as the Tauri app (`MIGRATION_PLAN.md`). Its updates are accepted only if they are signed with **your** update key. The release workflow signs them; installed apps check the signature against the public key built into them.
+
+- **The public key** is in the repository: `electron/tauri-updater.key.pub` and `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` (key ID `F074C66F1E88511B`). The Electron app's hand-over to the Tauri app checks against it too.
+- **The private key** (`aghorizon.key`, made with `npx @tauri-apps/cli signer generate`) and its password are kept by you, with a copy somewhere other than your PC. They are the repository secrets `TAURI_SIGNING_PRIVATE_KEY` (the file's content) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The Windows release build stops with an error if the key is missing.
+- **If the private key or its password is lost**, installed copies can never be updated again: everyone would have to download and install the next version by hand, and the new key's public half would have to be built in. Keep the backup.
+- **Never** commit the private key, paste it anywhere, or use it in a test: the CI tests (`tauri-update.yml`) make their own throwaway key.
+- What a Windows release carries: `AG-Horizon-Setup-<version>.exe`, `AG-Horizon-Setup-<version>.exe.sig` and `latest.json`. No `latest.yml` / `beta.yml` for Windows any more: old Windows Electron apps find the Tauri app only through the bridge version's hand-over (`MIGRATION_PLAN.md` 1.3), so **the bridge version must have been released before the first tag on this branch**.
+- Channels work as before: Stable takes GitHub's latest release; Test takes the newest published release, beta or not, that has a `latest.json`. Never a downgrade.
