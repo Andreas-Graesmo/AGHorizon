@@ -931,6 +931,8 @@ async function handleSubsApi(req, res, pathname) {
 // runtime: minutes (a series: per episode), 0 when TMDB doesn't know. Providers' own runtimes are often wrong.
 // (TMDB, with the app's key like OpenSubtitles: env TMDB_API_KEY or "tmdbApiKey" in secrets.json, written by the release build)
 const TMDB_KEY = process.env.TMDB_API_KEY || (() => { try { return require('./secrets.json').tmdbApiKey || ''; } catch { return ''; } })();
+// AGH_TMDB_BASE: the test suite's fake TMDB (test/parity/); the real one otherwise
+const TMDB_API = process.env.AGH_TMDB_BASE || 'https://api.themoviedb.org/3';
 const tmdbCache = new Map();   // "movie:603" -> { runtime, cast }
 async function handleTmdb(req, res, q) {
   if (!TMDB_KEY) throw httpError(501, 'TMDB isn’t available in this build');
@@ -941,7 +943,7 @@ async function handleTmdb(req, res, q) {
   if (!tmdbCache.has(key)) {
     // series: aggregate_credits lists everyone across all seasons, with their character names under roles
     const credits = type === 'tv' ? 'aggregate_credits' : 'credits';
-    const r = await fetch(`https://api.themoviedb.org/3/${type}/${id}?append_to_response=${credits}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${TMDB_API}/${type}/${id}?append_to_response=${credits}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw httpError(r.status === 404 ? 404 : 502, `TMDB answered HTTP ${r.status}`);
     const j = await r.json();
     const runtime = Number(type === 'tv' ? (j.episode_run_time || [])[0] || (j.last_episode_to_air && j.last_episode_to_air.runtime) : j.runtime) || 0;
@@ -962,7 +964,7 @@ let trending = null;   // { t, job }
 const TRENDING_TTL = 6 * 3600e3;
 async function loadTrending() {
   const one = async (type, page) => {
-    const r = await fetch(`https://api.themoviedb.org/3/trending/${type}/week?page=${page}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${TMDB_API}/trending/${type}/week?page=${page}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw httpError(502, `TMDB answered HTTP ${r.status}`);
     return ((await r.json()).results || []).map((x) => ({
       id: x.id,

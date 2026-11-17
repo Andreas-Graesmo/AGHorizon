@@ -93,19 +93,6 @@ fn tag(body: &str, name: &str) -> String {
 static TITLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<title\b[^>]*>(.*?)</title>").unwrap());
 static DESC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<desc\b[^>]*>(.*?)</desc>").unwrap());
 
-/// .slice(0, 400) counts UTF-16 units
-fn slice_utf16(s: &str, max: usize) -> String {
-    let mut n = 0;
-    let mut out = String::new();
-    for ch in s.chars() {
-        n += ch.len_utf16();
-        if n > max {
-            break;
-        }
-        out.push(ch);
-    }
-    out
-}
 
 /// A JavaScript object's own string keys in its iteration order: integer-like keys first, ascending, then the rest
 /// in the order they were added. filterEpg's "first channel wins" depends on it.
@@ -390,11 +377,11 @@ fn filter_epg(full: &Guide, ids: &[String], names: &[String]) -> Value {
             }
         }
         if keep {
-            let list: Vec<Value> = full.programmes.get(id).unwrap().iter().map(|(a, b, t, d)| json!([a, b, t, d])).collect();
+            let list: Vec<Value> = full.programmes.get(id).unwrap().iter().map(|(a, b, t, d)| json!([js_num(*a), js_num(*b), t, d])).collect();
             programmes.insert(id.to_string(), Value::Array(list));
         }
     }
-    json!({ "programmes": programmes, "byName": by_name, "totalChannels": full.programmes.len(), "parsedAt": full.parsed_at })
+    json!({ "programmes": programmes, "byName": by_name, "totalChannels": full.programmes.len(), "parsedAt": js_num(full.parsed_at) })
 }
 
 /// POST /api/epg { url, ua?, force?, ids?, names? }
@@ -424,27 +411,7 @@ pub async fn handle(body: Value) -> ApiResult<Value> {
     Ok(filter_epg(&full, &ids, &names))
 }
 
-fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_f64().map(|x| x != 0.0 && !x.is_nan()).unwrap_or(true),
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(_) => true,
-    }
-}
 
-/// String(value) for what a JSON body can hold
-fn js_string(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Null => "null".into(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => n.to_string(),
-        Value::Array(a) => a.iter().map(|x| if x.is_null() { String::new() } else { js_string(x) }).collect::<Vec<_>>().join(","),
-        Value::Object(_) => "[object Object]".into(),
-    }
-}
 
 #[cfg(test)]
 mod tests {
