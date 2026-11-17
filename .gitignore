@@ -25,3 +25,4 @@ src-tauri/binaries/*
 # Tauri migration e2e (tauri-update.yml)
 src-tauri/tauri.e2e.json
 e2e-out/
+server-rs/target/

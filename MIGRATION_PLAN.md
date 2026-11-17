@@ -400,22 +400,37 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
 - [ ] **7.4** Update `README.md` ("Windows: built with Tauri; macOS and Linux: Electron, moving later"), `RELEASING.md` (mixed release) and `docs/`.
 - [ ] **Gate:** two weeks of stable on Windows with no data-loss reports.
 
-### Phase 8 (optional): Port the server to Rust
+### Phase 8: Port the server to Rust (started 2026-11-17, owner's request)
 
-Do this only if bundle size or the two-process design hurts. The Node SEA adds roughly 30-45 MB compressed. Electron on macOS and Linux keeps running `server.js` in-process until Phase 9, so the JS server stays the reference implementation.
+`server.js` stays the reference. The Rust port must give the same answers, checked over HTTP by the same tests (8.4). Electron on macOS/Linux keeps `server.js` until Phase 9, and Android TV until 8.7.
 
-- [ ] **8.1** Create a separate `aghorizon-server` crate with **no Tauri dependency**, so Android TV could later link it over JNI and replace libnode.
-- [ ] **8.2 Fallback proxy.** axum forwards unknown `/api/*` routes to the Node sidecar, so routes can move one at a time.
-- [ ] **8.3** Port in this order:
-  1. static, `/api/fetch`, `/api/local` (Range), `/api/tmdb`, `/api/trending`, `/api/capabilities`
-  2. `/api/stream` with M3U8 rewriting and the TS sniffer, plus `/api/tracks`
-  3. `/api/probe`, `/api/keyframe`, `/api/transcode`, `/api/tcsubs` (`tokio::process`, `kill_on_drop`, `Semaphore(4)`)
-  4. `/api/subs/*` and local subtitles
-  5. `/api/epg` (quick-xml streaming)
-  6. `/api/shared` with the PCR stitcher, last or never
-- [ ] **8.4** Port the `node --test` fixtures for `server.test.js`, `shared.test.js` and `cast.test.js` into contract tests that run against **both** implementations.
-- [ ] **8.5** Move the downloads engine to Rust, then drop the Node sidecar.
-- [ ] **Gate:** both servers pass the same contract tests, with no regressions in compatibility mode or Multiview shared mode on real providers.
+- [x] **8.1** The crate `server-rs/` (`aghorizon-server`): a library plus the `aghorizon-server-rs` binary. It has **no Tauri dependency**: hyper 1, tokio and reqwest (rustls).
+  - Same command line and lines as `sidecar/entry.js`: `[port]`, `READY <port>` / `ERROR <code> <message>`, and it exits when stdin closes.
+  - Same environment: `PUBLIC_DIR`, `FFMPEG_PATH`, `OPENSUBTITLES_API_KEY`, `TMDB_API_KEY` (or `secrets.json` next to the program).
+  - Unit tests with `cargo test`.
+- [x] **8.2 Unported routes answer 501** ("Not available in this build yet") rather than being forwarded to the Node sidecar. The Windows app keeps the Node sidecar until every route is ported, so there's no mixed state to manage.
+- [ ] **8.3 Port**, done so far:
+  - [x] the request guard, static files (WHATWG URL parsing via the `url` crate, as `new URL` does, so the same dot-segment and percent rules), `/api/capabilities`, `/api/fetch`;
+  - [x] `/api/stream` (M3U8 rewriting, pass-through with Range, the TS sniffer) and `/api/tracks`;
+  - [x] `/api/epg`. The same piece-by-piece parsing rules and regular expressions as `server.js` (regex crate; one branch per quote style instead of back-references), not quick-xml, so edge cases match. That includes JavaScript's object key order, which decides which channel a shared name goes to.
+  - [ ] `/api/local` (Range) and local subtitles, `/api/tmdb`, `/api/trending`;
+  - [ ] `/api/probe`, `/api/keyframe`, `/api/transcode`, `/api/tcsubs` (`tokio::process`, `kill_on_drop`, at most 4 conversions);
+  - [ ] `/api/subs/*` (OpenSubtitles);
+  - [ ] `/api/shared` with the PCR stitcher (last).
+- [ ] **8.4 Contract tests against both.** `test/parity/parity.test.js` talks HTTP to whichever server `AGH_PARITY_SERVER` names (`node`, the default and part of `npm test`, or `rust`), with a fake provider. Both servers pass all of it. CI: `.github/workflows/server-rs.yml`, Linux and Windows.
+  - Covered so far:
+    - the guard (Host, Origin, Sec-Fetch-Site);
+    - static files (types, index, 404, dot segments, encoded slashes, NUL, bad encoding);
+    - capabilities and unknown routes;
+    - fetch (gzip, user agent, every error message, refused connection, unknown host);
+    - the guide (ids, names, `byName` order, the time window, entities, CDATA, 400-character descriptions, gzip, all errors);
+    - HLS rewriting (keys, data: URIs, absolute and parent paths, redirects, src);
+    - pass-through and Range;
+    - tracks (PAT/PMT, private-data AC-3, language, visually impaired, HLS segments under src, no sniffing on Range).
+  - [ ] Still to bring over: `shared.test.js` and `cast.test.js` behaviour, and each new route as it is ported.
+- [ ] **8.5** Move the downloads engine and folder sync (`desktop/`) and the stdin/stdout RPC to Rust. Then the Windows app's sidecar becomes the Rust binary, and Node leaves the Windows app (about 30–45 MB compressed less).
+- [ ] **8.6 Gate (Windows):** both servers pass the same contract tests, the Windows e2e suites pass with the Rust sidecar, and there are no regressions in compatibility mode or Multiview shared mode on real providers.
+- [ ] **8.7 Android TV:** the crate built for Android (ARM64, ARMv7) with cargo-ndk and started over JNI by the Kotlin shell, instead of nodejs-mobile. Same HTTP API, so the pages, `tv.js` and the ExoPlayer side don't change. Switch on the Test channel after Windows has run the Rust server for a release cycle or two, then delete `server.js`.
 
 ### Phase 9 (later): macOS and Linux on Tauri
 
