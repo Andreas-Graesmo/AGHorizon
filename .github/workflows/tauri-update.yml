@@ -1,0 +1,62 @@
+# MIGRATION_PLAN.md Phase 5 gate on Windows: the installed Tauri app updates itself from N to N+1
+# (e2e/tauri-update.js). Both versions are built here with a throwaway signing key, never the release key.
+name: Tauri self-update (migration, phase 5)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['src-tauri/**', 'scripts/tauri-prep.js', 'scripts/tauri-release.js', 'sidecar/**', 'server.js', 'public/js/tauri-shell.js', 'e2e/tauri-update.js', '.github/workflows/tauri-update.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-update-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run: { shell: bash }
+    env:
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: e2e-only
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: npm ci (without Electron's binary; not needed here)
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - name: Player libraries into public/vendor
+        run: for i in 1 2 3; do npm run setup && break; sleep 10; done
+      - name: Sidecars (server .exe, pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'src-tauri -> target' }
+      - name: Throwaway signing key, and a config that uses it (and allows the local http server)
+        run: |
+          npx --yes @tauri-apps/cli@2.12.4 signer generate --ci -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" -w "$RUNNER_TEMP/e2e.key"
+          node -e "
+            const fs = require('fs');
+            fs.writeFileSync('src-tauri/tauri.e2e.json', JSON.stringify({ plugins: { updater: {
+              pubkey: fs.readFileSync(process.env.RUNNER_TEMP + '/e2e.key.pub', 'utf8').trim(),
+              dangerousInsecureTransportProtocol: true } } }));"
+      - name: Build version N (9.0.0) and N+1 (9.0.1)
+        run: |
+          export TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/e2e.key")"
+          for v in 9.0.0 9.0.1; do
+            node -e "const f='package.json',p=require('./'+f);p.version='$v';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+            npx --yes @tauri-apps/cli@2.12.4 build --bundles nsis --config src-tauri/tauri.e2e.json
+            node scripts/tauri-release.js "e2e-out/$v" --base-url http://127.0.0.1:47900
+          done
+          ls -la e2e-out/*
+          cat e2e-out/9.0.1/latest.json
+      - name: Playwright (CDP client only; no browsers)
+        run: npm install --no-save --no-audit --no-fund playwright@1.63.0
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      - name: Self-update N → N+1
+        run: node e2e/tauri-update.js e2e-out/9.0.0/AG-Horizon-Setup-9.0.0.exe e2e-out/9.0.1

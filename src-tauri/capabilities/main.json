@@ -21,6 +21,7 @@
     "allow-downloads",
     "allow-sync",
     "allow-popups",
-    "allow-migration"
+    "allow-migration",
+    "allow-updater"
   ]
 }

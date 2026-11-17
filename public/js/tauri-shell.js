@@ -6,18 +6,35 @@
  *   downloads.* and sync.*  → the app's `downloads` / `sync` commands (src-tauri/src/main.rs); their engines run in
  *                             the server sidecar (desktop/), the folder dialogs, Explorer and the keychain in Rust
  *   window, displays        → Tauri's window API
- *   updater.*               → not yet: MIGRATION_PLAN.md Phase 5
+ *   updater.*               → the app's `updater` command (src-tauri/src/updater.rs); the Test channel's release is
+ *                             found here through the GitHub API, as on Android TV (tv.js)
  */
 (() => {
   if (window.tunerDesktop || window.AGHorizonTV || !window.__TAURI__) return;
   const T = window.__TAURI__;
   const invoke = T.core.invoke;
   const win = () => T.window.getCurrentWindow();
-  const ok = (v) => () => Promise.resolve(v);
-  const LATER = 'This comes in a later step of the move to the new app.';
   const platform = /Windows/.test(navigator.userAgent) ? 'win32' : /Mac/.test(navigator.userAgent) ? 'darwin' : 'linux';
   const dl = (op) => (...args) => invoke('downloads', { op, args });
   const sy = (op) => (...args) => invoke('sync', { op, args });
+  const up = (op, ...args) => invoke('updater', { op, args });
+  const REPO = 'Andreas-Graesmo/AGHorizon';
+  const gh = (p) => fetch(`https://api.github.com/repos/${REPO}/${p}`, { headers: { Accept: 'application/vnd.github+json' } });
+
+  // Test channel (decision 0.6): the newest published release, beta or not, that is a Tauri build (has latest.json).
+  // Its latest.json goes to the app, which takes it only from this repository. null: use Stable's.
+  async function testManifest() {
+    try {
+      const [r, current] = await Promise.all([gh('releases?per_page=30'), T.app.getVersion()]);
+      if (!r.ok) return null;
+      let best = null;
+      for (const rel of await r.json()) {
+        const asset = !rel.draft && (rel.assets || []).find((a) => a.name === 'latest.json');
+        if (asset && tvVersionCompare(rel.tag_name, '0.0.0') > 0 && (!best || tvVersionCompare(rel.tag_name, best.tag) > 0)) best = { tag: rel.tag_name, url: asset.browser_download_url };
+      }
+      return best && tvVersionCompare(best.tag, current) > 0 ? best.url : null;
+    } catch { return null; }   // offline, or GitHub's limit for the hour: Stable's
+  }
 
   // The sync files are bytes; the commands carry JSON, so base64 on the way (a Uint8Array would become {"0": …}).
   const toB64 = (u8) => { let s = ''; const b = new Uint8Array(u8); for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
@@ -40,16 +57,29 @@
     displays,
     async focusWindow() { const w = win(); await w.unminimize(); await w.show(); await w.setFocus(); },
     async appInfo() {
-      return {
-        version: await T.app.getVersion(), platform, arch: 'x64', updater: false, updaterReason: LATER,
-        releasesUrl: 'https://github.com/Andreas-Graesmo/AGHorizon/releases/latest', channel: 'stable',
-      };
+      return { version: await T.app.getVersion(), platform, arch: 'x64', ...(await up('info')) };
     },
     ready() { win().show().catch(() => {}); },   // the window starts hidden, so start-up shows no empty frame
     titleBar() {},                               // HTML caption buttons come in MIGRATION_PLAN.md 4.2
     updater: {
-      status: ok({ state: 'idle' }), check: ok({ state: 'idle' }), download: ok({ state: 'idle' }), install: ok({ state: 'idle' }),
-      openReleases: ok(), notes: ok({ error: LATER }), setChannel: (c) => Promise.resolve(c), onStatus() {},
+      status: () => up('status'),
+      async check() { const ch = (await up('info')).channel; return up('check', ch === 'test' ? await testManifest() : null); },
+      download: () => up('download'),
+      install: () => up('install'),
+      openReleases: () => up('open'),
+      setChannel: (c) => up('setChannel', c),
+      onStatus(cb) { T.event.listen('updater:status', (e) => cb(e.payload)); },
+      // "What's new?": the Markdown written on the version's GitHub release (as in Electron and on Android TV)
+      async notes(version) {
+        const none = { error: 'No release notes were found for this version.' };
+        if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(String(version))) return none;
+        try {
+          const r = await gh(`releases/tags/v${version}`);
+          if (r.status === 404) return none;
+          if (!r.ok) throw new Error('GitHub answered ' + r.status);
+          return { body: String((await r.json()).body || '') };
+        } catch (e) { return { error: 'Couldn’t fetch the release notes: ' + String((e && e.message) || e).slice(0, 120) }; }
+      },
     },
     downloads: {
       list: dl('list'), add: dl('add'), pause: dl('pause'), resume: dl('resume'), reorder: dl('reorder'),
