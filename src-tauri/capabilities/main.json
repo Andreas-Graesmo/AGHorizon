@@ -17,6 +17,7 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-set-fullscreen",
+    "core:window:allow-set-size",
     "allow-downloads",
     "allow-sync",
     "allow-popups"
