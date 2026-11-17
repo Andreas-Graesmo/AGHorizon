@@ -87,7 +87,7 @@ async function launch() {
   /* 1: start, dashboard, a live channel converted with ffmpeg, then killed */
   let { child, browser, page } = await launch();
   await page.waitForFunction(() => typeof state === 'object' && typeof ui === 'object', null, { timeout: 30000 });
-  const info = await page.evaluate(() => ({ tauri: !!window.__TAURI__, bridge: !!window.tunerDesktop && typeof window.tunerDesktop.ready === 'function' && !window.tunerDesktop.sync, route: ui.route, topbar: !!document.querySelector('#topbar') }));
+  const info = await page.evaluate(() => ({ tauri: !!window.__TAURI__, bridge: !!window.tunerDesktop && typeof window.tunerDesktop.ready === 'function' && typeof window.tunerDesktop.sync.getCode === 'function' && typeof window.tunerDesktop.downloads.onChange === 'function', route: ui.route, topbar: !!document.querySelector('#topbar') }));
   check('page from the app\'s own server, with the Tauri bridge', info.tauri && info.bridge, JSON.stringify(info));
   check('the dashboard renders', info.route === 'dashboard' && info.topbar, `route ${info.route}`);
   await page.waitForFunction(() => state.ffmpeg === true, null, { timeout: 15000 }).catch(() => {});
