@@ -78,8 +78,22 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
   - **Bug found: closing the popup (`window.close()`) leaves the Tauri window visible on screen.** Fix, verified: fixed labels `pip` and `mirror`, and Rust destroys the window when the page closes it (4.3, 4.4).
   - `NewWindowResponse::Allow` (WebView2's own popup) also keeps the opener link, but Tauri cannot make it frameless, on top or fullscreen. Don't use it.
   - `window.moveTo` does not move a Tauri-created window. Mirror's drag must use `startDragging()` (4.4).
-- [ ] **0.3 Decide the server strategy** (Appendix D). The default is C, hybrid.
-  - [ ] Prove a Node SEA (or `bun build --compile`) binary of `server.js` for `x86_64-pc-windows-msvc`. Bundle it with esbuild so `./subtitles`, `./unicode-ln`, `./secrets.json` and `./package.json` are inlined. It must run with `PUBLIC_DIR`, `FFMPEG_PATH` and `TMPDIR` passed through env.
+- [x] **0.3 Server strategy: C, hybrid, starting with a Node sidecar. Proven on Windows.** The code is in `sidecar/`; CI runs `.github/workflows/sidecar.yml` ([run #1](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44108337313)).
+  - **Entry:** `sidecar/entry.js` takes a port, prints `READY <port>` or `ERROR <code> <message>` (exit 1), and **exits when its stdin closes**.
+  - **Build:** `sidecar/build.js` bundles it with esbuild into 64 KB of JS. `ffmpeg-static` and `secrets.json` are left out: `FFMPEG_PATH` and `TMDB_API_KEY` / `OPENSUBTITLES_API_KEY` come as env. Node 22's SEA then makes `aghorizon-server-x86_64-pc-windows-msvc.exe`, the name `externalBin` expects.
+  - **`server.js` changed in one line:** `PUBLIC_DIR` comes from env, with the same default as before (Electron and Android unaffected; `npm test` unchanged).
+  - **Windows results** (`sidecar/smoke.js` against the built `.exe`, 13/13):
+    - starts with READY in 81 ms;
+    - serves the UI and scripts from `PUBLIC_DIR`, and `/api/fetch`, `/api/stream`, `/api/probe` and `/api/transcode` all work through ffmpeg from `FFMPEG_PATH`;
+    - API keys from env;
+    - the static path guard holds;
+    - a second copy on the same port prints `ERROR EADDRINUSE` and exits 1;
+    - closing stdin ends it, and **killing the parent ends it within 102 ms**, so no orphan.
+  - **Size:** 83.2 MB on disk, **32.7 MB compressed**. That's almost all Node itself (Linux: 119 MB / 40.8 MB). This is the cost Phase 8 would remove.
+  - **To carry into 2.3 / 5.6:**
+    - The injection breaks `node.exe`'s Authenticode signature ("signature seems corrupted"). Strip it in CI before injecting (`signtool remove /s`), and sign the result if the app is ever signed.
+    - Pin the Node version used to build (currently 22).
+    - The downloads engine (`setLocalFiles`, `/api/local`) isn't wired into the sidecar yet; that's 3.5.
 - [ ] **0.4 Decide on ffmpeg.** Keep the GPL static build (libx264 is needed by `-c:v libx264`) as a sidecar. Ship the GPL licence and a source link with each release.
 - [ ] **0.5 Decide on the title bar.** `decorations:false` plus HTML window buttons. Optionally use `tauri-plugin-decorum` for Win11 snap layouts.
 - [ ] **0.6 Choose the beta update channel design** (5.4; a rolling `updater-beta` release is recommended).
@@ -121,15 +135,15 @@ The code is portable and harmless on macOS and Linux. There it only writes the e
   - `binaries/ffmpeg-x86_64-pc-windows-msvc.exe`
   - Other targets are added in Phase 9.
 - [ ] **2.4 `server.js` changes.** Each must stay Node 18 compatible (Android) and keep working in-process under Electron (macOS and Linux).
-  - [ ] Read `PUBLIC_DIR` from env, defaulting to the current `__dirname/public` (`server.js:21`).
+  - [x] Read `PUBLIC_DIR` from env, defaulting to the current `__dirname/public` (`server.js:21`; done in 0.3).
   - [ ] Make `ffmpeg-static` optional, using `FFMPEG_PATH` first. That code path already exists at `server.js:647`.
-  - [ ] Add a CLI entry (`node server.js --port N`, or reuse `android/app/nodejs/tv-main.js`). It prints `READY <port>` or `ERROR EADDRINUSE` on stdout.
-  - [ ] Exit when stdin closes or the parent process dies, so no orphans are left behind.
+  - [x] CLI entry `sidecar/entry.js`: `READY <port>` / `ERROR <code>` on stdout (done in 0.3).
+  - [x] Exit when stdin closes; this also covers a killed parent on Windows (102 ms in 0.3).
 - [ ] **2.5 Rust `setup()`.**
   - Spawn the server sidecar (`tauri-plugin-shell`), passing env: port 47831 (`TUNER_PORT` override), `PUBLIC_DIR` = resource dir, `FFMPEG_PATH` = resolved sidecar path, `TMPDIR`, and the API keys.
   - Wait for `READY` before creating the window.
   - On `EADDRINUSE`, show a `tauri-plugin-dialog` error and `app.exit(1)`, as `main.js:197-205` does.
-  - Put the sidecar in a Windows Job Object so it dies with the app.
+  - Keep the sidecar's stdin piped and never close it while the app runs: its end is how the server notices the app has gone (0.3). A Windows Job Object is optional extra safety, and it also covers ffmpeg children if the server itself is killed.
 - [ ] **2.6** Bundle `public/**` as `bundle.resources`. Keep `npm run setup` (vendored hls.js and mpegts.js) as a pre-build step.
 - [ ] **2.7 Main window** from `WebviewWindowBuilder`:
   - `WebviewUrl::External("http://127.0.0.1:47831/")`
