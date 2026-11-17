@@ -409,7 +409,7 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
   - Same environment: `PUBLIC_DIR`, `FFMPEG_PATH`, `OPENSUBTITLES_API_KEY`, `TMDB_API_KEY` (or `secrets.json` next to the program).
   - Unit tests with `cargo test`.
 - [x] **8.2 Unported routes answer 501** ("Not available in this build yet") rather than being forwarded to the Node sidecar. The Windows app keeps the Node sidecar until every route is ported, so there's no mixed state to manage.
-- [ ] **8.3 Port**, done so far:
+- [x] **8.3 Port**, every route of `server.js` (2026-11-17):
   - [x] the request guard, static files (WHATWG URL parsing via the `url` crate, as `new URL` does, so the same dot-segment and percent rules), `/api/capabilities`, `/api/fetch`;
   - [x] `/api/stream` (M3U8 rewriting, pass-through with Range, the TS sniffer) and `/api/tracks`;
   - [x] `/api/epg`. The same piece-by-piece parsing rules and regular expressions as `server.js` (regex crate; one branch per quote style instead of back-references), not quick-xml, so edge cases match. That includes JavaScript's object key order, which decides which channel a shared name goes to.
@@ -420,7 +420,14 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
   - [x] `/api/subs/*` (OpenSubtitles): one login per account, logged in again once when a token expires. The User-Agent takes the app's version from `package.json` at build time.
   - JavaScript-compatible values throughout (`util.rs`): numbers written as JSON writes them (`10`, not `10.0`), `Number()`, `toFixed()` (ties up), `String()`, `||`, and UTF-16 `slice`.
   - Both servers take `AGH_TMDB_BASE` / `AGH_OPENSUBTITLES_BASE` (test-only; the real addresses otherwise), so the suite can stand in for TMDB and OpenSubtitles.
-  - [ ] `/api/shared` with the PCR stitcher (last).
+  - [x] `/api/shared` and `/api/shared/stats` (`server-rs/src/shared.rs`):
+    - the PCR stitcher;
+    - the scheduler: whose turn it is by need, the burst depth measured, a visit ended when another picture waits;
+    - three tries, then the picture falls back;
+    - a player that hangs up leaves at once;
+    - 256 MB at most queued for a reader that stopped.
+
+    The stitcher's three cases from `shared.test.js` are Rust unit tests. Both servers take `AGH_SHARE_REVISIT` (test only).
 - [ ] **8.4 Contract tests against both.** `test/parity/parity.test.js` talks HTTP to whichever server `AGH_PARITY_SERVER` names (`node`, the default and part of `npm test`, or `rust`), with a fake provider. Both servers pass all of it. CI: `.github/workflows/server-rs.yml`, Linux and Windows.
   - Covered so far:
     - the guard (Host, Origin, Sec-Fetch-Site);
@@ -446,7 +453,13 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
     - Two differences are allowed:
       - a 416 for an empty file carries no Content-Length from `server.js`, and `Content-Length: 0` from Rust;
       - an oversized request body makes `server.js` drop the connection, where Rust answers 413.
-  - [ ] Still to bring over: `shared.test.js` and `cast.test.js` behaviour, with `/api/shared`.
+  - Round 3 (2026-11-17), 20 tests:
+    - two Multi view pictures on one fake provider connection that opens with an 8 s burst. The provider never sees two connections; each picture gets one unbroken stream of its own channel, byte for byte; the stats (joins, no rough joins, nothing missing, a believable reserve and burst) check out; and the group and connection are gone once the pictures close;
+    - HLS-only channels refused with 415;
+    - 404 after three tries;
+    - a bad address.
+
+    `cast.test.js`'s TMDB behaviour was already covered in round 2.
 - [ ] **8.5** Move the downloads engine and folder sync (`desktop/`) and the stdin/stdout RPC to Rust. Then the Windows app's sidecar becomes the Rust binary, and Node leaves the Windows app (about 30–45 MB compressed less).
 - [ ] **8.6 Gate (Windows):** both servers pass the same contract tests, the Windows e2e suites pass with the Rust sidecar, and there are no regressions in compatibility mode or Multiview shared mode on real providers.
 - [ ] **8.7 Android TV:** the crate built for Android (ARM64, ARMv7) with cargo-ndk and started over JNI by the Kotlin shell, instead of nodejs-mobile. Same HTTP API, so the pages, `tv.js` and the ExoPlayer side don't change. Switch on the Test channel after Windows has run the Rust server for a release cycle or two, then delete `server.js`.

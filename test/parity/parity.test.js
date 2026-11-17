@@ -128,11 +128,49 @@ function provider() {
         return send(206, body.subarray(a, b + 1), { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${a}-${b}/${body.length}`, 'Content-Length': b - a + 1 });
       }
       default:
+        if (u.pathname.startsWith('/share/')) return shareLive(req, res, u);
         if (u.pathname.startsWith('/tmdb/')) return tmdb(req, res, u);
         if (u.pathname.startsWith('/os/')) return opensubs(req, res, u);
         return send(404, 'no such thing');
     }
   });
+}
+
+// a provider like the measured one, for /api/shared: each connection starts 8 s back, sends that at once, then goes
+// on in real time. Every 40 ms of stream is one packet with the clock (PCR) and two with "video", each saying which
+// channel and which 40 ms it belongs to (test/shared.test.js), so a stream can be checked byte for byte.
+const STEP = 0.04;
+function pcrPacket(pid, ch, n, k, pcrTicks) {
+  const p = Buffer.alloc(188, 0xff);
+  p[0] = 0x47; p[1] = pid >> 8; p[2] = pid & 0xff;
+  if (pcrTicks === undefined) p[3] = 0x10;
+  else {
+    p[3] = 0x20; p[4] = 183; p[5] = 0x10;
+    const base = Math.floor(pcrTicks / 300), ext = pcrTicks % 300;
+    p.writeUInt32BE(Math.floor(base / 2), 6);
+    p[10] = ((base & 1) << 7) | 0x7e | (ext >> 8);
+    p[11] = ext & 0xff;
+  }
+  p.writeUInt32BE(ch, 20); p.writeUInt32BE(n, 24); p[28] = k;
+  return p;
+}
+const opening = (ch) => pcrPacket(0, ch, 0, 9);
+const group = (ch, n) => Buffer.concat([pcrPacket(0x100, ch, n, 0, Math.round(n * STEP * 27e6)), pcrPacket(0x101, ch, n, 1), pcrPacket(0x101, ch, n, 2)]);
+const groups = (ch, from, to) => Buffer.concat(Array.from({ length: to - from + 1 }, (_, i) => group(ch, from + i)));
+const share = { epoch: Date.now(), open: 0, most: 0, connects: 0 };
+function shareLive(req, res, u) {
+  if (u.pathname === '/share/hls/1.ts') { res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' }); return res.end('#EXTM3U\n'); }
+  const ch = Number(/(\d+)\.ts$/.exec(u.pathname)[1]);
+  const onAir = () => Math.floor((Date.now() - share.epoch) / (STEP * 1000)) + 100000;
+  share.most = Math.max(share.most, ++share.open);
+  share.connects++;
+  res.writeHead(200, { 'Content-Type': 'video/mp2t' });
+  let n = onAir() - 200;
+  res.write(opening(ch));
+  const send = () => { const to = onAir(); if (to >= n) { res.write(groups(ch, n, to)); n = to + 1; } };
+  send();
+  const iv = setInterval(send, 20);
+  res.on('close', () => { clearInterval(iv); share.open--; });
 }
 
 // a fake TMDB (AGH_TMDB_BASE = <provider>/tmdb/3)
@@ -280,6 +318,7 @@ test.before(async () => {
     OPENSUBTITLES_API_KEY: 'parity-os', TMDB_API_KEY: 'parity-tmdb',
     AGH_TMDB_BASE: `${P}/tmdb/3`, AGH_OPENSUBTITLES_BASE: `${P}/os/api/v1`,
     AGH_DATA_DIR: path.join(pub, 'data'), AGH_DOCUMENTS_DIR: pub,
+    AGH_SHARE_REVISIT: '0.4',   // the real 3 s would make the sharing test take half a minute
   });
   srv = s.child; port = s.port;
 });
@@ -741,4 +780,66 @@ test('transcode: fragmented MP4 or Matroska, subtitles alongside, at most four a
     status = (await req(`/api/transcode?url=${encodeURIComponent(`${P}/clip.mp4`)}&maxh=144`)).status;
   }
   assert.strictEqual(status, 200);
+});
+
+/* ───────────── /api/shared: Multi view pictures taking turns on one provider connection ───────────── */
+
+test('shared: two pictures take turns on one provider connection and neither misses a packet', async () => {
+  const watch = (ch) => {
+    const got = [];
+    const src = `${P}/share/live/u/p/${ch}.ts`;
+    const sock = net.connect(port, '127.0.0.1');
+    sock.write(`GET /api/shared?url=${encodeURIComponent(src)}&group=list1 HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n\r\n`);
+    sock.on('data', (c) => got.push(c));
+    sock.on('error', () => {});
+    return { ch, sock, raw: () => Buffer.concat(got) };
+  };
+  share.most = 0; share.connects = 0;
+  const pictures = [watch(1), watch(2)];
+  await new Promise((x) => setTimeout(x, 3500));
+  const stats = (await req('/api/shared/stats')).json();
+  pictures.forEach((p) => p.sock.destroy());
+
+  assert.strictEqual(share.most, 1, 'never more than one connection to the provider');
+  assert.ok(share.connects >= 4, `the connection went round (${share.connects} connections)`);
+  for (const p of pictures) {
+    const raw = p.raw();
+    const head = raw.subarray(0, raw.indexOf('\r\n\r\n')).toString('latin1');
+    assert.match(head, /^HTTP\/1\.1 200/);
+    assert.match(head, /content-type: video\/mp2t/i);
+    assert.match(head, /cache-control: no-store/i);
+    let data = raw.subarray(raw.indexOf('\r\n\r\n') + 4);
+    if (/transfer-encoding: chunked/i.test(head)) {   // de-chunk what came so far
+      const out = []; let o = 0;
+      for (;;) { const e = data.indexOf('\r\n', o); if (e < 0) break; const n = parseInt(data.subarray(o, e).toString(), 16); if (!n || e + 2 + n > data.length) break; out.push(data.subarray(e + 2, e + 2 + n)); o = e + 2 + n + 2; }
+      data = Buffer.concat(out);
+    }
+    const count = Math.floor((data.length - 188) / (3 * 188));
+    assert.ok(count > (8 + 2) / STEP, `picture ${p.ch} got the burst and kept up (${count * STEP} s)`);
+    const first = data.readUInt32BE(188 + 24);
+    assert.ok(data.subarray(0, 188 + count * 3 * 188).equals(Buffer.concat([opening(p.ch), groups(p.ch, first, first + count - 1)])), `picture ${p.ch} is one unbroken stream of its own channel`);
+  }
+  assert.deepStrictEqual(stats.map((g) => [g.group, g.pictures.length]), [['list1', 2]]);
+  assert.ok(stats[0].connects >= 4);
+  for (const s of stats[0].pictures) {
+    assert.deepStrictEqual(Object.keys(s), ['reserve', 'burst', 'visits', 'errors', 'joins', 'rough', 'missing']);
+    assert.ok(s.joins >= 1 && s.rough === 0 && s.missing === 0 && s.errors === 0 && s.visits >= 2, JSON.stringify(s));
+    // 8 s came with the first burst and the picture has played in real time since
+    assert.ok(s.reserve > 4 && s.reserve < 9, `a comfortable, believable reserve (${s.reserve} s)`);
+    assert.ok(s.burst > 6 && s.burst < 10, `the burst was measured (${s.burst} s)`);
+  }
+  // the pictures are gone: so is the group, and the provider connection
+  for (let i = 0; i < 30 && ((await req('/api/shared/stats')).json().length || share.open); i++) await new Promise((x) => setTimeout(x, 100));
+  assert.deepStrictEqual((await req('/api/shared/stats')).json(), []);
+  assert.strictEqual(share.open, 0);
+});
+
+test('shared: a channel without MPEG-TS is refused (the picture falls back), and bad addresses', async () => {
+  let r = await req(`/api/shared?url=${encodeURIComponent(`${P}/share/hls/1.ts`)}&group=list2`);
+  assert.deepStrictEqual([r.status, r.json()], [415, { error: 'This channel has no MPEG-TS stream to share' }]);
+  r = await req(`/api/shared?url=${encodeURIComponent(`${P}/status?s=404`)}&group=list3`);
+  assert.deepStrictEqual([r.status, r.json()], [404, { error: 'Stream answered HTTP 404' }]);   // after three tries
+  r = await req('/api/shared?url=nope');
+  assert.deepStrictEqual([r.status, r.json()], [400, { error: 'Invalid URL' }]);
+  assert.deepStrictEqual((await req('/api/shared/stats')).json(), []);
 });

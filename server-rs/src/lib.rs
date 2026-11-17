@@ -1,14 +1,14 @@
 //! AG Horizon's local server in Rust (MIGRATION_PLAN.md Phase 8): the same HTTP API as server.js, so the same pages
 //! work against either. No Tauri dependency: the Windows app runs it as its sidecar, and Android TV can link it.
 //!
-//! Ported so far: everything but /api/shared (Multi view's shared connection), which answers 501 until it is
-//! ported (test/parity/ lists what is covered).
+//! Every route of server.js is here; test/parity/ checks both servers give the same answers.
 
 mod canon_table;
 pub mod epg;
 pub mod ffmpeg;
 pub mod local;
 pub mod opensubs;
+pub mod shared;
 pub mod stream;
 pub mod subtitles;
 pub mod tmdb;
@@ -279,8 +279,8 @@ pub async fn handle(cfg: Arc<Config>, req: Request<Incoming>) -> Resp {
         ("/api/probe", &Method::GET) => ffmpeg::probe(ffmpeg(&cfg).await, &q).await,
         ("/api/keyframe", &Method::GET) => ffmpeg::keyframe(ffmpeg(&cfg).await, &q).await,
         ("/api/transcode", &Method::GET) => ffmpeg::transcode(ffmpeg(&cfg).await, &q).await,
-        // not ported yet (MIGRATION_PLAN.md Phase 8): say so plainly rather than 404
-        ("/api/shared" | "/api/shared/stats", &Method::GET) => Err(ApiError::new(501, "Not available in this build yet")),
+        ("/api/shared", &Method::GET) => shared::handle_shared(&q).await,
+        ("/api/shared/stats", &Method::GET) => Ok(shared::handle_stats()),
         // the same order as server.js: a download's subtitles, a conversion's subtitles, then the download itself
         (p, &Method::GET) if LOCAL_SUBS.is_match(p) => local::handle_local_subs(cfg.local_files.as_ref(), ffmpeg(&cfg).await, p, &q).await,
         (p, &Method::GET) if p.starts_with("/api/tcsubs/") => local::handle_tc_subs(p).await,
