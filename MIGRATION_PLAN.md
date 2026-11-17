@@ -307,21 +307,49 @@ Most of it lives in `public/js/tauri-shell.js` and `src-tauri/src/main.rs`; `pla
 
 ### Phase 6: Data migration on first Tauri launch (Windows)
 
-- [ ] **6.1 Plain files.** If `app_data_dir/migrated` is missing, copy `downloads.json`, `sync.json` and `window-state.json` from `%APPDATA%\Tuner IPTV`. Download files stay where they are; the paths in `downloads.json` are absolute.
-- [ ] **6.2 Renderer storage.**
-  - Rust command `migration_payload()` returns the parsed `migration.json`, once.
-  - Before `core.js` reads storage, the adapter writes every `tuner.*` key to localStorage and refills IndexedDB `tuner/files`, then calls `migration_done()`.
-  - Do not overwrite keys that already exist; a user may have opened the Tauri app first.
-- [ ] **6.3 Sync code.** Read it from the Credential Manager entry or the export written in 1.2. If it is missing, sync turns off cleanly (`sync.js:360-363`). Show a one-time "re-enter your sync code" notice.
-- [ ] **6.4 No bridge export found** (the user skipped 2.9.0). Show a one-time dialog: "Open the previous version once, or restore from sync." Optional and fragile: parse the Chromium LevelDB with `rusty-leveldb`.
-- [ ] **6.5 Windows installer handover.** Add a Tauri NSIS hook (`NSIS_HOOK_POSTINSTALL`) that:
-  - finds the electron-builder uninstaller through the HKCU Uninstall key (GUID derived from `app.aghorizon.desktop`);
-  - runs `Uninstall AG Horizon.exe /S`;
-  - **never deletes `%APPDATA%\Tuner IPTV`**;
-  - fixes the Start menu and desktop shortcuts.
-- [ ] **Gate:** run the full upgrade on clean Windows 10 and 11 VMs, Electron 2.5.x → bridge 2.9.0 → Tauri 3.0.0-beta.1:
+Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`). The code lives in `src-tauri/src/main.rs` (`from_electron`, `migration` command), `desktop/migration-import.js`, `public/js/tauri-shell.js` and `src-tauri/windows/hooks.nsh`.
+
+- [x] **6.1 Plain files.**
+  - Before the server sidecar starts, `downloads.json` and `sync.json` are copied from `%APPDATA%\Tuner IPTV` into `app_data_dir`, but only where the new app has none yet.
+  - Downloaded files stay where they are; the paths in `downloads.json` are absolute.
+  - Window bounds were already handled in 4.1.
+- [x] **6.2 Renderer storage.**
+  - If `migration.json` (format 1) exists and the marker `electron-import.json` doesn't, Rust adds an initialization script to the main window: `window.__aghMigrating = <desktop/migration-import.js>(data)`.
+  - It runs before the page's own scripts. localStorage is written synchronously; IndexedDB `tuner/files` follows, and `core.js`'s `idb.open` waits for it.
+  - Keys and records the new app already has are kept.
+  - The adapter then calls `migration {op:'done'}`, and Rust writes the marker. The import never runs twice.
+  - The same function is `electron/migration.js`'s `IMPORT_SCRIPT`, so the round-trip test (`spike/migration/check-roundtrip.js`) covers the very code the app runs.
+- [x] **6.3 Sync code.**
+  - The hand-over adds `syncCode` to `migration.json`. On start it goes into Credential Manager (unless one is there already) and is then removed from the file.
+  - If storing it fails, it stays in the file and the next start tries again.
+  - Without a code, sync is simply off, as before.
+- [x] **6.4 No bridge export found.**
+  - Condition: an Electron profile (`Local Storage`) exists, but there is no `migration.json` and no marker.
+  - The app shows a one-time dialog: "Start the previous version once, close it, and start this one again. Or restore from sync." Marker: `electron-import-notice`.
+  - Parsing LevelDB is not done.
+- [x] **6.5 Windows installer handover.** A `NSIS_HOOK_PREINSTALL` hook (`src-tauri/windows/hooks.nsh`, `installMode: currentUser`) runs only when `migration.json` exists. It:
+  - finds the electron-builder entry in HKCU Uninstall (DisplayName `AG Horizon <version>`; electron-builder writes no InstallLocation, so the folder comes from its UninstallString `"…\Programs\ag-horizon\Uninstall AG Horizon.exe"`);
+  - runs it with `/S _?=<folder>`, then deletes the uninstaller and the empty folder;
+  - **never touches `%APPDATA%\Tuner IPTV`**.
+
+  The shortcuts the Electron uninstaller removes are created again by the Tauri installer right after. Without `migration.json`, both apps stay installed.
+- [x] **CI gate (Windows runner):**
+  - `e2e/tauri-migration.js`, 14/14 checks:
+    - the real Electron app exports;
+    - the hand-over's sync code is added;
+    - on the Tauri app's first start, the playlists, favourites, theme, IndexedDB playlist file, downloads folder and sync folder come over;
+    - the code is in Credential Manager and gone from the file;
+    - the marker is written;
+    - a restart keeps the new app's changes;
+    - the notice shows once.
+  - `e2e/tauri-installer.js`, 10/10 checks:
+    - with real electron-builder and Tauri installers, installing without a hand-over keeps both apps;
+    - installing after a hand-over removes the Electron app (its entry and its files), keeps its data, and the Tauri app is installed.
+- [ ] **Gate, by hand:** run the full upgrade on clean Windows 10 and 11 machines, Electron 2.5.x → bridge 2.9.0 → Tauri 3.0.0-beta.1. Check that:
   - playlists, file playlists, favourites, history, settings, theme, downloads list, sync folder and sync code all survive;
   - exactly one app is installed.
+
+  This needs Phase 5 (updater) and the signing key (1.0).
 
 ### Phase 7: Windows rollout
 
