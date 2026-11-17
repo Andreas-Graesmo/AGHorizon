@@ -485,10 +485,10 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
   - Node has left the Windows app. The server program is 4.9 MB instead of about 80 MB.
   - The installer is **53.8 MB** with BtbN's ffmpeg 8.1; with the Node server it would be about 75 MB.
   - The Windows workflows set up Rust (and cache `server-rs`) before the prep step.
-- [ ] **8.6 Gate (Windows):**
+- [x] **8.6 Gate (Windows): passed.**
   - [x] Both servers pass the same contract tests: 20 HTTP and 9 RPC, on Linux and Windows.
   - [x] Every Windows suite passes with the Rust sidecar: the app (live TV with AC-3 converted, downloads, sync, window, PiP, mirror, fullscreen, keep-awake), the first start after Electron with the installer, the self-update 14/14, and the media spike.
-  - [ ] By hand on a real PC with real providers: compatibility mode, Multi view shared mode, downloads. This is the next beta's job.
+  - [x] By hand on a real PC with real providers, with v3.1.0-beta.1 (the Rust server and ffmpeg 8.1): the owner reported that everything works (2026-11-17). That covered compatibility mode, Multi view (shared mode too), downloads, subtitles, the guide and trending.
 - [ ] **8.7 Android TV:** the crate built for Android (ARM64, ARMv7) with cargo-ndk and started over JNI by the Kotlin shell, instead of nodejs-mobile. Same HTTP API, so the pages, `tv.js` and the ExoPlayer side don't change. Switch on the Test channel after Windows has run the Rust server for a release cycle or two, then delete `server.js`.
 
 ### Phase 9 (later): macOS and Linux on Tauri
