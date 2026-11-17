@@ -28,27 +28,38 @@ function vaultDir(vault) {
 }
 const checkDevice = (d) => { if (!HEX(16, 32).test(String(d))) throw new Error('Bad device'); return d; };
 
+// Electron's safeStorage, the asynchronous calls (the synchronous ones are on their way out). What the synchronous
+// ones encrypted, these decrypt.
+const keychain = () => safeStorage.isAsyncEncryptionAvailable().catch(() => false);
+async function saveCode(code) {
+  const data = await keychain() ? Buffer.concat([Buffer.from('enc:'), await safeStorage.encryptStringAsync(code)]) : Buffer.from(code);
+  fs.writeFileSync(secretFile(), data, { mode: 0o600 });
+}
+
 function init() {
-  ipcMain.handle('sync:info', () => ({
+  ipcMain.handle('sync:info', async () => ({
     host: os.hostname().replace(/\.(local|lan|home)$/i, ''),
-    keychain: safeStorage.isEncryptionAvailable(),
+    keychain: await keychain(),
     folder: readCfg().folder || '',
   }));
 
   /* the sync code */
-  ipcMain.handle('sync:code:get', () => {
+  ipcMain.handle('sync:code:get', async () => {
     let raw;
     try { raw = fs.readFileSync(secretFile()); } catch { return ''; }
-    if (raw.subarray(0, 4).toString() === 'enc:') {
-      try { return safeStorage.decryptString(raw.subarray(4)); } catch { return ''; }   // e.g. the keychain was reset
-    }
-    return raw.toString('utf8');
+    if (raw.subarray(0, 4).toString() !== 'enc:') return raw.toString('utf8');
+    let code;
+    try {
+      const r = await safeStorage.decryptStringAsync(raw.subarray(4));
+      code = r.result;
+      if (r.shouldReEncrypt) await saveCode(code).catch(() => {});   // the keychain has a newer key: keep the code under that one
+    } catch { return ''; }   // e.g. the keychain was reset
+    return code;
   });
-  ipcMain.handle('sync:code:set', (_e, code) => {
+  ipcMain.handle('sync:code:set', async (_e, code) => {
     code = String(code || '');
     if (!code) { fs.rmSync(secretFile(), { force: true }); return; }
-    const data = safeStorage.isEncryptionAvailable() ? Buffer.concat([Buffer.from('enc:'), safeStorage.encryptString(code)]) : Buffer.from(code);
-    fs.writeFileSync(secretFile(), data, { mode: 0o600 });
+    await saveCode(code);
   });
 
   /* the folder */

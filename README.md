@@ -1,6 +1,6 @@
 # AG Horizon
 
-A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator.
+A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator. It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
 
 - **Dashboard** with a large slideshow, *Trending this week* (from TMDB, matched to your playlists), live channels on your favorites, and what you watched recently
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
@@ -22,14 +22,42 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 | Windows | `AG-Horizon-Setup-<version>.exe` |
 | macOS (Apple silicon) | `AG-Horizon-<version>-arm64.dmg` |
 | Linux | `AG-Horizon-<version>.AppImage` |
+| Android TV | `AG-Horizon-TV-<version>.apk` |
 
 After that the app updates itself: **Settings › About & updates**.
 
 - **Windows:** the installer isn't code-signed, so SmartScreen may say "Windows protected your PC" the first time. Click **More info › Run anyway**.
 - **macOS:** the app isn't signed either. The first time, right-click the app and choose **Open**. On a Mac the app tells you about new versions, and you download them from the releases page.
 - **Linux:** make the file executable once (`chmod +x AG-Horizon-*.AppImage`), then run it.
+- **Android TV:** the app isn't in the Play Store; you install the `.apk` yourself. See [Android TV](#android-tv).
 
 Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
+
+## Android TV
+
+The same app on a TV: Android TV and Google TV boxes and sets with Android 7 or newer. (Fire TV runs Android apps too, but the app hasn't been tried there.) It has the dashboard, Live TV with the guide, movies and series, favorites, recently viewed, search, several playlists and sync (AG Horizon cloud).
+
+**Installing.** Download `AG-Horizon-TV-<version>.apk` from the [releases page](https://github.com/Andreas-Graesmo/AGHorizon/releases/latest) and install it on the TV. The usual ways: the *Downloader* app on the TV (type the address of the file), *Send files to TV* from a phone, or `adb install` from a computer. The TV asks once whether that app may install apps. After that the app updates itself: it tells you when there is a new version, downloads it, and hands it to Android's installer, which asks you once more (**Settings › About & updates**). Your playlists, favorites and history are kept.
+
+**The remote.**
+
+| | In the app | In the player |
+|---|---|---|
+| ◀ ▶ ▲ ▼ | Move the focus | Live TV: ▲ ▼ change channel. Movies and episodes: ◀ ▶ skip 10 s back / 30 s forward |
+| OK | Open / watch | Show the controls (pause, seek bar, audio language, subtitles, speed) |
+| Hold OK, or Menu | What the small buttons on a tile do: favorite, remove from Recently viewed, mark as watched, edit a playlist | |
+| Back | Close a menu or dialog, go back a page; twice on the dashboard leaves the app | Hide the controls, then leave the player |
+| Channel + / − | | Next / previous channel |
+| Play / pause, ⏪ ⏩, ⏮ ⏭ | | Pause, skip, previous / next episode |
+| 0–9 | Live TV: go to that channel number | Live TV: go to that channel number |
+
+**What plays, plays in the TV's own player** (ExoPlayer), full screen, not in the page. It uses the TV's hardware decoders, so HEVC and 4K play where the TV can, and sound it has no decoder for (AC-3, E-AC-3, DTS, MP2) is decoded by the app. That is why there is no compatibility mode on a TV. The player picks your preferred audio language and turns subtitles on in your language (**Settings › Languages**); you can change both in its controls.
+
+**Left out on a TV**, because they belong to a computer: picture-in-picture, Mirror picture, Multi view, downloads, playlists from a file, the command palette and keyboard shortcuts, OpenSubtitles search, and syncing through a folder.
+
+**Size.** **Settings › Appearance › Size** makes everything larger or smaller.
+
+**If pages look wrong** (missing colours, broken layout), the TV's *Android System WebView* is old: the app needs version 111 or newer. Update it in the TV's app store.
 
 ## Sources and startup
 
@@ -78,6 +106,8 @@ The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 a
 
 The window shows the UI from a small server (`server.js`) that runs inside the app on `127.0.0.1`. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
 
+On Android TV it is the same pages and the same `server.js`: the app (`android/`) shows the pages in a WebView and runs the server with Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile)) inside the app. The pages notice the TV (`public/js/tv.js`), switch to the remote, and hand what should play to ExoPlayer.
+
 ## Notes
 
 - **Playlist logins are saved in plain text** in the app's local storage on your computer.
@@ -110,6 +140,10 @@ supabase/sync.sql       tables and functions for the optional sync server
 public/js/boot.js       start-up, drag & drop
 public/mirror.html/js   the mirror window
 scripts/get-vendor.js   optional: download player libraries locally
+public/js/tv.js         Android TV: the remote, what a TV leaves out, handing playback to the TV's player
+unicode-ln.js           letters and numbers, for the Node.js inside the Android TV app (made by scripts/gen-unicode-ln.js)
+android/                the Android TV app: WebView, Node.js for Android running server.js, ExoPlayer
+android/ci/smoke.js     tries the Android TV app on an emulator
 ```
 
 ## Credits
@@ -117,3 +151,5 @@ scripts/get-vendor.js   optional: download player libraries locally
 Navigation icons (Live TV, Series, Movies) are from [Font Awesome Free](https://fontawesome.com) and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 Cast photos come from [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+The Android TV app runs its server with [nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile) and plays with [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media); sound the TV can't decode is decoded by ffmpeg, as built by the [Jellyfin project](https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder) (GPL-licensed, like the desktop app's ffmpeg: that matters only if you redistribute the app).

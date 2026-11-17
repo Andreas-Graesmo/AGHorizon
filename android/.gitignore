@@ -1,0 +1,16 @@
+.gradle/
+build/
+local.properties
+captures/
+.cxx/
+*.iml
+.idea/
+# Node.js for Android (libnode.so per processor type): downloaded by the build, see app/build.gradle.kts
+app/libnode/
+# signing keys never belong in the repository
+*.jks
+*.keystore
+keystore.properties
+
+# what the emulator test leaves behind (screenshots, the log)
+ci/out/

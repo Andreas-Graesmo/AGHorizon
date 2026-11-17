@@ -11,7 +11,7 @@ function openPlaylistDialog(p) {
   resetForm();
   if (p) fillForm(p);
   if (!dlg.open) dlg.showModal();
-  setTimeout(() => (p ? F('name') : F('name')).focus(), 30);
+  setTimeout(() => F('name').focus(), 30);
 }
 const closePlaylistDialog = () => { if (dlg.open) dlg.close(); };
 $('#mClose').addEventListener('click', closePlaylistDialog);
@@ -110,6 +110,7 @@ form.addEventListener('submit', async (e) => {
   const idx = state.playlists.findIndex((x) => x.id === p.id);
   p.added = idx >= 0 ? state.playlists[idx].added || Date.now() : Date.now();
   if (idx >= 0) p.updated = state.playlists[idx].updated;
+  if (idx >= 0 && state.playlists[idx].type === 'file' && p.type !== 'file') idb.del('file:' + p.id).catch(() => {});   // no longer a file: its stored M3U would stay for good
   if (idx >= 0) state.playlists[idx] = p; else state.playlists.push(p);
   dropCaches(p.id);
   savePlaylists();
@@ -156,7 +157,7 @@ async function openAccountInfo(p) {
   if (!acctDlg.open) acctDlg.showModal();
   let j;
   try { j = await apiJson(xt.api(p, ''), p); } catch (e) { $('#acctBody').innerHTML = `<div class="empty err-text">${esc(e.message)}</div>`; return; }
-  const u = j.user_info || {}, s = j.server_info || {};
+  const u = (j && j.user_info) || {}, s = (j && j.server_info) || {};
   const day = (t) => (Number(t) ? new Date(Number(t) * 1000).toLocaleDateString() : '–');
   const count = (k) => { const c = state.cache[k]; return c ? c.channels.length.toLocaleString() : '–'; };
   const chips = (list) => list.filter(Boolean).map((x) => `<span class="acct-chip">${esc(x)}</span>`).join('') || '–';
@@ -184,7 +185,7 @@ async function openAccountInfo(p) {
         ${row('Created', day(u.created_at))}
         ${row('Expires', Number(u.exp_date) ? day(u.exp_date) : 'Never')}
         ${row('Trial account', String(u.is_trial) === '1' ? 'Yes' : 'No')}
-        <h4>Allowed formats</h4><div class="acct-chips">${chips((u.allowed_output_formats || []).map((f) => String(f).toUpperCase()))}</div>
+        <h4>Allowed formats</h4><div class="acct-chips">${chips((Array.isArray(u.allowed_output_formats) ? u.allowed_output_formats : []).map((f) => String(f).toUpperCase()))}</div>
       </section>
       <section><h3>Server information</h3>
         ${row('URL', esc(s.url || normServer(p.server)), 'mono')}

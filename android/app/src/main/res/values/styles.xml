@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="app_background">#0c0e12</color>
+    <color name="accent">#ff7a59</color>
+
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
+    <!-- the player's controls, sized up from the desktop player's (.p-btn, .pc-skip, .pc-time); the focus is drawn in code -->
+    <style name="PlayerIcon">
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
+        <item name="android:padding">13dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+
+    <style name="PlayerSkip">
+        <item name="android:layout_width">56dp</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+
+    <!-- the "15" inside the skip arrows (#i-back15, #i-fwd15) -->
+    <style name="PlayerSkipText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">1dp</item>
+        <item name="android:text">15</item>
+        <item name="android:textColor">#ffffff</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="PlayerTime">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minWidth">56dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">#f1f3f8</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+</resources>

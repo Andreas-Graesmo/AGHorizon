@@ -41,7 +41,7 @@ window.addEventListener('drop', async (e) => {
   openWorkspace(last.id, 'live');
 });
 
-go('dashboard', {}, { push: false });
+go('dashboard', { push: false });
 // desktop app: the window is hidden until this first view has been drawn (after the next frame)
 requestAnimationFrame(() => setTimeout(tunerDesktop.ready));
 
@@ -69,5 +69,5 @@ async function startupReload() {
 }
 startupReload();
 initUpdates();
-initDownloads();
+if (TV) tvInit(); else initDownloads();   // a TV has the remote instead (tv.js), and downloads nothing
 

@@ -66,6 +66,14 @@ function maybeGunzip(buf) {
   return buf;
 }
 
+// a body that isn't a JSON object is the caller's mistake, not the provider's
+function parseJsonBody(text) {
+  let j;
+  try { j = JSON.parse(text || '{}'); } catch { throw httpError(400, 'The request body is not valid JSON'); }
+  if (!j || typeof j !== 'object') throw httpError(400, 'The request body is not a JSON object');
+  return j;
+}
+
 function readBody(req, limit = 32 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -92,7 +100,11 @@ async function handleFetch(req, res, q) {
 /* ------------------------------------------------------------------- EPG */
 
 // keep identical to normName in public/js/core.js, which sends the channel names the guide is matched by
-const normName = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+// A Node.js built without the Unicode tables (the one inside the Android TV app) can't make this expression: there
+// unicode-ln.js does the same with a table of its own.
+const normName = (() => {
+  try { const other = new RegExp('[^\\p{L}\\p{N}]+', 'gu'); return (s) => String(s).toLowerCase().replace(other, ''); } catch { return require('./unicode-ln').normName; }
+})();
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 function decode(s) {
@@ -217,6 +229,7 @@ async function downloadEpg(url, ua) {
   if (!r.ok) throw httpError(502, `Guide download failed (HTTP ${r.status})`);
   const now = Date.now();
   const full = await parseXmltv(Buffer.from(await r.arrayBuffer()), now - 3 * 3600e3, now + 36 * 3600e3);
+  epgCache.delete(url);   // a Map keeps a key's first place: a refreshed guide has to count as the newest
   epgCache.set(url, { t: now, full });
   while (epgCache.size > 6) epgCache.delete(epgCache.keys().next().value);
   return full;
@@ -241,7 +254,7 @@ function filterEpg(full, ids, names) {
 }
 
 async function handleEpg(req, res) {
-  const body = JSON.parse((await readBody(req)) || '{}');
+  const body = parseJsonBody(await readBody(req));
   if (!body.url) throw httpError(400, 'Missing guide URL');
   const full = await loadEpg(body.url, body.ua, !!body.force);
   sendJson(res, 200, filterEpg(full, body.ids || [], body.names || []));
@@ -855,6 +868,7 @@ function handleLocal(req, res, pathname) {
     if (err || !st.isFile()) return send(res, 404, 'Not found');
     const type = LOCAL_MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
     const r = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (!st.size) return r && (r[1] || r[2]) ? send(res, 416, '', { 'Content-Range': 'bytes */0' }) : send(res, 200, '', { 'Content-Type': type, 'Content-Length': 0, 'Accept-Ranges': 'bytes' });   // an empty download: no stream can read bytes 0 to -1
     let start = 0, end = st.size - 1;
     if (r && (r[1] || r[2])) {
       if (r[1]) { start = Number(r[1]); if (r[2]) end = Math.min(end, Number(r[2])); } else start = Math.max(0, st.size - Number(r[2]));
@@ -900,7 +914,7 @@ async function handleTcSubs(req, res, pathname) {
 // POST /api/subs/download  { os, fileId, lang, saveFor? }           -> { vtt, remaining, saved }
 //   saveFor: a download id – the subtitle is also saved next to that file, for offline viewing
 async function handleSubsApi(req, res, pathname) {
-  const body = JSON.parse((await readBody(req, 64 * 1024)) || '{}');
+  const body = parseJsonBody(await readBody(req, 64 * 1024));
   if (pathname === '/api/subs/login') return sendJson(res, 200, await subs.osLogin(body.os || {}));
   if (pathname === '/api/subs/search') return sendJson(res, 200, await subs.osSearch(body.os, body.q || {}));
   if (pathname === '/api/subs/download') {
@@ -976,6 +990,7 @@ async function handleTrending(req, res) {
 function serveStatic(req, res, pathname) {
   let p;
   try { p = decodeURIComponent(pathname); } catch { return send(res, 400, 'Bad request'); }
+  if (p.includes('\0')) return send(res, 400, 'Bad request');   // fs.stat throws on a null byte
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, p));
   if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + path.sep)) return send(res, 403, 'Forbidden');
@@ -1007,12 +1022,13 @@ function requestAllowed(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://local');
   if (!requestAllowed(req)) return send(res, 403, 'Forbidden');
-  if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
+  let url;
+  try { url = new URL(req.url, 'http://local'); } catch { return send(res, 400, 'Bad request'); }   // e.g. "//"
 
   try {
-    if (url.pathname === '/api/fetch' && req.method === 'GET') await handleFetch(req, res, url.searchParams);
+    if (!url.pathname.startsWith('/api/')) serveStatic(req, res, url.pathname);
+    else if (url.pathname === '/api/fetch' && req.method === 'GET') await handleFetch(req, res, url.searchParams);
     else if (url.pathname === '/api/epg' && req.method === 'POST') await handleEpg(req, res);
     else if (url.pathname === '/api/stream' && req.method === 'GET') await handleStream(req, res, url.searchParams);
     else if (url.pathname === '/api/shared' && req.method === 'GET') handleShared(req, res, url.searchParams);

@@ -36,6 +36,8 @@ test('a mistyped, swapped, short or long code is refused', () => {
   assert.ok(caught / tried > 0.99, `only ${caught} of ${tried} single typos caught`);
   for (let i = 0; i < code.length - 1; i++) {
     if (code[i] === code[i + 1]) continue;
+    // 0 and Z are 31 apart, so the mod-31 check can't see them swapped; codes already given out keep that check
+    if ((code[i] + code[i + 1]).match(/^(0Z|Z0)$/)) continue;
     const swapped = code.slice(0, i) + code[i + 1] + code[i] + code.slice(i + 2);
     assert.strictEqual(S.secretFromCode(swapped), null, `swap at ${i}`);
   }

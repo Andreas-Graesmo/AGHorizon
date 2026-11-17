@@ -71,7 +71,7 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 6px; border: 1px soli
 .btn.small { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
 .btn.white { background: #fff; color: #111; }
 .btn.white small { display: block; font-weight: 500; font-size: 11px; opacity: .7; line-height: 1.1; }
-.btn.on, .fav-btn.on { color: var(--accent); }
+.btn.on { color: var(--accent); }
 .icon-btn { appearance: none; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 8px; border-radius: 9px; display: inline-grid; place-items: center; line-height: 1; }
 .icon-btn.sm { padding: 5px; border-radius: 7px; }
 .icon-btn.round { border-radius: 50%; background: var(--panel-2); }
@@ -90,8 +90,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .seg button { appearance: none; border: 0; background: none; color: var(--muted); font-weight: 600; padding: 6px 12px; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
-.seg-full { display: flex; margin: 0 12px 8px; }
-.seg-full button { flex: 1; justify-content: center; }
 .spinner { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--panel-3); border-top-color: var(--accent); animation: spin .8s linear infinite; margin: 0 auto 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -118,7 +116,7 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .ps-text small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-switch .chev { width: 14px; height: 14px; color: var(--muted); }
 .top-search { display: flex; align-items: center; gap: 8px; width: min(460px, 38vw); height: 32px; padding: 0 8px 0 11px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; flex: none; }
-.top-search:focus-within { border-color: var(--accent); }
+.top-search:has(input:focus) { border-color: var(--accent); }
 .top-search > .ic { width: 15px; height: 15px; color: var(--text); }
 .top-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; height: 100%; font-size: 13px; border-radius: 0; }
 .top-search input:focus { border: 0; }
@@ -253,7 +251,7 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .cats-head .icon-btn { color: var(--text); opacity: .85; }
 .cats-head .icon-btn.on { background: var(--sel); color: var(--accent); opacity: 1; }
 .cat-search { display: flex; align-items: center; gap: 6px; margin: 0 10px 8px; padding: 0 4px 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); flex: none; }
-.cat-search:focus-within { border-color: var(--accent); }
+.cat-search:has(input:focus) { border-color: var(--accent); }
 .cat-search > .ic { width: 15px; height: 15px; color: var(--muted); }
 .cat-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; font-size: 13px; height: 100%; border-radius: 0; }
 .cat-search input:focus { border: 0; }
@@ -301,7 +299,6 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .logo { width: 38px; height: 38px; border-radius: 8px; background: var(--logo-bg); display: grid; place-items: center; overflow: hidden; flex: none; }
 .logo img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
 .logo .ph, .logo > span { font-size: 11px; font-weight: 800; color: var(--logo-ink); }
-.logo.lg { width: 56px; height: 42px; }
 
 .live-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
 .player-slot { position: relative; background: #000; flex: 1; min-height: 120px; }
@@ -414,7 +411,6 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .cast .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }   /* over the initials, which show if it fails */
 .cast b { display: block; font-size: 11px; font-weight: 500; line-height: 1.25; }
 .cast small { color: var(--muted); font-size: 10px; }
-.big-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 78px; height: 78px; border-radius: 50%; border: 0; cursor: pointer; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
 .seasons { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
 .chip-btn { appearance: none; border: 0; background: var(--panel-3); color: var(--text); font-weight: 650; padding: 6px 14px; border-radius: 99px; cursor: pointer; font-size: 12.5px; }
 .chip-btn.on { background: var(--accent); color: var(--accent-ink); }
@@ -427,22 +423,6 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .ep-p { color: var(--muted); font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ep-d { color: var(--muted); font-size: 12.5px; }
 .ep .bar { margin-top: 6px; }
-
-/* playlists */
-.pl-chips { display: flex; flex-wrap: wrap; gap: 10px; }
-.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
-.pl-card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: border-color .15s, transform .15s; text-align: left; }
-.pl-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-.pl-card h3 { font-size: 15px; margin-top: 10px; }
-.pl-top { display: flex; align-items: center; justify-content: space-between; }
-.pl-icon { width: 38px; height: 38px; border-radius: 10px; background: var(--sel); color: var(--accent); display: grid; place-items: center; }
-.tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--panel-3); color: var(--muted); }
-.pl-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pl-count { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
-.pl-actions { display: flex; gap: 2px; margin-top: 10px; margin-left: -6px; }
-.pl-card.add { align-items: center; justify-content: center; border-style: dashed; color: var(--muted); min-height: 170px; font-weight: 600; background: transparent; gap: 10px; }
-.pl-card.add:hover { color: var(--accent); }
-.pl-badge { width: 22px; height: 22px; border-radius: 7px; background: var(--panel-3); color: var(--text); display: inline-grid; place-items: center; font-size: 10px; font-weight: 800; flex: none; }
 
 /* ── the player ───────────────────────────────────── */
 .player { position: fixed; z-index: 30; background: #000; overflow: hidden; --pc: #fff; }
@@ -526,9 +506,6 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { transform: translateX(18px); }
-.big-search { position: relative; margin-bottom: 8px; }
-.big-search .ic { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); width: 22px; height: 22px; }
-.big-search input { padding: 15px 18px 15px 50px; font-size: 16px; border-radius: 14px; }
 
 /* ── toasts, menus, dialogs ───────────────────────── */
 #toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 200; display: grid; gap: 8px; justify-items: center; pointer-events: none; }
@@ -672,6 +649,8 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .sw-search > .ic { width: 16px; height: 16px; color: var(--muted); }
 .sw-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; height: 100%; font-size: 14px; border-radius: 0; }
 .sw-search input:focus { border: 0; outline: 0; }
+/* a search box shows the focus on the box around the text field, not on the field inside it as well */
+:is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
 .sw-keys { display: flex; gap: 6px; color: var(--muted); }
 .sw-keys .ic { width: 14px; height: 14px; }
 .sw-list { border-top: 1px solid var(--line); padding: 10px 10px; max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -951,3 +930,42 @@ dialog.acct-dlg { width: min(960px, calc(100vw - 24px)); overflow: hidden; }
 .sync-dev small { display: block; font-size: 12px; }
 .btn.danger-text { color: var(--red); }
 .set-row .upd-btns .btn[disabled] { opacity: .5; cursor: default; }
+
+/* ───────────────────────────── Android TV (the pages inside the TV app, steered with a remote: js/tv.js) ───────────────────────────── */
+/* what a TV has no use for: keyboard shortcuts, Multi view, downloads, files from this computer, links to copy or open, the page's own player */
+html.tv #btnKeys, html.tv #btnPalette, html.tv #nav [data-route="multiview"], html.tv #nav [data-route="downloads"],
+html.tv [data-multi], html.tv .multi-btn, html.tv [data-dl], html.tv .ep-dl, html.tv [data-act="dl-season"], html.tv [data-act="copy"], html.tv [data-act="trailer"],
+html.tv #typeTiles [data-type="file"], html.tv #player, html.tv [data-copy], html.tv [data-sync="copy"], html.tv [data-act="ep-more"], html.tv .card .c-remove { display: none !important; }
+html.tv #topbar { -webkit-app-region: no-drag; }
+html.tv, html.tv body { cursor: default; }
+/* the focus ring: what the remote is on */
+html.tv :focus { outline: 1px solid var(--accent); outline-offset: 2px; scroll-margin: 28px; }
+html.tv .card:focus { outline: none; }
+html.tv .card:focus .c-img, html.tv .chan-card:focus { outline: 1px solid var(--accent); outline-offset: 2px; }
+html.tv .card:focus .c-img { transform: translateY(-2px); box-shadow: var(--shadow); }
+html.tv .card:focus .c-title { color: var(--text); }
+html.tv .row.ch:focus, html.tv .ep:focus, html.tv .sw-row:focus, html.tv .cat:focus, html.tv .menu-i:focus, html.tv .g-prog:focus, html.tv .g-chan:focus { outline-offset: -1px; }
+html.tv .ep:focus { background: var(--panel); border-color: var(--line); }
+/* a search box: its own border shows the focus of the text field in it (a button in it, like the scope chip, has its own) */
+html.tv :is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
+html.tv .sw-search { border-color: var(--line); }
+html.tv .sw-search:has(input:focus) { border-color: var(--accent); }
+/* keys of a computer keyboard: no use with a remote */
+html.tv .sw-keys, html.tv .sw-foot > span:has(> kbd), html.tv .pal-foot, html.tv #mvPickClose { display: none; }
+html.tv [data-act="hero-open"]:focus { scroll-margin-top: 600px; }   /* the first thing on the dashboard: scrolls it back to its top */
+/* Live TV: next to the channel list, the channel the focus is on and what it shows now */
+html.tv .player-slot { background: var(--bg); overflow: hidden; }
+.tv-ch { position: absolute; inset: 0; padding: 26px 30px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.tv-ch-head { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.tv-ch-head .logo { width: 64px; height: 64px; flex: none; border-radius: 14px; background: var(--panel-2); display: grid; place-items: center; overflow: hidden; font-weight: 800; color: var(--muted); }
+.tv-ch-head .logo img { width: 100%; height: 100%; object-fit: contain; }
+.tv-ch-head b { display: block; font-size: 24px; letter-spacing: -.02em; }
+.tv-ch-head small { color: var(--muted); font-size: 13px; }
+.tv-ch-now { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.tv-ch h3 { margin: 0; font-size: 20px; }
+.tv-ch .bar { max-width: 420px; }
+.tv-ch p { margin: 0; max-width: 62ch; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.tv-ch-next { font-size: 14px; }
+.tv-ch-hint { margin-top: auto; font-size: 12px; }
+html.tv .cats-col { width: 242px; }   /* the narrower columns of a small window crowd the icons in their heading */
+html.tv .chan-col { width: 300px; }

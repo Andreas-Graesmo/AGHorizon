@@ -25,7 +25,7 @@ const desktopStub = () => {
   const never = () => new Promise(() => {});
   window.tunerDesktop = {
     displays: async () => [], focusWindow: async () => {}, appInfo: async () => ({ version: '2.2.1', platform: 'darwin' }), ready: () => {},
-    updater: { status: async () => ({ state: 'idle' }), check: async () => {}, download: async () => {}, install: async () => {}, openReleases: async () => {}, onStatus: () => {} },
+    updater: { status: async () => ({ state: 'idle' }), check: async () => {}, download: async () => {}, install: async () => {}, openReleases: async () => {}, notes: async () => ({}), setChannel: async (c) => c, onStatus: () => {} },
     downloads: { list: never, add: never, pause: never, resume: never, reorder: never, remove: never, reveal: never, openFolder: never, chooseFolder: never, setOption: never, setWatching: async () => {}, orphans: async () => [], adopt: never, onChange: () => {} },
   };
 };
@@ -181,9 +181,9 @@ async function main(only) {
           devices: { aaaaaaaaaaaaaaaa: { name: 'Living room PC', at: new Date(now - 40e3).toISOString() }, bbbbbbbbbbbbbbbb: { name: 'Laptop', at: new Date(now - 26 * 60e3).toISOString() }, cccccccccccccccc: { name: 'Office', at: new Date(now - 2 * 864e5).toISOString() } } },
       });
       await hideCursor(page);
-      await page.evaluate(() => { clearTimeout(sy.timer); sy.keys = null; sy.showCode = true; sy.info = { host: 'Living room PC' }; go('settings'); });
+      await page.evaluate(() => { clearTimeout(sy.timer); sy.keys = null; sy.showCode = true; sy.info = { host: 'Living room PC' }; openSettings('Sync'); });
       await settle(page, 400);
-      const box = await page.evaluate(() => { const c = document.getElementById('set-sync'); c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: r.x - 12, y: r.y - 12, width: r.width + 24, height: r.height + 24 }; });
+      const box = await page.evaluate(() => { const c = document.getElementById('syncCard'); c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: r.x - 12, y: r.y - 12, width: r.width + 24, height: r.height + 24 }; });
       await settle(page, 300);
       const png = path.join(OUT, 'sync.png');
       await page.screenshot({ path: png, clip: box });
