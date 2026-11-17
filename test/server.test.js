@@ -171,3 +171,91 @@ test('HLS playlists pass the channel’s address on to their segments', () => {
   const out = rewriteM3u8('#EXTM3U\nseg1.ts\n', 'http://x/live/a.m3u8', '', 'http://x/live/a.m3u8');
   assert.match(out, /\/api\/stream\?url=http%3A%2F%2Fx%2Flive%2Fseg1\.ts&src=http%3A%2F%2Fx%2Flive%2Fa\.m3u8/);
 });
+
+// a raw request to the local server: also paths fetch() would clean up ("//"), and a time limit, so a request
+// that is never answered fails the test instead of hanging it
+function rawRequest(port, pathname, { method = 'GET', headers = {}, body } = {}) {
+  const http = require('http');
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: pathname, method, headers: { Host: `127.0.0.1:${port}`, ...headers } }, (r) => {
+      let text = '';
+      r.setEncoding('utf8');
+      r.on('data', (d) => { text += d; });
+      r.on('end', () => resolve({ status: r.statusCode, headers: r.headers, text }));
+    });
+    req.setTimeout(3000, () => req.destroy(new Error(`no answer to ${method} ${JSON.stringify(pathname)}`)));
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+test('an empty download is answered, not read with a stream that cannot start', async (t) => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { start, server, setLocalFiles } = require('../server');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-empty-'));
+  const file = path.join(dir, 'film.mp4');
+  fs.writeFileSync(file, '');   // a provider that answered 200 with no body
+  setLocalFiles((id) => (id === 'abcdef0123' ? file : null));
+  const port = await start(0);
+  t.after(() => { server.close(); setLocalFiles(null); fs.rmSync(dir, { recursive: true, force: true }); });
+
+  const whole = await rawRequest(port, '/api/local/abcdef0123');
+  assert.strictEqual(whole.status, 200);
+  assert.strictEqual(whole.headers['content-length'], '0');
+  assert.strictEqual(whole.text, '');
+  assert.strictEqual((await rawRequest(port, '/api/local/abcdef0123', { method: 'HEAD' })).status, 200);
+  const ranged = await rawRequest(port, '/api/local/abcdef0123', { headers: { Range: 'bytes=0-' } });   // what <video> asks for
+  assert.strictEqual(ranged.status, 416);
+  assert.strictEqual(ranged.headers['content-range'], 'bytes */0');
+  // and the server is still there
+  assert.strictEqual((await rawRequest(port, '/api/capabilities')).status, 200);
+});
+
+test('a request path that cannot be read gets 400, and only from this computer', async (t) => {
+  const { start, server } = require('../server');
+  const port = await start(0);
+  t.after(() => server.close());
+  assert.strictEqual((await rawRequest(port, '//')).status, 400);              // new URL() can't parse it
+  assert.strictEqual((await rawRequest(port, '/%00')).status, 400);            // a null byte in a file name
+  assert.strictEqual((await rawRequest(port, '/js/a%00.js')).status, 400);
+  assert.strictEqual((await rawRequest(port, '//', { headers: { Host: 'evil.example' } })).status, 403);   // other sites first get no further
+  assert.strictEqual((await rawRequest(port, '/')).status, 200);
+});
+
+test('a request body that is not a JSON object is the caller’s mistake (400), not the provider’s', async (t) => {
+  const { start, server } = require('../server');
+  const port = await start(0);
+  t.after(() => server.close());
+  for (const route of ['/api/epg', '/api/subs/login', '/api/subs/search', '/api/subs/download']) {
+    for (const body of ['not json', '{"url":', 'null', '"text"', '42']) {
+      const r = await rawRequest(port, route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      assert.strictEqual(r.status, 400, `${route} with ${body}: ${r.text}`);
+      assert.doesNotMatch(r.text, /Unexpected token|Unexpected end|Cannot read prop/, `${route} with ${body}`);
+    }
+  }
+});
+
+test('a guide that was just downloaded again is the newest in the cache, not the next one thrown out', async (t) => {
+  const http = require('http');
+  const zlib = require('zlib');
+  const { start, server } = require('../server');
+  const hits = {};
+  const guide = zlib.gzipSync('<tv><channel id="a"><display-name>A</display-name></channel></tv>');
+  const files = http.createServer((req, res) => { hits[req.url] = (hits[req.url] || 0) + 1; res.end(guide); }).listen(0, '127.0.0.1');
+  await new Promise((r) => files.once('listening', r));
+  const port = await start(0);
+  t.after(() => { server.close(); files.close(); });
+  const ask = async (name, force = false) => {
+    const r = await rawRequest(port, '/api/epg', { method: 'POST', body: JSON.stringify({ url: `http://127.0.0.1:${files.address().port}/cache-${name}.xml.gz`, ids: ['a'], force }) });
+    assert.strictEqual(r.status, 200, r.text);
+  };
+  for (const n of ['a', 'b', 'c', 'd', 'e', 'f']) await ask(n);   // the cache keeps six guides
+  await ask('a', true);   // refreshed: a is now the newest
+  await ask('g');         // a seventh: the oldest (b) goes
+  await ask('a');
+  assert.strictEqual(hits['/cache-a.xml.gz'], 2, 'the refreshed guide came from the cache');
+  await ask('b');
+  assert.strictEqual(hits['/cache-b.xml.gz'], 2, 'the oldest guide was the one thrown out');
+});
