@@ -298,22 +298,29 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
   - `android-tv` is unchanged. `publish-test` now needs `windows`, `desktop` and `android-tv`.
 - [x] **5.7 Asset names.** `scripts/tauri-release.js` writes `AG-Horizon-Setup-<v>.exe`, `.exe.sig` and `latest.json`. `latest.json` has both the `windows-x86_64-nsis` and `windows-x86_64` keys, with URLs under this repository's releases, which the Electron hand-over requires. The website regex and README names still match.
 - [x] **5.8 `android.yml`:** no change.
-- [ ] **5.9 Licensing: ffmpeg GPL source with the first Tauri release** (decided in 0.4).
-  - [ ] Ship `win32-x64.LICENSE` (GPL v3) next to the ffmpeg sidecar, and name ffmpeg and its licence on the About page and in the README.
-  - [ ] Build the **corresponding source archive** once, and attach it to a pinned release `ffmpeg-6.1.1-gyan-essentials-source` that every Tauri release's notes link to:
-    - FFmpeg at commit `e38092ef93` (`win32-x64.README`);
-    - the 33 libraries whose exact versions that README lists (x264 `v0.164.3172`, x265 `3.5-153-gce8642f22`, libvpx `v1.13.1-601-g655da33b8`, aom, opus, lame, …), fetched by a script at those versions.
-  - [ ] **Open:** about 8 bundled libraries have **no version** in the README: gnutls, gmp, libxml2, zlib, xz/lzma, bzip2, iconv and fontconfig. Ask gyan.dev for their exact sources or versions.
-    - **Read from the binary itself (2026-11-17, sha256 `04e13079…`):** zlib **1.2.13** ("deflate 1.2.13"), bzip2 **1.0.8** ("1.0.8, 13-Jul-2019"), GnuTLS **3.6.16** ("Enabled GnuTLS 3.6.16 logging"), xz/liblzma **5.2.9**.
-      - libxml2 reports `LIBXML_VERSION` **21300**: a development snapshot between 2.12 and 2.13 (built from git), not a release. The exact commit is unknown.
-      - gmp, libiconv and fontconfig carry no version text.
-      - The configure line is in the binary too: `--enable-gpl --enable-version3 --enable-static … --enable-fontconfig --enable-iconv --enable-gnutls --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-zlib …`.
-    - **Probable recipe:** media-autobuild_suite on MSYS2. Its `build/media-suite_compile.sh` fetches GnuTLS as a pinned release tarball, takes gmp and xz from MSYS2 packages (`do_pacman_install`), and builds libxml2 from git.
-      - MSYS2 keeps the source of every past package (`repo.msys2.org/mingw/sources/`). So with the build date, the versions of gmp, libiconv and fontconfig can be looked up there, and that suite's history at that date gives its pins.
-      - The libxml2 commit stays a guess without gyan.
-      - Still worth asking gyan: the build date, the media-autobuild_suite commit, and the libxml2 commit.
-    - If they can't be had, switch the sidecar to a build whose recipe pins every source, such as BtbN FFmpeg-Builds (option B in the decision). That means re-running the media spike, and decision 0.4 is revisited.
-  - [ ] Keep the license file and README hashes from 0.4 with the archive, so it's clear which binary it belongs to.
+- [ ] **5.9 Licensing: ffmpeg GPL source.** **Changed on 2026-11-17 (owner's decision): Option B.** The Windows app now ships BtbN's ffmpeg, whose sources are all pinned.
+  - **The build:** BtbN/FFmpeg-Builds `autobuild-2026-10-31-12-59` (a month-end build, which BtbN keeps until 2028-10), `ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip`.
+    - Zip sha256 `401dffcf…`, `ffmpeg.exe` sha256 `c46215f8…`, `LICENSE.txt` GPL v3.
+    - BtbN no longer builds 6.1. 8.1 is the older of its two maintained release branches.
+    - `scripts/tauri-prep.js` refuses anything else. `ffmpeg.LICENSE` in the app names the source release.
+  - **Cost:** `ffmpeg.exe` is 165 MB instead of 83 MB (it has many more libraries). Compressed that is about 47 MB instead of 22 MB, so the installer grows by roughly 25 MB, to about 75 MB.
+  - **The source:**
+    - `scripts/ffmpeg-source.sh` fetches the following, with `SHA256SUMS` and a README:
+      - BtbN's scripts, patches and Dockerfiles at commit `5031c6f`;
+      - FFmpeg `release/8.1` at `8dca1586f4`;
+      - every library of the 109 build stages enabled for win64 / gpl / 8.1, through BtbN's own `download.sh`.
+    - `.github/workflows/ffmpeg-source.yml` (run by hand) publishes it as the pre-release `ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source`.
+    - Its tag isn't a version number, so no updater offers it. electron-updater's Test channel skips tags that aren't valid semver, and Stable reads only GitHub's latest release, which a pre-release never is. The Tauri app, the Android TV app and `handover.js` skip it too.
+  - [ ] Re-run the media spike and the three Windows e2e suites with 8.1. The app's ffmpeg options (`-reconnect*`, `-copyts`, `-c:a aac`, `-movflags`, …) all exist in 8.1.
+  - [ ] Name ffmpeg and its licence on the About page and in the README, with a link to the source release.
+  - [ ] **Versions already shipped with gyan's 6.1.1** (Electron ≤ 2.5.0 on Windows, and Tauri v3.1.0-beta.0) — "make do with what we have":
+    - 33 libraries come with versions from gyan's README;
+    - zlib 1.2.13, bzip2 1.0.8, GnuTLS 3.6.16 and xz 5.2.9 were read from the binary;
+    - libxml2 is a 2.13 development snapshot (commit unknown);
+    - gmp, libiconv and fontconfig have no version.
+
+    Not pursued further for now. A best-effort archive can be assembled from this if ever needed.
+  - The macOS/Linux Electron apps' ffmpeg (`ffmpeg-static`'s other builders) is handled in Phase 9.
 - [x] **Gate, self-update (CI):** `e2e/tauri-update.js`, 14/14. Versions 9.0.0 and 9.0.1 are built with a throwaway key and served locally.
   - A manifest for the installed version → up to date.
   - An installer with one byte changed → "The signature verification failed", and nothing is installed.
