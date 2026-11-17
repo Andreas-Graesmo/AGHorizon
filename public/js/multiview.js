@@ -16,6 +16,8 @@ const MV_LAYOUTS = {
   '4': { n: 4, label: '2 × 2' },
 };
 const MV_MAX = 4;
+// The Tauri app on Linux (WebKitGTK, not Chromium): see MvTile.play
+const mvNoMse = !TV && !!window.__TAURI__ && /Linux/.test(navigator.userAgent) && /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium/.test(navigator.userAgent);
 
 const mv = {
   layout: '2c',
@@ -108,6 +110,7 @@ class MvTile {
     const v = this.video;
     v.onerror = null;
     v.pause();
+    tcDetach(v);
     v.removeAttribute('src');
     v.load();
   }
@@ -125,7 +128,9 @@ class MvTile {
     const token = ++this.token;
     pushRecent(ch);
     loadShortEpg(ch);
-    const plan = playPlan(ch);
+    // Linux's WebKit can freeze its whole page with several MSE players at once (MIGRATION_PLAN.md 9.3): there every
+    // picture plays the server's conversion (copied H.264 is cheap), which it plays as a plain video
+    const plan = mvNoMse && state.ffmpeg ? ['tc'] : playPlan(ch);
     // sharing first; if the provider won't play along the picture falls back to a connection of its own
     this.start(ch, mvShareUrl(ch) && plan[0] !== 'tc' ? ['share', ...plan] : plan, token);
   }
@@ -206,7 +211,7 @@ class MvTile {
       this.converted = true;
       this.tcEl.hidden = false;
       v.onerror = () => fail('The converted stream could not be played');
-      v.src = `/api/transcode?url=${enc(from)}${uaParam(p)}&video=${info.video === 'h264' ? 'copy' : 'h264'}&maxh=${maxh}`;
+      tcAttach(v, `/api/transcode?url=${enc(from)}${uaParam(p)}&video=${info.video === 'h264' ? 'copy' : 'h264'}&maxh=${maxh}`);
       v.play().catch(() => {});
     } else {
       v.src = src;
