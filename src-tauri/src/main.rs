@@ -50,6 +50,8 @@ fn port() -> u16 {
     std::env::var("TUNER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(DEFAULT_PORT)
 }
 
+mod updater;
+
 fn main() {
     tauri::Builder::default()
         // first, as its docs ask: a second launch focuses this one (two copies would fight over the port)
@@ -57,6 +59,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // size, position and maximised (MIGRATION_PLAN.md 4.1); not VISIBLE: the page shows the window when drawn
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -67,8 +70,10 @@ fn main() {
         .manage(Server(Mutex::new(None)))
         .manage(Rpc::default())
         .manage(Migration::default())
-        .invoke_handler(tauri::generate_handler![downloads, sync, popups, migration])
+        .manage(updater::Updater::default())
+        .invoke_handler(tauri::generate_handler![downloads, sync, popups, migration, updater::updater])
         .setup(|app| {
+            updater::init(app.handle());
             start_server(app.handle().clone())?;
             Ok(())
         })
@@ -77,6 +82,7 @@ fn main() {
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 stop_server(app);
+                updater::install_on_quit(app);   // exits if an update was waiting
             }
         });
 }
@@ -190,7 +196,7 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn stop_server(app: &AppHandle) {
+pub(crate) fn stop_server(app: &AppHandle) {
     // first ask: the downloads engine marks what was downloading to carry on next time, saves, and exits
     let asked = tauri::async_runtime::block_on(async {
         tokio::time::timeout(Duration::from_millis(1500), rpc(app, "quit", json!([]))).await

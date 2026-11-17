@@ -18,6 +18,8 @@ tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync", "time"] }
+tauri-plugin-updater = "2"
+semver = "1"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6", features = ["windows-native"] }   # the sync code, in Windows Credential Manager
