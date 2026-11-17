@@ -2,7 +2,10 @@
 
 This is the media spike from `MIGRATION_PLAN.md` Phase 0.1. It tests what each Tauri v2 webview can play when the page is served by AG Horizon's real `server.js` on the app's origin (`http://127.0.0.1:47831`). Playback goes through the same paths the app uses.
 
-- **Runs:** CI [run #2](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44078652026) (commit `0a60d3b`) and run #3 (`1574ad2`, MSE and timeout additions), plus repeated local runs on Ubuntu 24.04 WebKitGTK.
+- **Runs:**
+  - CI [run #2](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44078652026) (commit `0a60d3b`).
+  - CI [run #5](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44083465027) (`c34f854`, which adds the MSE variant and the timeouts). In #5, Windows finished, Linux froze, and macOS never got a runner.
+  - Repeated local runs on Ubuntu 24.04 WebKitGTK.
 - **Harness:**
   - `serve.js`: the app server plus fixtures and a results endpoint.
   - `page/spike.js`: the tests.
@@ -33,7 +36,7 @@ This is the media spike from `MIGRATION_PLAN.md` Phase 0.1. It tests what each T
 | mpegts.js TS H.264/AAC | ✅ | ✅ | 🟡 | ✅ heard | ✅ heard |
 | mpegts.js TS HEVC | ❌ (VM) | ❌ | 🟡 | ✅ heard | 🟡 |
 | mpegts.js TS AC-3 / E-AC-3 | 🟡 no sound (→ app converts) | 🟡 | 🟡 | ✅ heard | ✅ heard |
-| Multiview 4 × mpegts.js | ✅ | ✅ | ✅ | ✅ | ⚠️ flaky, see below |
+| Multiview 4 × mpegts.js | ✅ | ✅ | ✅ | ✅ run #2 / **froze** run #5 | ⚠️ flaky, see below |
 | Multiview 4 × hls.js / 4 × MP4 | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ⚠️ / ✅ |
 | **Compatibility mode** `/api/transcode` (fMP4, `<video src>`) | ✅ | ✅ | **❌ media error 4, every mode** | 🟡 | ✅ heard |
 | `/api/transcode?video=hevc` (Matroska) | ❌ silent fail, no error event | ❌ | ❌ error event fires | 🟡 plays | ✅ |
@@ -42,14 +45,16 @@ This is the media spike from `MIGRATION_PLAN.md` Phase 0.1. It tests what each T
 | `canvas.captureStream()` (Mirror fallback) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `requestPictureInPicture` | ✅ (needs gesture) | ✅ | ✅ (needs gesture) | ➖ | ➖ |
 | `navigator.wakeLock` | ✅ granted | ✅ | ❌ denied | ❌ denied | ❌ denied |
-| `invoke` from `http://127.0.0.1:47831` (`remote.urls`) | (run #3) | (run #3) | ✅ | ✅ | ✅ |
-| `/api/*` same-origin guard passes | (run #3) | (run #3) | ✅ | ✅ | ✅ |
+| `invoke` from `http://127.0.0.1:47831` (`remote.urls`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/api/*` same-origin guard passes | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Compatibility mode **through MSE** (fetch → `SourceBuffer`) | ✅ | ✅ | **pending (no macOS runner)** | (froze earlier) | ✅ heard |
 
 ## Findings and what they change in the plan
 
 1. **Compatibility mode is broken on macOS as built.** WKWebView rejects every `/api/transcode` response (media error 4), including plain fragmented-MP4 H.264/AAC. The same bytes play everywhere else. The likely cause is that WebKit's progressive player wants a byte-range-capable resource, while the server sends `Accept-Ranges: none` with no length.
-   - Run #3 checks the candidate fix: fetch the same fMP4 and append it to a `SourceBuffer` (MSE). It works on WebKitGTK locally.
-   - **Plan change:** add "compatibility mode via MSE on WebKit" to Phase 2/4. The other option is HLS output from ffmpeg for WebKit.
+   - The candidate fix is to fetch the same fMP4 and append it to a `SourceBuffer` (MSE). It plays with sound on WebView2 (run #5) and on WebKitGTK (locally).
+   - **It has not yet run on macOS**, the one place it matters, because run #5's macOS job never got a runner.
+   - **Plan change (task 2.12):** add "compatibility mode via MSE on WebKit". The other option is HLS output from ffmpeg for WebKit.
    - The audit's earlier guess ("Matroska fails on WebKit") was right but only half the story: on macOS, fMP4 fails too.
 2. **The HEVC fallback in `player.js` can fail silently.** On Chromium/WebView2, an undecodable HEVC stream (native or Matroska) plays sound with **no picture and no `error` event**, so the `video.onerror` switch to H.264 never fires.
    - Today this only matters where `hevcOk` (MSE `hvc1`) is true but the element can't decode. That was not seen on CI.
@@ -60,18 +65,23 @@ This is the media spike from `MIGRATION_PLAN.md` Phase 0.1. It tests what each T
 5. **PiP.** `requestPictureInPicture` exists on WebView2 and WKWebView, but **not on WebKitGTK**. Hide PiP on Linux unless the opener-popup spike (0.2) works.
 6. **Keep-awake must be native.** `navigator.wakeLock` is denied on both WebKits, and granted on WebView2. This confirms plan 4.6: use the `keepawake` crate.
 7. **WebKitGTK is the most capable at decoding.** It showed the picture for every fixture, HEVC included, both natively and through MSE. Sound was *heard* for AC-3, E-AC-3 and HEVC streams through mpegts.js. This needs the GStreamer plugins (`gst-libav`, `-bad`). On Linux the app can rely on compatibility mode less, but **only if those plugins are present**. That makes `bundleMediaFramework: true` for the AppImage important (plan 0.1 and 5.5).
-8. **Linux Multiview is flaky locally, but not on CI.** On Ubuntu 24.04 under Xvfb with software GL, 4 simultaneous MSE pictures sometimes left one picture dead: mpegts.js "Failed to push buffer" (1 of 4 runs), hls.js stuck at `readyState 1` (2 of 4 runs). Progressive MP4 was always 4/4.
-   - Earlier runs also wedged the whole web process, but every one of those happened with stale WebKit processes and an old server still running. In 12 clean runs it did not recur, so it is **unconfirmed**.
-   - Ubuntu 22.04 on CI played 4/4 on every path.
-   - Next step: repeat on a real Linux desktop with a GPU before treating it as a blocker. Consider a per-tile retry in `multiview.js`, which helps on every platform anyway.
-9. **The `remote.urls` IPC design works.** `window.__TAURI__` is injected into the page served by the app's own server, and `invoke` of an app command granted by a capability succeeds. That makes plan option A (keep the origin `http://127.0.0.1:47831`) confirmed on macOS and Linux; Windows is in run #3. The server's same-origin guard accepts the webview on every platform tested.
+8. **Linux Multiview can freeze the whole page. This is confirmed, and it is the main Linux risk.** With several MSE pictures at once, WebKitGTK sometimes stops the web process entirely, so even page timers stop and the guard can't report.
+   - **Where it froze:**
+     - On a clean CI runner, at the first Multiview test (2 × mpegts.js) in run #5. Run #2 passed 4/4.
+     - Locally (Ubuntu 24.04, Xvfb, software GL), in the first full run, and in 4 of 6 looped runs.
+   - **Without a full freeze,** a single picture sometimes fails: mpegts.js "Failed to push buffer", or hls.js stuck at `readyState 1`.
+   - **Progressive MP4 (no MSE) has never failed:** 4/4 in every run.
+   - **Candidate mitigation, untested:** on Linux, have Multiview tiles play the server's progressive output (`/api/transcode?video=copy`, which WebKitGTK plays) instead of MSE, or cap Linux Multiview at 1–2 MSE tiles. Also add a per-tile retry.
+   - This is still CI and container hardware. Retest on a real Linux desktop with a GPU.
+9. **The `remote.urls` IPC design works.** `window.__TAURI__` is injected into the page served by the app's own server, and `invoke` of an app command granted by a capability succeeds. That makes plan option A (keep the origin `http://127.0.0.1:47831`) confirmed on all three webviews (Windows in run #5). The server's same-origin guard accepts the webview on every platform tested.
 
 ## Still to check by hand (cannot be automated here)
 
 - Sound on WKWebView for hls.js, mpegts.js and native HLS (expected to work; the harness can't hear MSE on Mac).
 - HEVC and AC-3 on a real Windows PC with the HEVC Video Extensions and a GPU.
 - Element fullscreen and PiP with a real click (all webviews refuse them without a gesture, which is correct).
-- Multiview with 4 or more real channels on a real Linux desktop.
+- Multiview with 4 or more real channels on a real Linux desktop (see finding 8).
+- The MSE fix for compatibility mode on macOS (finding 1): re-run CI when a macOS runner is free, or run the spike on a Mac.
 
 ## Re-running
 
