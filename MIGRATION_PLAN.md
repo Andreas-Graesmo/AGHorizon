@@ -44,14 +44,16 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
 ### Phase 0: Spikes and decisions (go/no-go)
 
 - [x] **0.1 Media spike on all three webviews.** Done on CI VMs (Windows WebView2, macOS WKWebView, Ubuntu 22.04 WebKitGTK) and locally (Ubuntu 24.04). The harness is in `spike/media/` and the results in [`spike/media/RESULTS.md`](spike/media/RESULTS.md). Outcomes that change this plan:
-  - **Go on all three.** Every webview plays H.264/AAC through native, hls.js and mpegts.js; autoplay works; and `invoke` from the `remote.urls` origin works (Windows confirmation pending in CI run #3).
+  - **Go on Windows and macOS. Go on Linux, with a Multiview caveat.** Every webview plays H.264/AAC through native, hls.js and mpegts.js; autoplay works; and `invoke` from the `remote.urls` origin works on all three.
   - **New, blocking on macOS:** WKWebView rejects every `/api/transcode` stream, fMP4 included, so compatibility mode is dead there as built. Fix it by feeding the conversion through MSE on WebKit (being verified on macOS), or by having ffmpeg output HLS. → task 2.12.
   - **New:** undecodable HEVC gives sound with no picture and no `error` event (Chromium/WebView2), so the H.264 fallback in `player.js` never fires. → task 2.13.
   - **Confirmed:** keep `--enable-blink-features=AudioVideoTracks` (without it `audioTracks` is missing on WebView2).
   - **Confirmed:** `navigator.wakeLock` is denied on both WebKits, so use `keepawake` (4.6).
   - **Confirmed:** no PiP API at all on WebKitGTK (4.3).
   - **Confirmed:** `canvas.captureStream()` works everywhere, so the Mirror fallback is viable (4.4).
-  - **Open:** Multiview with 4 MSE pictures on Linux was flaky in a software-GL container (but 4/4 on CI). Retest on a real Linux desktop, and add a per-tile retry. Manual checks still open: sound on WKWebView for MSE streams, and HEVC/AC-3 on real Windows hardware.
+  - **New, Linux:** several MSE pictures at once (Multiview) can freeze WebKitGTK's whole web process. It reproduced on a clean CI runner. → task 4.10.
+  - **Open:** the MSE fix for macOS compatibility mode has not run on macOS yet (no runner). It works on WebView2 and WebKitGTK.
+  - **Open, manual checks:** sound on WKWebView for MSE streams; HEVC/AC-3 on real Windows hardware; Linux Multiview on a real desktop.
 
   The original checklist for this spike:
   - [ ] hls.js and mpegts.js playback (MSE), including the mpegts Worker (`player.js:191-192`)
@@ -207,6 +209,10 @@ All 34 preload members are listed in Appendix A.
 - [ ] **4.7 External links.** `window.open(..., '_blank')` for trailers (`workspace.js:831`) goes to the opener plugin, and so do `updater:open` and any other http(s) URL.
 - [ ] **4.8 macOS lifecycle.** Keep Tauri's default macOS app menu (Edit shortcuts, Cmd+Q). Optional parity: `RunEvent::Reopen` recreates `main`, and `ExitRequested` → `prevent_exit()` when the last window closes.
 - [ ] **4.9 Clipboard.** If spike 0.1 showed `navigator.clipboard` failing on WKWebView, add `tauri-plugin-clipboard-manager`.
+- [ ] **4.10 Multiview on Linux** (found by spike 0.1).
+  - WebKitGTK can freeze its web process when several MSE players run at once.
+  - On Linux, play Multiview tiles from the server's progressive output (`/api/transcode?video=copy`) instead of MSE, and verify that this avoids the freeze. If it doesn't, cap Linux at 1–2 tiles.
+  - Add a per-tile retry everywhere.
 - [ ] **Gate:** a manual QA pass of the window features on all OSes: PiP, mirror to a second monitor, fullscreen player and multiview, no screensaver during playback, window state restored, a second launch focuses the first, `.m3u` drag-drop works.
 
 ### Phase 5: Updater, packaging and CI
