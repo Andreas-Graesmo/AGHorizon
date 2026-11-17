@@ -7,26 +7,10 @@
  */
 const { app, ipcMain, dialog, safeStorage, BrowserWindow } = require('electron');
 const fs = require('fs');
-const fsp = fs.promises;
-const os = require('os');
 const path = require('path');
+const folderSync = require('../desktop/sync-folder');   // the folder itself, shared with the Tauri app's sidecar
 
-const cfgFile = () => path.join(app.getPath('userData'), 'sync.json');
 const secretFile = () => path.join(app.getPath('userData'), 'sync-code');
-const SUBDIR = 'AG Horizon Sync';
-const HEX = (min, max) => new RegExp(`^[0-9a-f]{${min},${max}}$`);
-
-function readCfg() { try { return JSON.parse(fs.readFileSync(cfgFile(), 'utf8')); } catch { return {}; } }
-function writeCfg(c) { fs.writeFileSync(cfgFile(), JSON.stringify(c, null, 2)); }
-
-// the folder for one vault: "<picked folder>/AG Horizon Sync/<first 16 of the vault id>"
-function vaultDir(vault) {
-  const root = readCfg().folder;
-  if (!root) throw new Error('No sync folder chosen');
-  if (!HEX(64, 64).test(String(vault))) throw new Error('Bad vault');
-  return path.join(root, SUBDIR, vault.slice(0, 16));
-}
-const checkDevice = (d) => { if (!HEX(16, 32).test(String(d))) throw new Error('Bad device'); return d; };
 
 // Electron's safeStorage, the asynchronous calls (the synchronous ones are on their way out). What the synchronous
 // ones encrypted, these decrypt.
@@ -52,11 +36,8 @@ async function readCode() {
 }
 
 function init() {
-  ipcMain.handle('sync:info', async () => ({
-    host: os.hostname().replace(/\.(local|lan|home)$/i, ''),
-    keychain: await keychain(),
-    folder: readCfg().folder || '',
-  }));
+  folderSync.configure({ dataDir: app.getPath('userData') });
+  ipcMain.handle('sync:info', async () => ({ host: folderSync.host(), keychain: await keychain(), folder: folderSync.folder() }));
 
   /* the sync code */
   ipcMain.handle('sync:code:get', () => readCode());
@@ -74,39 +55,11 @@ function init() {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (r.canceled || !r.filePaths[0]) return '';
-    writeCfg({ ...readCfg(), folder: r.filePaths[0] });
-    return r.filePaths[0];
+    return folderSync.setFolder(r.filePaths[0]);
   });
-  ipcMain.handle('sync:folder:list', async (_e, vault) => {
-    const dir = vaultDir(vault);
-    let names = [];
-    try { names = await fsp.readdir(dir); } catch { return []; }
-    const out = [];
-    for (const n of names) {
-      const m = /^([0-9a-f]{16,32})\.agh$/.exec(n);
-      if (!m) continue;
-      try {
-        const file = path.join(dir, n);
-        const [st, blob] = await Promise.all([fsp.stat(file), fsp.readFile(file)]);
-        out.push({ device: m[1], updated: st.mtime.toISOString(), blob: new Uint8Array(blob) });
-      } catch { /* being written by the sync program right now: next time */ }
-    }
-    return out;
-  });
-  ipcMain.handle('sync:folder:put', async (_e, vault, device, blob) => {
-    const dir = vaultDir(vault);
-    await fsp.mkdir(dir, { recursive: true });
-    const file = path.join(dir, checkDevice(device) + '.agh');
-    const tmp = file + '.tmp';
-    await fsp.writeFile(tmp, Buffer.from(blob));
-    await fsp.rename(tmp, file);   // whole files only: a sync program never picks up half of one
-    return new Date().toISOString();
-  });
-  ipcMain.handle('sync:folder:remove', async (_e, vault, device) => {
-    const dir = vaultDir(vault);
-    if (device) await fsp.rm(path.join(dir, checkDevice(device) + '.agh'), { force: true });
-    else await fsp.rm(dir, { recursive: true, force: true });
-  });
+  ipcMain.handle('sync:folder:list', (_e, vault) => folderSync.list(vault));
+  ipcMain.handle('sync:folder:put', (_e, vault, device, blob) => folderSync.put(vault, device, blob));
+  ipcMain.handle('sync:folder:remove', (_e, vault, device) => folderSync.remove(vault, device));
 }
 
 module.exports = { init, readCode };

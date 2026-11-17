@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['src-tauri/**', 'scripts/tauri-prep.js', 'sidecar/**', 'server.js', 'subtitles.js', 'public/**', 'e2e/**', '!**/*.md', '.github/workflows/tauri-windows.yml']
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'sidecar/**', 'server.js', 'subtitles.js', 'public/**', 'e2e/**', '!**/*.md', '.github/workflows/tauri-windows.yml']
 
 permissions:
   contents: read
