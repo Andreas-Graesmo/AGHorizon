@@ -4,15 +4,17 @@
  * Fills src-tauri/binaries/ before a Tauri build (MIGRATION_PLAN.md 2.3):
  *   aghorizon-server-<triple>[.exe]   server.js as a single executable (sidecar/build.js)
  *   ffmpeg-<triple>[.exe] + ffmpeg.LICENSE
- *       Windows: the pinned gyan.dev 6.1.1 build that the app ships today (decision 0.4), refused unless its
- *       SHA-256 matches. Other systems (development only, until MIGRATION_PLAN.md Phase 9): FFMPEG_PATH or `ffmpeg`.
+ *       Windows: BtbN's ffmpeg 8.1 GPL build from their October 2026 month-end autobuild (kept by BtbN until
+ *       2028-10), refused unless the zip and the unpacked ffmpeg.exe match their SHA-256 (MIGRATION_PLAN.md 5.9,
+ *       Option B: every library in it is pinned in BtbN's public scripts, so its source can be published).
+ *       Other systems (development only, until MIGRATION_PLAN.md Phase 9): FFMPEG_PATH or `ffmpeg`.
  * Usage: node scripts/tauri-prep.js [--skip-server]
  */
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
+const os = require('os');
 
 const root = path.join(__dirname, '..');
 const out = path.join(root, 'src-tauri', 'binaries');
@@ -24,19 +26,22 @@ const triple = TRIPLES[`${process.platform}-${process.arch}`];
 if (!triple) throw new Error(`no target triple for ${process.platform}-${process.arch}`);
 const ext = process.platform === 'win32' ? '.exe' : '';
 
-// MIGRATION_PLAN.md 0.4: github.com/eugeneware/ffmpeg-static release b6.1.1 (gyan.dev 6.1.1 essentials, GPL v3)
+// MIGRATION_PLAN.md 5.9 (Option B). The matching source: scripts/ffmpeg-source.sh and the release FFMPEG.sourceTag.
 const FFMPEG = {
-  base: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1',
-  gz: { name: 'ffmpeg-win32-x64.gz', sha256: '8883a3dffbd0a16cf4ef95206ea05283f78908dbfb118f73c83f4951dcc06d77' },
-  exe: { sha256: '04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00' },
-  license: { name: 'win32-x64.LICENSE', sha256: '8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903' },
+  base: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59',
+  zip: { name: 'ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip', sha256: '401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f' },
+  exe: { sha256: 'c46215f8889634396f0ac0acac738ef2145175e5b6caf28b3daa8ac9a9980c5f' },
+  license: { sha256: '8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903' },   // GPL v3 (LICENSE.txt in the zip)
+  btbnCommit: '5031c6f1082414e53688d39e521849905071070d',   // BtbN/FFmpeg-Builds at that autobuild: every library's pin
+  ffmpegCommit: '8dca1586f4',                                // FFmpeg release/8.1 (n8.1.3-27-g8dca1586f4)
+  sourceTag: 'ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source',
 };
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 async function fetchChecked(name, want) {
   for (let i = 1; ; i++) {
     try {
-      const r = await fetch(`${FFMPEG.base}/${name}`, { signal: AbortSignal.timeout(120000) });
+      const r = await fetch(`${FFMPEG.base}/${name}`, { signal: AbortSignal.timeout(600000) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const buf = Buffer.from(await r.arrayBuffer());
       const got = sha256(buf);
@@ -62,14 +67,24 @@ async function fetchChecked(name, want) {
   const ffOut = path.join(out, `ffmpeg-${triple}${ext}`);
   const licOut = path.join(out, 'ffmpeg.LICENSE');
   if (process.platform === 'win32') {
-    if (fs.existsSync(ffOut) && sha256(fs.readFileSync(ffOut)) === FFMPEG.exe.sha256 && fs.existsSync(licOut)) {
+    if (fs.existsSync(ffOut) && sha256(fs.readFileSync(ffOut)) === FFMPEG.exe.sha256 && fs.existsSync(licOut) && fs.readFileSync(licOut, 'utf8').includes(FFMPEG.sourceTag)) {
       console.log('ffmpeg: already in place, checksum ok');
     } else {
-      const exe = zlib.gunzipSync(await fetchChecked(FFMPEG.gz.name, FFMPEG.gz.sha256));
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-ffmpeg-'));
+      const zip = path.join(tmp, FFMPEG.zip.name);
+      fs.writeFileSync(zip, await fetchChecked(FFMPEG.zip.name, FFMPEG.zip.sha256));
+      // Windows' own tar (bsdtar) unpacks zip files; Git Bash's GNU tar, which may come first on PATH, can't
+      const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+      const dir = FFMPEG.zip.name.replace(/\.zip$/, '');
+      execFileSync(tar, ['-xf', zip, '-C', tmp, `${dir}/bin/ffmpeg.exe`, `${dir}/LICENSE.txt`], { stdio: 'inherit' });
+      const exe = fs.readFileSync(path.join(tmp, dir, 'bin', 'ffmpeg.exe'));
+      const lic = fs.readFileSync(path.join(tmp, dir, 'LICENSE.txt'));
       if (sha256(exe) !== FFMPEG.exe.sha256) throw new Error('ffmpeg.exe: checksum mismatch after unpacking. Refusing it.');
+      if (sha256(lic) !== FFMPEG.license.sha256) throw new Error('ffmpeg LICENSE.txt: checksum mismatch. Refusing it.');
       fs.writeFileSync(ffOut, exe);
-      fs.writeFileSync(licOut, await fetchChecked(FFMPEG.license.name, FFMPEG.license.sha256));
-      console.log(`ffmpeg 6.1.1 (gyan.dev, GPL v3, checksums ok) → src-tauri/binaries/ffmpeg-${triple}${ext}`);
+      fs.writeFileSync(licOut, `${lic.toString('utf8')}\n\n---\nffmpeg n8.1.3-27-g8dca1586f4, built by BtbN/FFmpeg-Builds (commit ${FFMPEG.btbnCommit}).\nThe complete corresponding source: https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/${FFMPEG.sourceTag}\n`);
+      fs.rmSync(tmp, { recursive: true, force: true });
+      console.log(`ffmpeg 8.1 (BtbN, GPL v3, checksums ok) → src-tauri/binaries/ffmpeg-${triple}${ext}`);
     }
   } else {
     // development builds on other systems only: the release ffmpeg for macOS/Linux is decided in Phase 9

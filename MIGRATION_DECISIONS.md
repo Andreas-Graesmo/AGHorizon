@@ -2,7 +2,7 @@
 
 These are recommendations for `MIGRATION_PLAN.md` tasks 0.4, 0.5 and 0.6, written for the Windows-first scope.
 
-**Status: all three approved on 2026-11-17.** The GPL source archive ships with the first Tauri release. The plan carries the details: tasks 2.3, 4.2, 5.4 and 5.9.
+**Status: all three approved on 2026-11-17.** **0.4 changed the same day:** the owner chose Option B (BtbN's ffmpeg 8.1, every source pinned), because 8 of the gyan build's library sources couldn't be identified; see `MIGRATION_PLAN.md` 5.9. The GPL source archive ships with the first Tauri release. The plan carries the details: tasks 2.3, 4.2, 5.4 and 5.9.
 
 ---
 
