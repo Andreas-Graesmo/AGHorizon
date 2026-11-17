@@ -312,7 +312,7 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
     - `.github/workflows/ffmpeg-source.yml` publishes it as the pre-release `ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source`. **Published on 2026-11-17:** 107 files, 2.2 GB, with `README.txt` and `SHA256SUMS`. GitHub's latest release is still v2.5.0.
     - Its tag isn't a version number, so no updater offers it. electron-updater's Test channel skips tags that aren't valid semver, and Stable reads only GitHub's latest release, which a pre-release never is. The Tauri app, the Android TV app and `handover.js` skip it too.
   - [x] The media spike and the three Windows e2e suites pass with 8.1 (2026-11-17). The app's ffmpeg options (`-reconnect*`, `-copyts`, `-c:a aac`, `-movflags`, …) all exist in 8.1.
-  - [ ] Name ffmpeg and its licence on the About page and in the README, with a link to the source release.
+  - [x] ffmpeg and its licence are named in Settings › About & updates (`ffmpegCredit()` in `ui.js`: the BtbN build with a link to the source release in the Tauri app, `ffmpeg-static` in Electron, Jellyfin's decoder on Android TV) and in the README.
   - [ ] **Versions already shipped with gyan's 6.1.1** (Electron ≤ 2.5.0 on Windows, and Tauri v3.1.0-beta.0) — "make do with what we have":
     - 33 libraries come with versions from gyan's README;
     - zlib 1.2.13, bzip2 1.0.8, GnuTLS 3.6.16 and xz 5.2.9 were read from the binary;
