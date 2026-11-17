@@ -197,6 +197,10 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub(crate) fn stop_server(app: &AppHandle) {
+    // already stopped (the updater stops it before its installer runs, then the app exits)
+    if app.state::<Server>().0.lock().unwrap().is_none() {
+        return;
+    }
     // first ask: the downloads engine marks what was downloading to carry on next time, saves, and exits
     let asked = tauri::async_runtime::block_on(async {
         tokio::time::timeout(Duration::from_millis(1500), rpc(app, "quit", json!([]))).await
