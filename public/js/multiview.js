@@ -119,8 +119,9 @@ class MvTile {
     this.hideOv();
   }
 
-  play(ch) {
+  play(ch, { retry = false } = {}) {
     this.ch = ch;
+    if (!retry) this.retryLeft = 1;   // one automatic second try per start (MIGRATION_PLAN.md 4.8)
     const token = ++this.token;
     pushRecent(ch);
     loadShortEpg(ch);
@@ -146,6 +147,14 @@ class MvTile {
       if (token !== this.token) return;
       if (rest.length) { this.start(ch, rest, token, msg); return; }
       this.teardown();
+      // Several pictures starting at once can make one fail that would play a moment later (a busy provider, or a
+      // webview's media stack): try the whole way once more before saying so.
+      if (this.retryLeft > 0) {
+        this.retryLeft--;
+        this.ov('loading', 'Trying again…');
+        setTimeout(() => { if (token === this.token) this.play(ch, { retry: true }); }, 3000);
+        return;
+      }
       const hint = !state.ffmpeg ? ' ffmpeg was not found, so unsupported codecs can’t be converted.' : compatMode() === 'off' ? ' Compatibility mode is switched off in Settings › Playback.' : '';
       this.ov('error', "Couldn't play this channel", `${msg}.${hint} The stream may be offline, or your provider’s connection limit may be used up.`);
     };

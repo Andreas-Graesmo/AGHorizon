@@ -6,6 +6,9 @@
  * converts it with ffmpeg), and leaves nothing running after being killed or closed.
  * Phase 3: downloads (a real one, played back through /api/local, kept across a restart), the sync code in Windows
  * Credential Manager, folder sync with binary data, and the monitor list.
+ * Phase 4: the window buttons, the window's size kept across restarts, picture-in-picture and the mirror window
+ * (opened and closed with no window left behind), fullscreen from a real click, the screen kept awake, and closing
+ * the app with picture-in-picture open.
  * The page is driven through WebView2's DevTools port (AGH_DEVTOOLS_PORT, see src-tauri/src/main.rs).
  * Usage (Windows, after `node scripts/tauri-prep.js` and `cargo build --release` in src-tauri): node e2e/tauri-windows.js
  */
@@ -149,6 +152,78 @@ async function launch() {
   const disp = await page.evaluate(() => window.tunerDesktop.displays());
   check('displays: the monitors are listed', disp.length >= 1 && disp.some((d) => d.primary) && disp[0].width > 0, JSON.stringify(disp));
 
+  /* Phase 4: title bar */
+  const tb = await page.evaluate(async () => {
+    const w = window.__TAURI__.window.getCurrentWindow();
+    const box = document.querySelector('#topbar .win-ctl');
+    return { decorated: await w.isDecorated(), buttons: box ? [...box.querySelectorAll('button')].map((b) => b.getAttribute('aria-label')) : [], drag: document.getElementById('topbar').getAttribute('data-tauri-drag-region') };
+  });
+  check('title bar: no system frame; minimise, maximise and close in the top bar, which drags the window', tb.decorated === false && tb.buttons.join() === 'Minimise,Maximise,Close' && tb.drag === 'deep', JSON.stringify(tb));
+  const isMax = () => page.evaluate(() => window.__TAURI__.window.getCurrentWindow().isMaximized());
+  await page.click('#topbar .win-ctl .max');
+  await sleep(800);
+  const maxed = await isMax();
+  await page.click('#topbar .win-ctl .max');
+  await sleep(800);
+  check('title bar: maximise, then restore, by clicking', maxed === true && (await isMax()) === false && (await page.getAttribute('#topbar .win-ctl .max', 'aria-label')) === 'Maximise', `maximised ${maxed}`);
+  await page.click('#topbar .win-ctl .min');
+  await sleep(800);
+  const minimized = await page.evaluate(() => window.__TAURI__.window.getCurrentWindow().isMinimized());
+  await page.evaluate(() => window.tunerDesktop.focusWindow());
+  await sleep(500);
+  check('title bar: minimise', minimized === true, `minimised ${minimized}`);
+
+  /* Phase 4: picture-in-picture, the mirror, fullscreen, keep-awake (a film plays in the player) */
+  await page.evaluate((url) => playChannel({ uid: 'e2e:movie:2', pid: null, kind: 'movie', name: 'E2E Film', url }), `${filmUrl}?play`);
+  await page.waitForFunction(() => { const v = document.querySelector('#video'); return v.videoWidth > 0 && v.currentTime > 1; }, null, { timeout: 30000 }).catch(() => {});
+  await sleep(1500);
+  check('keep-awake: a wake lock is held while a video plays', await page.evaluate(() => window.__aghShell.wakeLockHeld()));
+
+  const winInfo = (label) => page.evaluate(async (l) => {
+    const all = await window.__TAURI__.window.getAllWindows();
+    const w = all.find((x) => x.label === l);
+    if (!w) return null;
+    return { decorated: await w.isDecorated(), onTop: await w.isAlwaysOnTop(), visible: await w.isVisible(), fullscreen: await w.isFullscreen() };
+  }, label);
+  await page.click('#pPip');
+  await sleep(2500);
+  const pip = await winInfo('pip');
+  const inPip = await page.evaluate(() => { const v = document.querySelector('#video'); return { inPip: v.ownerDocument !== document, w: v.videoWidth, paused: v.paused }; });
+  check('PiP: the PiP button opens a frameless window on top', pip && pip.decorated === false && pip.onTop === true && pip.visible, JSON.stringify(pip));
+  check('PiP: the player moved into it and plays', inPip.inPip && inPip.w > 0 && !inPip.paused, JSON.stringify(inPip));
+  await page.evaluate(() => togglePip());
+  await sleep(2000);
+  const back = await page.evaluate(() => { const v = document.querySelector('#video'); return { home: v.ownerDocument === document, paused: v.paused }; });
+  check('PiP: closed, its window is gone (no window left on screen) and the player is back', (await winInfo('pip')) === null && back.home, JSON.stringify({ window: await winInfo('pip'), ...back }));
+
+  await page.evaluate(() => openMirror());
+  await sleep(3000);
+  const mirror = await winInfo('mirror');
+  const mirrorPic = await page.evaluate(() => { try { const v = mirrorWin.document.querySelector('video'); return v ? v.videoWidth : -1; } catch (e) { return String(e); } });
+  check('mirror (floating): a frameless window on top showing the picture', mirror && mirror.decorated === false && mirror.onTop && mirrorPic > 0, JSON.stringify({ ...mirror, picture: mirrorPic }));
+  await page.evaluate(() => closeMirror());
+  await sleep(1500);
+  check('mirror: closed, its window is gone', (await winInfo('mirror')) === null);
+  const firstDisplay = await page.evaluate(async () => (await window.tunerDesktop.displays())[0].id);
+  await page.evaluate((id) => openMirror(id), firstDisplay);
+  await sleep(3000);
+  const mirrorFs = await winInfo('mirror');
+  check('mirror on a chosen monitor: fullscreen there', mirrorFs && mirrorFs.fullscreen === true, JSON.stringify(mirrorFs));
+  await page.evaluate(() => closeMirror());
+  await sleep(1500);
+
+  const wfs = () => page.evaluate(() => window.__TAURI__.window.getCurrentWindow().isFullscreen());
+  await page.hover('#video');
+  await page.click('#pFull');   // a real click: browsers allow fullscreen only from one
+  await sleep(1500);
+  const fsOn = await wfs();
+  await page.keyboard.press('Escape');
+  await sleep(1500);
+  check('fullscreen: the player button makes the window fullscreen; Escape leaves it', fsOn === true && (await wfs()) === false, `on ${fsOn}`);
+  await page.evaluate(() => stopPlayback());
+  await sleep(1500);
+  check('keep-awake: released when nothing plays', !(await page.evaluate(() => window.__aghShell.wakeLockHeld())));
+
   await browser.close().catch(() => {});
   spawnSync('taskkill', ['/F', '/PID', String(child.pid)]);   // no /T: the job object must take the children
   await sleep(3000);
@@ -161,12 +236,35 @@ async function launch() {
   check('starts again after a kill (port free again)', true);
   const kept = await page.evaluate(async () => (await window.tunerDesktop.downloads.list()).items.map((it) => `${it.title}:${it.state}`));
   check('downloads: the finished film is still listed after the restart', kept.includes('E2E Film:done'), JSON.stringify(kept));
-  const exited = new Promise((r) => child.on('exit', (code) => r(code)));
+
+  // window size: changed now, it must come back after a normal close and start
+  await page.evaluate(() => window.__TAURI__.window.getCurrentWindow().setSize(new window.__TAURI__.window.LogicalSize(1111, 733)));
+  await sleep(1000);
+  // closing the app window while picture-in-picture is open: both go, and the app quits (electron/main.js 'closed')
+  await page.evaluate((url) => playChannel({ uid: 'e2e:movie:3', pid: null, kind: 'movie', name: 'E2E Film', url }), `${filmUrl}?again`);
+  await page.waitForFunction(() => document.querySelector('#video').videoWidth > 0, null, { timeout: 30000 }).catch(() => {});
+  await page.evaluate(() => togglePip());
+  await sleep(2500);
+  const pipOpen = await page.evaluate(async () => (await window.__TAURI__.window.getAllWindows()).map((w) => w.label));
+  let exited = new Promise((r) => child.on('exit', (code) => r(code)));
   await page.evaluate(() => window.__TAURI__.window.getCurrentWindow().close()).catch(() => {});
-  const code = await Promise.race([exited, sleep(15000).then(() => 'still running')]);
+  let code = await Promise.race([exited, sleep(15000).then(() => 'still running')]);
   await sleep(1500);
-  const afterClose = running();
-  check('closing the window quits, and nothing is left running', code !== 'still running' && Object.values(afterClose).every((n) => n === 0), `exit ${code}, ${JSON.stringify(afterClose)}`);
+  let afterClose = running();
+  check('closing the app window with PiP open quits, and nothing is left running', pipOpen.includes('pip') && code !== 'still running' && Object.values(afterClose).every((n) => n === 0), `windows before ${JSON.stringify(pipOpen)}, exit ${code}, ${JSON.stringify(afterClose)}`);
+  await browser.close().catch(() => {});
+
+  /* 3: start again: the window has the size it was closed with */
+  ({ child, browser, page } = await launch());
+  await page.waitForFunction(() => typeof state === 'object', null, { timeout: 30000 });
+  const size = await page.evaluate(async () => { const w = window.__TAURI__.window.getCurrentWindow(); const s = await w.innerSize(); const f = await w.scaleFactor(); return { w: Math.round(s.width / f), h: Math.round(s.height / f) }; });
+  check('window size kept across a restart (window-state plugin)', Math.abs(size.w - 1111) <= 2 && Math.abs(size.h - 733) <= 2, JSON.stringify(size));
+  exited = new Promise((r) => child.on('exit', (c) => r(c)));
+  await page.click('#topbar .win-ctl .close');   // the window's own close button
+  code = await Promise.race([exited, sleep(15000).then(() => 'still running')]);
+  await sleep(1500);
+  afterClose = running();
+  check('the close button quits, and nothing is left running', code !== 'still running' && Object.values(afterClose).every((n) => n === 0), `exit ${code}, ${JSON.stringify(afterClose)}`);
   await browser.close().catch(() => {});
 
   prov.close();

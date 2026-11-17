@@ -66,4 +66,88 @@
       folderRemove: (vault, device) => invoke('sync', { op: 'folderRemove', args: [vault, device || null] }),
     },
   };
+
+  /* ───────────── Windows integration (MIGRATION_PLAN.md Phase 4) ───────────── */
+  const cmd = (op, label) => invoke('popups', { op, label }).catch(() => {});
+
+  // 4.2 the title bar: the top bar drags the window (double-click maximises), except its buttons and the search box;
+  // the window's own buttons at its right end
+  function titleBar() {
+    const bar = document.getElementById('topbar');
+    if (!bar || bar.querySelector('.win-ctl')) return;
+    document.documentElement.classList.add('tauri-shell');
+    bar.setAttribute('data-tauri-drag-region', 'deep');
+    const search = document.getElementById('topSearch');
+    if (search) search.setAttribute('data-tauri-drag-region', 'false');
+    const ICON = {
+      min: '<svg viewBox="0 0 10 10"><path d="M0 5.5h10"/></svg>',
+      max: '<svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9"/></svg>',
+      restore: '<svg viewBox="0 0 10 10"><rect x=".5" y="2.5" width="7" height="7"/><path d="M2.5 2.5v-2h7v7h-2"/></svg>',
+      close: '<svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10"/></svg>',
+    };
+    const box = document.createElement('div');
+    box.className = 'win-ctl';
+    box.innerHTML = `<button type="button" class="min" aria-label="Minimise" title="Minimise">${ICON.min}</button>`
+      + `<button type="button" class="max" aria-label="Maximise" title="Maximise">${ICON.max}</button>`
+      + `<button type="button" class="close" aria-label="Close" title="Close">${ICON.close}</button>`;
+    bar.appendChild(box);
+    const max = box.querySelector('.max');
+    box.querySelector('.min').addEventListener('click', () => win().minimize());
+    max.addEventListener('click', () => win().toggleMaximize());
+    box.querySelector('.close').addEventListener('click', () => win().close());
+    const sync = async () => {
+      const on = await win().isMaximized().catch(() => false);
+      max.innerHTML = on ? ICON.restore : ICON.max;
+      max.setAttribute('aria-label', on ? 'Restore' : 'Maximise');
+      max.title = on ? 'Restore' : 'Maximise';
+    };
+    win().onResized(sync);
+    sync();
+  }
+
+  // 4.3 / 4.4 picture-in-picture and the mirror window are Tauri windows handed over on window.open (Rust). Two
+  // things the page can't do itself there: a window it closes stays on screen (spike 0.2), so remove it once closed;
+  // and frameless windows are dragged by asking the app (PiP by its top bar, the mirror anywhere but its controls).
+  const popupsOpen = {};
+  const nativeOpen = window.open.bind(window);
+  window.open = function (url, name, features) {
+    const w = nativeOpen(url, name, features);
+    const label = name === 'ag-horizon-pip' ? 'pip' : name === 'tuner-mirror' ? 'mirror' : null;
+    if (w && label) watchPopup(w, label);
+    return w;
+  };
+  function watchPopup(w, label) {
+    popupsOpen[label] = w;
+    const drag = (e) => {
+      if (e.button !== 0 || e.target.closest('button, input, select, a, .m-volpop, [role="slider"]')) return;
+      if (label === 'pip' && !e.target.closest('.p-top')) return;
+      cmd('drag', label);
+    };
+    let doc = null;
+    const iv = setInterval(() => {
+      if (w.closed) { clearInterval(iv); delete popupsOpen[label]; setTimeout(() => cmd('destroy', label), 150); return; }
+      try { if (w.document !== doc && w.document.body) { doc = w.document; doc.addEventListener('mousedown', drag, true); } } catch { /* navigating */ }
+    }, 250);
+  }
+
+  // 4.5 element fullscreen (player, Multiview tiles) fills only the webview in WebView2: make the window fullscreen too
+  document.addEventListener('fullscreenchange', () => { win().setFullscreen(!!document.fullscreenElement).catch(() => {}); });
+
+  // 4.6 the screen stays on while a video plays (Electron did this by itself; WebView2 grants the Wake Lock API)
+  let wake = null;
+  const videos = () => [...document.querySelectorAll('video'), ...Object.values(popupsOpen).flatMap((w) => { try { return [...w.document.querySelectorAll('video')]; } catch { return []; } })];
+  async function syncWake() {
+    const want = document.visibilityState === 'visible' && videos().some((v) => !v.paused && !v.ended && v.readyState > 2);
+    if (want && !wake && navigator.wakeLock) {
+      try { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } catch { /* not now */ }
+    } else if (!want && wake) { const l = wake; wake = null; l.release().catch(() => {}); }
+  }
+  for (const t of ['playing', 'pause', 'ended', 'emptied']) document.addEventListener(t, syncWake, true);
+  document.addEventListener('visibilitychange', syncWake);
+  setInterval(syncWake, 10000);
+
+  // for e2e/tauri-windows.js
+  window.__aghShell = { wakeLockHeld: () => !!wake };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', titleBar); else titleBar();
 })();

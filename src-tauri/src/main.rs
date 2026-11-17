@@ -11,8 +11,9 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 
-use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry};
+use tauri_plugin_window_state::StateFlags;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -49,9 +50,16 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // size, position and maximised (MIGRATION_PLAN.md 4.1); not VISIBLE: the page shows the window when drawn
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
+                .with_denylist(&["pip", "mirror"])
+                .build(),
+        )
         .manage(Server(Mutex::new(None)))
         .manage(Rpc::default())
-        .invoke_handler(tauri::generate_handler![downloads, sync])
+        .invoke_handler(tauri::generate_handler![downloads, sync, popups])
         .setup(|app| {
             start_server(app.handle().clone())?;
             Ok(())
@@ -385,6 +393,7 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
     let origin = format!("http://127.0.0.1:{port}");
     let url: Url = format!("{origin}/").parse().expect("valid url");
     let (nav_app, popup_app, nav_origin, popup_origin) = (app.clone(), app.clone(), origin.clone(), origin);
+    let legacy = legacy_bounds(app);
 
     #[allow(unused_mut)]
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
@@ -392,6 +401,9 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
         .inner_size(1280.0, 800.0)
         .min_inner_size(760.0, 520.0)
         .background_color(tauri::window::Color(0x0c, 0x0e, 0x12, 0xff))
+        // the app's own top bar is the title bar, with HTML window buttons (MIGRATION_PLAN.md 0.5 / 4.2)
+        .decorations(false)
+        .shadow(true)
         .visible(false) // shown by the page once it has drawn (tauri-shell.js ready()), or after 5 s
         .disable_drag_drop_handler() // the page reads dropped .m3u files itself (boot.js)
         // stay on the app's own page; real links go to the system browser (electron/main.js will-navigate)
@@ -402,15 +414,23 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
             }
             own
         })
-        // window.open: picture-in-picture and the mirror window come in MIGRATION_PLAN.md 4.3/4.4;
+        // window.open: picture-in-picture and the mirror window (MIGRATION_PLAN.md 4.3 / 4.4);
         // other web links (trailers) open in the system browser
-        .on_new_window(move |u, _features| {
-            let own = u.origin().ascii_serialization() == popup_origin;
-            if !own && (u.scheme() == "http" || u.scheme() == "https") {
+        .on_new_window(move |u, features| {
+            if u.as_str() == "about:blank" || (u.origin().ascii_serialization() == popup_origin && u.path() == "/mirror.html") {
+                return popup(&popup_app, &u, features);
+            }
+            if u.scheme() == "http" || u.scheme() == "https" {
                 let _ = popup_app.opener().open_url(u.as_str(), None::<&str>);
             }
             NewWindowResponse::Deny
         });
+    if let Some(b) = &legacy {
+        builder = builder.inner_size(b.width, b.height);
+        if let (Some(x), Some(y)) = (b.x, b.y) {
+            builder = builder.position(x, y);
+        }
+    }
 
     #[cfg(windows)]
     {
@@ -423,11 +443,142 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
     }
 
     let window = builder.build()?;
+    if legacy.map(|b| b.maximized).unwrap_or(false) {
+        let _ = window.maximize();
+    }
+    // closing the app window takes picture-in-picture and the mirror with it (electron/main.js 'closed')
+    let a = app.clone();
+    window.on_window_event(move |e| {
+        if let WindowEvent::Destroyed = e {
+            for label in ["pip", "mirror"] {
+                if let Some(w) = a.get_webview_window(label) {
+                    let _ = w.destroy();
+                }
+            }
+        }
+    });
     tauri::async_runtime::spawn(async move {
         tokio_sleep(Duration::from_secs(5)).await;
         let _ = window.show();
     });
     Ok(())
+}
+
+// The Electron app's last window bounds (<appData>/Tuner IPTV/window-state.json, logical pixels), used once: until
+// the window-state plugin has its own file (MIGRATION_PLAN.md 4.1).
+struct LegacyBounds {
+    x: Option<f64>,
+    y: Option<f64>,
+    width: f64,
+    height: f64,
+    maximized: bool,
+}
+fn legacy_bounds(app: &AppHandle) -> Option<LegacyBounds> {
+    let config = app.path().app_config_dir().ok()?;
+    if config.join(tauri_plugin_window_state::DEFAULT_FILENAME).exists() {
+        return None;
+    }
+    let text = std::fs::read_to_string(config.parent()?.join("Tuner IPTV").join("window-state.json")).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let (width, height) = (v["width"].as_f64()?, v["height"].as_f64()?);
+    if width < 400.0 || height < 300.0 {
+        return None;
+    }
+    Some(LegacyBounds { x: v["x"].as_f64(), y: v["y"].as_f64(), width, height, maximized: v["maximized"].as_bool() == Some(true) })
+}
+
+/* ───────────────────────── picture-in-picture and the mirror window ───────────────────────── */
+
+// window.open("about:blank", "ag-horizon-pip") and window.open("/mirror.html[?d=<monitor>]", "tuner-mirror"):
+// Tauri windows handed to WebView2, so the page keeps scripting them as before (spike 0.2). As electron/main.js:
+// frameless; PiP 480x270, on top, bottom right; the mirror floating on top, or fullscreen on the monitor picked.
+fn popup(app: &AppHandle, url: &Url, features: NewWindowFeatures) -> NewWindowResponse<Wry> {
+    let pip = url.as_str() == "about:blank";
+    let label = if pip { "pip" } else { "mirror" };
+    // window.close() from the page leaves the Tauri window up (spike 0.2): a leftover would block the label
+    if let Some(old) = app.get_webview_window(label) {
+        let _ = old.destroy();
+    }
+    let display = if pip { None } else { url.query_pairs().find(|(k, _)| k == "d").map(|(_, v)| v.into_owned()) };
+    let (w, h) = if pip { (480.0, 270.0) } else { (960.0, 540.0) };
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External("about:blank".parse().expect("url")))
+        .window_features(features)
+        .title(if pip { "AG Horizon – picture in picture" } else { "AG Horizon – mirror picture" })
+        .decorations(false)
+        .shadow(true)
+        .background_color(tauri::window::Color(0, 0, 0, 0xff))
+        .always_on_top(display.is_none())
+        .inner_size(w, h)
+        .min_inner_size(260.0, 146.0);
+    if display.is_none() {
+        if let Some((x, y)) = bottom_right(app, w, h) {
+            builder = builder.position(x, y);
+        }
+    }
+    match builder.build() {
+        Ok(window) => {
+            if let Some(key) = display {
+                fullscreen_on(&window, &key);
+            }
+            if pip {
+                keep_16_9(&window);
+            }
+            NewWindowResponse::Create { window }
+        }
+        Err(e) => {
+            eprintln!("popup {label}: {e}");
+            NewWindowResponse::Deny
+        }
+    }
+}
+
+// bottom right of the work area of the screen the app window is on, 24 px in (electron/main.js float())
+fn bottom_right(app: &AppHandle, w: f64, h: f64) -> Option<(f64, f64)> {
+    let m = app.get_webview_window("main")?.current_monitor().ok()??;
+    let (area, scale) = (m.work_area(), m.scale_factor());
+    let right = (area.position.x as f64 + area.size.width as f64) / scale;
+    let bottom = (area.position.y as f64 + area.size.height as f64) / scale;
+    Some((right - w - 24.0, bottom - h - 24.0))
+}
+
+// the monitor picked in the page ("name@x,y", tauri-shell.js displays()): cover it, fullscreen
+fn fullscreen_on(window: &WebviewWindow, key: &str) {
+    let Ok(monitors) = window.available_monitors() else { return };
+    let found = monitors.into_iter().find(|m| {
+        format!("{}@{},{}", m.name().map(String::as_str).unwrap_or(""), m.position().x, m.position().y) == key
+    });
+    if let Some(m) = found {
+        let _ = window.set_position(*m.position());
+        let _ = window.set_size(*m.size());
+        let _ = window.set_fullscreen(true);
+    }
+}
+
+// Tauri has no setAspectRatio: put the height back to 16:9 of the width after each resize
+fn keep_16_9(window: &WebviewWindow) {
+    let w = window.clone();
+    window.on_window_event(move |e| {
+        if let WindowEvent::Resized(size) = e {
+            let want = size.width * 9 / 16;
+            if size.height.abs_diff(want) > 2 && size.width > 0 {
+                let _ = w.set_size(tauri::PhysicalSize::new(size.width, want));
+            }
+        }
+    });
+}
+
+// The page asks for these through tauri-shell.js: remove a closed popup's window, or drag a frameless one.
+#[tauri::command]
+fn popups(app: AppHandle, op: String, label: String) -> Result<(), String> {
+    if label != "pip" && label != "mirror" {
+        return Err(format!("no such popup {label}"));
+    }
+    let Some(w) = app.get_webview_window(&label) else { return Ok(()) };
+    match op.as_str() {
+        "destroy" => w.destroy().map_err(|e| e.to_string()),
+        "drag" => w.start_dragging().map_err(|e| e.to_string()),
+        _ => Err(format!("unknown popups operation {op}")),
+    }
 }
 
 /* ───────────────────────── Windows: the server dies with the app ───────────────────────── */
