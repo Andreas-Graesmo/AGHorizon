@@ -76,7 +76,7 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
 - [ ] **0.4 Decide on ffmpeg.** Keep the GPL static build (libx264 is needed by `-c:v libx264`) as a sidecar. Ship the GPL licence and a source link with each release.
 - [ ] **0.5 Decide on the title bar.** `decorations:false` plus HTML window buttons. Optionally use `tauri-plugin-decorum` for Win11 snap layouts.
 - [ ] **0.6 Choose the beta update channel design** (5.4; a rolling `updater-beta` release is recommended).
-- [ ] **0.7 Quick win in the shared code (ship it in Electron now).**
+- [x] **0.7 Quick win in the shared code (ship it in Electron now).** Done in `public/js/player.js` (`armKeptHevcCheck`, `tcHevcToH264`). Checked with `spike/media/check-hevc-watchdog.js`: before the change the film stays on `transcode video=hevc` with no picture; after it, it switches to H.264 at about 8.5 s and shows the picture. An H.264 film still plays natively.
   - Add a watchdog for silent decode failures in `player.js`: "playing, but `videoWidth` still 0 after ~4 s" counts as an error, so the HEVC → H.264 fallback runs.
   - Today the fallback only listens for `video.onerror`, which Chromium never fires for undecodable HEVC.
   - This helps every platform today, independent of the migration.
