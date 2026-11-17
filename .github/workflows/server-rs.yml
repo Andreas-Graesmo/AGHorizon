@@ -1,0 +1,46 @@
+# MIGRATION_PLAN.md Phase 8: the local server ported to Rust (server-rs/). Its unit tests, then the HTTP parity suite
+# (test/parity/) against server.js and against the Rust server: both must give the same answers.
+name: Rust server (migration, phase 8)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['server-rs/**', 'server.js', 'subtitles.js', 'sidecar/entry.js', 'test/parity/**', '.github/workflows/server-rs.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-rs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'server-rs -> target' }
+      - name: Unit tests
+        working-directory: server-rs
+        run: cargo test --release
+      - name: Build
+        working-directory: server-rs
+        run: cargo build --release
+      - name: Parity, server.js
+        run: node --test test/parity/
+        env: { AGH_PARITY_SERVER: node }
+      - name: Parity, Rust
+        run: node --test test/parity/
+        env: { AGH_PARITY_SERVER: rust }
