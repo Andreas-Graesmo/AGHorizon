@@ -625,7 +625,10 @@ const closePip = () => { if (pipWin) pipWin.close(); };
 let mirrorWin = null;
 let mirrorMuteSaved = null;          // our own mute state, restored when "sound on mirror window only" ends
 const mirrorOpen = () => !!mirrorWin && !mirrorWin.closed;
-const mirrorSound = () => LS.get('tuner.mirrorSound', 'main'); // 'main' | 'mirror' | 'both'
+// WebKit (the Tauri app on macOS and Linux) has no video.captureStream(): the mirror then gets the picture drawn on a
+// canvas (canvas.captureStream), and the sound stays in this window (MIGRATION_PLAN.md 9.4)
+const mirrorViaCanvas = !HTMLMediaElement.prototype.captureStream && !!HTMLCanvasElement.prototype.captureStream;
+const mirrorSound = () => (mirrorViaCanvas ? 'main' : LS.get('tuner.mirrorSound', 'main')); // 'main' | 'mirror' | 'both'
 
 // Apply the sound choice. (The mirror gets its audio from the stream, which is not affected by muting this window.)
 function applyMirrorSound() {
@@ -658,9 +661,47 @@ function mirrorCtl() {
 }
 ['play', 'pause', 'volumechange', 'loadedmetadata', 'durationchange', 'timeupdate', 'emptied'].forEach((ev) => video.addEventListener(ev, mirrorCtl));
 
+// The canvas picture: one canvas and one stream while the mirror is open, so a new channel or a seek needs nothing new.
+// Drawn on every animation frame (and, while this window is hidden, from a timer, which the system may slow down).
+let mirrorCanvas = null;   // { stream, win, stop }
+function mirrorCanvasStream() {
+  if (mirrorCanvas) return mirrorCanvas.stream;
+  const c = document.createElement('canvas');
+  c.width = 1280; c.height = 720;
+  const g = c.getContext('2d');
+  let on = true, raf = 0, lastT = -1;
+  const draw = () => {
+    if (!on) return;
+    const w = video.videoWidth, h = video.videoHeight;
+    if (w && h && (c.width !== w || c.height !== h)) { c.width = w; c.height = h; lastT = -1; }
+    // only a new picture is drawn (a paused video keeps its last one in the stream; a seek or a new size redraws)
+    if (video.readyState >= 2 && w && video.currentTime !== lastT) {
+      try { g.drawImage(video, 0, 0, c.width, c.height); lastT = video.currentTime; } catch { /* no picture yet */ }
+    }
+  };
+  const frame = () => { draw(); raf = requestAnimationFrame(frame); };
+  raf = requestAnimationFrame(frame);
+  const timer = setInterval(() => { if (document.hidden) draw(); }, 40);
+  const stream = c.captureStream(30);
+  mirrorCanvas = {
+    stream, win: null,
+    stop() { on = false; cancelAnimationFrame(raf); clearInterval(timer); stream.getTracks().forEach((t) => t.stop()); },
+  };
+  return stream;
+}
+function stopMirrorCanvas() { if (mirrorCanvas) { mirrorCanvas.stop(); mirrorCanvas = null; } }
+
 function attachMirror() {
   if (!mirrorOpen()) return;
   try {
+    if (mirrorViaCanvas) {
+      const stream = mirrorCanvasStream();
+      // the same stream for the whole time the mirror is open: give it to each mirror window once
+      if (mirrorCanvas.win !== mirrorWin && mirrorWin.setStream) { mirrorWin.setStream(stream, 'main'); mirrorCanvas.win = mirrorWin; }
+      applyMirrorSound();
+      mirrorCtl();
+      return;
+    }
     // A fresh capture every time: after the source changes (new channel, seek in converted video) the old stream stops updating.
     const stream = video.captureStream ? video.captureStream() : null;
     if (stream && mirrorWin.setStream) mirrorWin.setStream(stream, mirrorSound());
@@ -671,7 +712,7 @@ function attachMirror() {
 function mirrorTitle(text) { try { if (mirrorOpen() && mirrorWin.setTitleText) mirrorWin.setTitleText(text || ''); } catch { /* window closing */ } }
 window.tunerMirrorReady = (w) => { mirrorWin = w; attachMirror(); mirrorTitle(state.current ? state.current.name : ''); uiMirrorChanged(); };
 video.addEventListener('loadeddata', attachMirror);
-video.addEventListener('emptied', () => { try { if (mirrorOpen() && mirrorWin.clearStream) mirrorWin.clearStream(); } catch { /* ignore */ } });
+video.addEventListener('emptied', () => { if (mirrorViaCanvas) return; try { if (mirrorOpen() && mirrorWin.clearStream) mirrorWin.clearStream(); } catch { /* ignore */ } });
 
 function openMirror(displayId) {
   if (mirrorOpen()) { try { mirrorWin.focus(); } catch { /* ignore */ } return; }
@@ -680,7 +721,7 @@ function openMirror(displayId) {
   if (!w) { toast('The pop-up was blocked. Allow pop-ups for this page and try again.', 'err'); return; }
   mirrorWin = w;
 }
-function mirrorClosed() { mirrorWin = null; applyMirrorSound(); uiMirrorChanged(); }
+function mirrorClosed() { mirrorWin = null; stopMirrorCanvas(); applyMirrorSound(); uiMirrorChanged(); }
 function closeMirror() { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } mirrorClosed(); }
 window.addEventListener('beforeunload', () => { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } });
 setInterval(() => { if (mirrorWin && mirrorWin.closed) mirrorClosed(); }, 1000);
