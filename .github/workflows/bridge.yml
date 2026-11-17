@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['electron/**', 'public/js/**', 'spike/migration/**', 'test/**', '!**/*.md', '.github/workflows/bridge.yml']
+    paths: ['electron/**', 'public/js/**', 'spike/migration/**', 'test/**', '.gitattributes', '!**/*.md', '.github/workflows/bridge.yml']
 
 permissions:
   contents: read
