@@ -189,12 +189,13 @@ async function launch() {
   await page.evaluate(() => togglePip());
   await sleep(2500);
   const pip = await winInfo('pip');
-  const inPip = await page.evaluate(() => { const v = document.querySelector('#video'); return { inPip: v.ownerDocument !== document, w: v.videoWidth, paused: v.paused }; });
+  // the player (and its <video>) now lives in the PiP window's document: follow player.js's own `video`
+  const inPip = await page.evaluate(() => ({ inPip: video.ownerDocument !== document, w: video.videoWidth, paused: video.paused }));
   check('PiP: opens a frameless window on top', pip && pip.decorated === false && pip.onTop === true && pip.visible, JSON.stringify(pip));
   check('PiP: the player moved into it and plays', inPip.inPip && inPip.w > 0 && !inPip.paused, JSON.stringify(inPip));
   await page.evaluate(() => togglePip());
   await sleep(2000);
-  const back = await page.evaluate(() => { const v = document.querySelector('#video'); return { home: v.ownerDocument === document, paused: v.paused }; });
+  const back = await page.evaluate(() => ({ home: video.ownerDocument === document, paused: video.paused }));
   check('PiP: closed, its window is gone (no window left on screen) and the player is back', (await winInfo('pip')) === null && back.home, JSON.stringify({ window: await winInfo('pip'), ...back }));
 
   await page.evaluate(() => openMirror());
