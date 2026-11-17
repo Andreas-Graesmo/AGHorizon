@@ -6,7 +6,10 @@
  */
 const { app, ipcMain, BrowserWindow, shell } = require('electron');
 const pkg = require('../package.json');
+const fs = require('fs');
+const path = require('path');
 const versions = require('./versions');
+const handover = require('./handover');
 
 let autoUpdater = null;
 try { ({ autoUpdater } = require('electron-updater')); } catch { /* dependency missing: updates are simply unavailable */ }
@@ -30,6 +33,60 @@ function applyChannel() {
 }
 
 let status = { state: 'idle' };
+
+/* Hand-over to the Tauri build (handover.js, MIGRATION_PLAN.md 1.3): on Windows, when the newest release on the
+ * channel is a Tauri build, it is offered through the same states as an ordinary update. Off until the Tauri updater's
+ * public key is in electron/tauri-updater.key.pub. */
+let handoverDeps = { exportForHandover: null };
+let pending = null;   // { rel, inst, file, hash }
+const handoverOn = () => process.platform === 'win32' && !!handover.publicKey() && !!pub.owner;
+
+async function checkHandover() {
+  const rel = await handover.findRelease({ channel, current: app.getVersion(), api });
+  if (!rel) return false;
+  const r = await fetch(rel.latestJsonUrl, { headers: { 'User-Agent': 'AG-Horizon' }, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error('latest.json: GitHub answered ' + r.status);
+  const inst = handover.windowsInstaller(await r.json(), pub);
+  if (!inst) return false;
+  pending = { rel, inst };
+  send({ state: 'available', version: rel.version, notes: rel.notes });
+  return true;
+}
+
+async function downloadHandover() {
+  const { rel, inst } = pending;
+  const dest = path.join(app.getPath('temp'), `AG-Horizon-Setup-${rel.version}.exe`);
+  send({ state: 'downloading', version: rel.version, percent: 0 });
+  try {
+    const got = await handover.download(inst.url, dest, (percent) => send({ state: 'downloading', version: rel.version, percent }));
+    const ok = handover.verify(null, inst.signature, handover.publicKey(), got.blake2b512);
+    if (!ok.ok) {
+      fs.rmSync(dest, { force: true });
+      send({ state: 'error', version: rel.version, message: `The new version's installer failed its signature check (${ok.reason}), so it was not installed.` });
+      return status;
+    }
+    pending.file = got.file;
+    send({ state: 'ready', version: rel.version });
+  } catch (e) {
+    fs.rmSync(dest, { force: true });
+    send({ state: 'error', version: rel.version, message: String((e && e.message) || e).slice(0, 200) });
+  }
+  return status;
+}
+
+async function installHandover() {
+  // the person's data first: if it can't be saved, nothing is installed
+  try {
+    if (!handoverDeps.exportForHandover) throw new Error('not ready');
+    await handoverDeps.exportForHandover();
+  } catch (e) {
+    send({ state: 'error', version: pending.rel.version, message: `Couldn't save your playlists and settings for the new version (${String((e && e.message) || e).slice(0, 120)}). Nothing was installed.` });
+    return status;
+  }
+  handover.runInstaller(pending.file);
+  setImmediate(() => app.quit());
+  return status;
+}
 function send(next) {
   status = next;
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('updater:status', status);
@@ -69,14 +126,15 @@ async function manualCheck() {
   return status;
 }
 
-function init() {
+function init(deps = {}) {
+  handoverDeps = { ...handoverDeps, ...deps };
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(), platform: process.platform, arch: process.arch,
     updater: !reason(), updaterReason: reason(), releasesUrl, channel,
   }));
   ipcMain.handle('updater:channel', (_e, next) => {
     if (next !== 'stable' && next !== 'test') return channel;
-    if (next !== channel) { channel = next; applyChannel(); if (status.state !== 'downloading' && status.state !== 'ready') send({ state: 'idle' }); }
+    if (next !== channel) { channel = next; applyChannel(); if (status.state !== 'downloading' && status.state !== 'ready') { pending = null; send({ state: 'idle' }); } }
     return channel;
   });
   ipcMain.handle('updater:status', () => status);
@@ -116,9 +174,26 @@ function init() {
   autoUpdater.on('update-downloaded', (i) => send({ state: 'ready', version: i.version }));
   autoUpdater.on('error', (e) => send({ state: 'error', version: status.version, message: String((e && e.message) || e).split('\n')[0].slice(0, 200) }));
 
-  ipcMain.handle('updater:check', async () => { try { await autoUpdater.checkForUpdates(); } catch (e) { send({ state: 'error', message: String(e.message || e).split('\n')[0] }); } return status; });
-  ipcMain.handle('updater:download', async () => { try { await autoUpdater.downloadUpdate(); } catch (e) { send({ state: 'error', version: status.version, message: String(e.message || e).split('\n')[0] }); } return status; });
-  ipcMain.handle('updater:install', () => { setImmediate(() => autoUpdater.quitAndInstall(true, true)); return status; });
+  ipcMain.handle('updater:check', async () => {
+    if (pending && (status.state === 'downloading' || status.state === 'ready')) return status;
+    pending = null;
+    if (handoverOn()) {
+      send({ state: 'checking' });
+      try { if (await checkHandover()) return status; } catch (e) { console.warn('hand-over check failed:', e && e.message); }   // then the ordinary check
+    }
+    try { await autoUpdater.checkForUpdates(); } catch (e) { send({ state: 'error', message: String(e.message || e).split('\n')[0] }); }
+    return status;
+  });
+  ipcMain.handle('updater:download', async () => {
+    if (pending) return downloadHandover();
+    try { await autoUpdater.downloadUpdate(); } catch (e) { send({ state: 'error', version: status.version, message: String(e.message || e).split('\n')[0] }); }
+    return status;
+  });
+  ipcMain.handle('updater:install', () => {
+    if (pending && pending.file) return installHandover();
+    setImmediate(() => autoUpdater.quitAndInstall(true, true));
+    return status;
+  });
 }
 
 module.exports = { init };
