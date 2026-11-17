@@ -1,0 +1,46 @@
+# MIGRATION_PLAN.md Phase 2 gate: build the Tauri app on Windows and drive it end to end (e2e/tauri-windows.js).
+name: Tauri app on Windows (migration, phase 2)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['src-tauri/**', 'scripts/tauri-prep.js', 'sidecar/**', 'server.js', 'subtitles.js', 'public/**', 'e2e/**', '!**/*.md', '.github/workflows/tauri-windows.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: npm ci (without Electron's binary; not needed here)
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - name: Player libraries into public/vendor
+        run: for i in 1 2 3; do npm run setup && break; sleep 10; done
+      - name: Sidecars (server .exe, pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'src-tauri -> target' }
+      - name: Build the app
+        working-directory: src-tauri
+        run: cargo build --release
+      - name: Sizes
+        run: ls -la src-tauri/target/release/*.exe
+      - name: Playwright (CDP client only; no browsers)
+        run: npm install --no-save --no-audit --no-fund playwright@1.63.0
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      - name: End to end
+        run: node e2e/tauri-windows.js

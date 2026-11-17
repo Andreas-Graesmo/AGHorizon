@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The app's page, served by its own server (a remote origin to Tauri). MIGRATION_PLAN.md 2.8.",
+  "windows": ["main"],
+  "remote": { "urls": ["http://127.0.0.1:47831/*"] },
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-close"
+  ]
+}

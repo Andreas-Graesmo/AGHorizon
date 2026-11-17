@@ -15,3 +15,9 @@ spike/media/tauri/target/
 spike/media/tauri/gen/
 spike/media/results/
 sidecar/dist/
+
+# Tauri app (MIGRATION_PLAN.md Phase 2)
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/*
+!src-tauri/binaries/README.md
