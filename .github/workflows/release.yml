@@ -1,3 +1,5 @@
+# MIGRATION_PLAN.md 5.6: a mixed release while Windows has moved to Tauri and macOS/Linux are still Electron.
+# Before the first tag with this file: the bridge release (MIGRATION_PLAN.md 1.4) must be out for a while.
 name: Release
 
 on:
@@ -8,11 +10,81 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # Windows: the Tauri app (MIGRATION_PLAN.md 5.6). One installer, AG-Horizon-Setup-<version>.exe, with its updater
+  # signature and latest.json, which the Tauri app and the Electron app's hand-over read. Signed with the release key
+  # (repository secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, MIGRATION_PLAN.md 1.0).
+  # No Windows Electron installer and no latest.yml / beta.yml: old Windows Electron apps must only ever find the
+  # bridge release, which hands over to this one (MIGRATION_PLAN.md 1.3).
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install
+        run: |
+          for i in 1 2 3; do
+            npm ci && exit 0
+            echo "npm ci failed (try $i of 3), trying again in 30 seconds"; sleep 30
+          done
+          exit 1
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - name: Test
+        run: npm test
+      - name: Download the video libraries so the app also works offline
+        run: |
+          for i in 1 2 3; do
+            npm run setup && exit 0
+            echo "Download failed (try $i of 3), trying again in 30 seconds"; sleep 30
+          done
+          exit 1
+      - name: Sidecars (the server as a program, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'src-tauri -> target' }
+      - name: The signing key is there
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error title=Signing key::The repository secret TAURI_SIGNING_PRIVATE_KEY is missing (MIGRATION_PLAN.md 1.0). Without it the app can't be updated."
+            exit 1
+          fi
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      - name: Build the installer
+        run: npx --yes @tauri-apps/cli@2.12.4 build --bundles nsis
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # built into the app (src-tauri/src/main.rs), as secrets.json is in the Electron app
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      - name: Release files (AG-Horizon-Setup-<version>.exe, .sig, latest.json)
+        run: node scripts/tauri-release.js release-out
+      - name: Add them to the draft release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          pre=""; case "$GITHUB_REF_NAME" in *-*) pre="--prerelease";; esac
+          # whichever build is first makes the draft (electron-builder on macOS/Linux also finds and fills it)
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft $pre --title "$version" --notes "" || true
+          gh release upload "$GITHUB_REF_NAME" release-out/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+  # macOS and Linux: still the Electron app until MIGRATION_PLAN.md Phase 9. --mac / --linux only, so electron-builder
+  # never builds or publishes anything for Windows; it publishes latest-mac.yml, latest-linux.yml and their beta-*.yml,
+  # which the Electron updaters there read.
+  desktop:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - { os: macos-latest, platform: --mac }
+          - { os: ubuntu-latest, platform: --linux }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -29,8 +101,6 @@ jobs:
             ~/.cache/electron-builder
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
           restore-keys: ${{ runner.os }}-electron-
       # downloads can fail for a moment (e.g. "504 Gateway Time-out"): try again before giving up
@@ -60,7 +130,7 @@ jobs:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
       - name: Build and upload installers
-        run: npx electron-builder --publish always
+        run: npx electron-builder ${{ matrix.platform }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -130,7 +200,7 @@ jobs:
   # Once the desktop and Android TV builds are done, it is published by itself:
   # only apps on the Test update channel pick it up. Stable versions stay drafts until you press Publish.
   publish-test:
-    needs: [build, android-tv]
+    needs: [windows, desktop, android-tv]
     if: ${{ !cancelled() && contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     env:
@@ -142,5 +212,5 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then gh release edit "$GITHUB_REF_NAME" --prerelease
           else echo "::warning::No release $GITHUB_REF_NAME was made (every build failed?)"; fi
       - name: Publish it
-        if: ${{ needs.build.result == 'success' && needs.android-tv.result == 'success' }}
+        if: ${{ needs.windows.result == 'success' && needs.desktop.result == 'success' && needs.android-tv.result == 'success' }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease
