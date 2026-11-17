@@ -67,10 +67,17 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
   - **Found:** undecodable HEVC gives sound with no picture and **no `error` event**, so the H.264 fallback in `player.js` never fires. → 0.7.
   - **To check by hand on a real PC:** HEVC with the HEVC Video Extensions and a GPU, and AC-3 (the CI VM has neither). Today the app converts both, as Electron does.
   - macOS and Linux results are recorded for Phase 9.
-- [ ] **0.2 Popup spike (WebView2).**
-  - Pin a Tauri 2.x version that has `on_new_window` with window features.
-  - Check that `window.open('about:blank')` returns a scriptable `w.document` that you can `appendChild(playerEl)` into, and that `window.opener` works from `/mirror.html`.
-  - The result decides the PiP and Mirror design in 4.3 and 4.4.
+- [x] **0.2 Popup spike (WebView2): go.** The spike is `spike/media/page/popup.js` plus `on_new_window` in `spike/media/tauri/src/main.rs`; it runs in CI as `windows-webview2-popups`. Results are in [`RESULTS.md`](spike/media/RESULTS.md#phase-02-popups).
+  - **With no handler, Tauri refuses `window.open`** (returns `null`), so PiP and Mirror do nothing until 4.3 and 4.4 are done.
+  - **`on_new_window` → `NewWindowResponse::Create`** with a `WebviewWindowBuilder` (`.window_features(features)`, `decorations(false)`, `always_on_top`) keeps PiP and Mirror working **as built**, twice in a row:
+    - the app writes into `about:blank` at once, and the document is not replaced later;
+    - `movePlayer` moves the playing `<video>` in, and it keeps playing;
+    - `pagehide` fires on close;
+    - the Mirror calls `window.opener.*`, reads the opener's document, and shows the `captureStream()` picture;
+    - Rust can set the Mirror window fullscreen.
+  - **Bug found: closing the popup (`window.close()`) leaves the Tauri window visible on screen.** Fix, verified: fixed labels `pip` and `mirror`, and Rust destroys the window when the page closes it (4.3, 4.4).
+  - `NewWindowResponse::Allow` (WebView2's own popup) also keeps the opener link, but Tauri cannot make it frameless, on top or fullscreen. Don't use it.
+  - `window.moveTo` does not move a Tauri-created window. Mirror's drag must use `startDragging()` (4.4).
 - [ ] **0.3 Decide the server strategy** (Appendix D). The default is C, hybrid.
   - [ ] Prove a Node SEA (or `bun build --compile`) binary of `server.js` for `x86_64-pc-windows-msvc`. Bundle it with esbuild so `./subtitles`, `./unicode-ln`, `./secrets.json` and `./package.json` are inlined. It must run with `PUBLIC_DIR`, `FFMPEG_PATH` and `TMPDIR` passed through env.
 - [ ] **0.4 Decide on ffmpeg.** Keep the GPL static build (libx264 is needed by `-c:v libx264`) as a sidecar. Ship the GPL licence and a source link with each release.
@@ -184,14 +191,17 @@ All 34 preload members are listed in Appendix A.
   - Add HTML min/max/close buttons, shown only under Tauri. Electron on macOS and Linux keeps its native title bar overlay.
   - Use `data-tauri-drag-region` alongside the existing `-webkit-app-region: drag` (`public/style.css:101-104,835-836,939`, `public/mirror.html:21`), so both shells can drag the window.
   - Under Tauri, replace the `env(titlebar-area-*)` padding.
-- [ ] **4.3 PiP** (`player.js:465-534`, Electron options `main.js:86-95,117-124`).
-  - [ ] If spike 0.2 passed: use `on_new_window` with frame name `ag-horizon-pip` to create a frameless, always-on-top 480×270 window (min 260×146), placed bottom-right of `current_monitor().work_area()` with a 24 px margin.
+- [ ] **4.3 PiP** (`player.js:465-534`, Electron options `main.js:86-95,117-124`). The design is proven by spike 0.2.
+  - [ ] **`on_new_window` on `main`:** for `about:blank`, build `WebviewWindowBuilder::new(app, "pip", WebviewUrl::External("about:blank"))` with `.window_features(features)` (required: it gives the popup the opener's WebView2 environment), `decorations(false)`, `always_on_top(true)`, `inner_size(480, 270)` and `min_inner_size(260, 146)`. Return `NewWindowResponse::Create`. Deny any other URL that isn't the app's own `/mirror.html`.
+  - [ ] **Close:** `window.close()` leaves the Tauri window on screen (spike 0.2), so destroy the `pip` window from Rust when the page closes it. The adapter calls a `close_popup("pip")` command on the window's `pagehide`; Rust can also do it on the webview's close request. Without this the next PiP can't be created either, because the label is taken.
+  - [ ] **Position:** bottom-right of `current_monitor().work_area()` with a 24 px margin.
   - [ ] Tauri has no `setAspectRatio`, so clamp to 16:9 on `WindowEvent::Resized`.
-  - [ ] Fallback if spike 0.2 failed: native `video.requestPictureInPicture()`, which works in WebView2. This loses the custom controls.
-- [ ] **4.4 Mirror** (`player.js:546-623`, `mirror.js`, `main.js:98-141`).
-  - [ ] Display picker: `?d=` carries the new monitor key. Rust sets position and size from the `Monitor`, then `set_fullscreen(true)`.
-  - [ ] Replace the manual `window.moveTo` drag (`mirror.js:21-33`) with `startDragging()` under Tauri, keeping the old code path for Electron. Drop the `content-bounds-updated` hack from the Tauri side.
-  - [ ] Keep `video.captureStream()`, which works in WebView2, if spike 0.2 shows opener popups work. Do **not** fall back to a second provider connection without making that an explicit decision (`player.js:541-543`).
+  - [ ] Give `pip` its own minimal capability: window dragging only, no app commands.
+- [ ] **4.4 Mirror** (`player.js:546-623`, `mirror.js`, `main.js:98-141`). Proven by spike 0.2, including `captureStream()` from the main window, `window.opener` calls and fullscreen from Rust.
+  - [ ] **`on_new_window`:** for `/mirror.html`, build the `mirror` window the same way as PiP (`.window_features(features)`, `decorations(false)`, 960×540); on top only for the floating mirror (no `?d=`).
+  - [ ] **Close:** destroy the `mirror` window from Rust when the page closes it (same bug as PiP).
+  - [ ] **Display picker:** `?d=` carries the new monitor key (`name + position`; Windows names look like `\\.\DISPLAY1`). Rust sets position and size from the `Monitor`, then `set_fullscreen(true)`.
+  - [ ] **Drag:** `window.moveTo` does nothing for a Tauri window (spike 0.2). Under Tauri, replace the manual drag (`mirror.js:21-33`) with `getCurrentWindow().startDragging()`, keeping the old code path for Electron. Drop the `content-bounds-updated` hack on the Tauri side.
   - [ ] Closing `main` closes `pip` and `mirror` (replaces `main.js:148-151`).
 - [ ] **4.5 Fullscreen.** In the adapter, mirror `document.fullscreenElement` to `getCurrentWindow().setFullscreen()`, because WebView2's element fullscreen fills only the webview.
 - [ ] **4.6 Keep-awake.**
@@ -420,7 +430,7 @@ Non-IPC coupling that has to be dealt with:
 | 1 | Windows users lose playlists and settings | High / critical | Bridge export (Phase 1), import (6.2), fallback notice (6.4), VM upgrade tests |
 | 2 | A Windows Electron client picks up a Tauri asset, or a macOS/Linux client picks up a Windows asset | Medium / high | Strict asset and manifest separation in the mixed release (5.6); gate tests both updaters |
 | 3 | A shared renderer or `server.js` change breaks the Electron build (macOS/Linux) or Android | Medium / high | Adapter is a no-op outside Tauri (3.2); Electron smoke run in the Phase 2/3 gates; Node 18 CI (`android.yml`) |
-| 4 | PiP and Mirror cannot get opener popups in WebView2 | Medium / medium | Spike 0.2; native PiP fallback |
+| 4 | PiP and Mirror popups | **Retired by spike 0.2** (works with `on_new_window` → `Create`) / medium | Destroy the popup from Rust on close (4.3, 4.4), or windows are left on screen |
 | 5 | Silent HEVC decode failure (sound, no picture) | Seen in spike / medium | Watchdog (0.7), already useful in Electron |
 | 6 | Screen sleeps during playback | Medium / medium | `navigator.wakeLock` (works in WebView2) plus `keepawake` (4.6) |
 | 7 | Orphaned server or ffmpeg processes; port 47831 still taken on relaunch | Medium / high | Parent-death detection, Job Object, cleanup before `install()` |
