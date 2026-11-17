@@ -1,10 +1,15 @@
 # MIGRATION_PLAN.md 5.9: publish the complete corresponding source of the ffmpeg the Windows app ships, as one
 # pre-release whose tag is not a version number, so no update channel (Electron, Tauri, Android TV) ever offers it.
-# Run by hand (Actions → this workflow → Run workflow) whenever scripts/tauri-prep.js pins a new ffmpeg.
+# Run by hand (Actions → this workflow → Run workflow) whenever scripts/tauri-prep.js pins a new ffmpeg, after
+# updating the pins in scripts/ffmpeg-source.sh (which also starts it).
 name: ffmpeg source release (GPL)
 
 on:
   workflow_dispatch:
+  # also when the script or this file change (re-running is safe: the files are replaced)
+  push:
+    branches: [migration/tauri]
+    paths: ['scripts/ffmpeg-source.sh', '.github/workflows/ffmpeg-source.yml']
 
 permissions:
   contents: write
