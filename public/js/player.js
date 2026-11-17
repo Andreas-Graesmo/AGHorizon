@@ -215,10 +215,7 @@ async function startPlayback(ch, kinds, token, lastError) {
     video.onerror = () => {
       if (token !== playToken) return;
       if (tcState.video !== 'hevc') return fail('The converted stream could not be played');
-      tcState.video = 'h264';   // the HEVC decoder refused it after all: convert the picture too
-      tcState.offset = tcState.vod ? curTime() : 0;
-      video.src = tcUrl(ch, p, tcState.offset);
-      video.play().catch(() => {});
+      tcHevcToH264(ch, p);
     };
     video.src = tcUrl(ch, p, start);
     video.play().catch(() => {});
@@ -250,10 +247,19 @@ async function startPlayback(ch, kinds, token, lastError) {
   }
 }
 
+// The HEVC decoder refused the kept HEVC picture after all: convert the picture to H.264 too, from where it is now.
+function tcHevcToH264(ch, p) {
+  tcState.video = 'h264';
+  tcState.offset = tcState.vod ? curTime() : 0;
+  video.src = tcUrl(ch, p, tcState.offset);
+  video.play().catch(() => {});
+}
+
 // Some streams "play" but show no picture or have no sound (HEVC, DTS, AC-3). Detect that and convert.
 function armCodecCheck() {
   clearTimeout(checkTimer);
-  if (tcState.on || !state.ffmpeg || compatMode() === 'off' || !state.current) return;
+  if (tcState.on) return armKeptHevcCheck();
+  if (!state.ffmpeg || compatMode() === 'off' || !state.current) return;
   const token = playToken;
   const ch = state.current;
   checkTimer = setTimeout(() => {
@@ -261,6 +267,17 @@ function armCodecCheck() {
     const noPicture = video.videoWidth === 0;
     const noSound = typeof video.webkitAudioDecodedByteCount === 'number' && video.webkitAudioDecodedByteCount === 0 && video.currentTime > 2;
     if (noPicture || noSound) startPlayback(ch, ['tc'], token);
+  }, 4000);
+}
+// A conversion that keeps the HEVC picture can fail without an error: Chromium plays the sound of a Matroska stream
+// whose HEVC it can't decode and shows no picture. Then convert the picture as well, as video.onerror would.
+function armKeptHevcCheck() {
+  if (tcState.video !== 'hevc' || !state.current) return;
+  const token = playToken;
+  const ch = state.current;
+  checkTimer = setTimeout(() => {
+    if (token !== playToken || !tcState.on || tcState.video !== 'hevc' || video.paused) return;
+    if (video.videoWidth === 0) tcHevcToH264(ch, playlistById(ch.pid));
   }, 4000);
 }
 video.addEventListener('playing', () => { hideOverlay(); armCodecCheck(); });
