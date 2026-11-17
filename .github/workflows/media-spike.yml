@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['spike/media/**', '.github/workflows/media-spike.yml']
+    paths: ['spike/media/**', '!spike/media/**/*.md', '.github/workflows/media-spike.yml']
 
 permissions:
   contents: read

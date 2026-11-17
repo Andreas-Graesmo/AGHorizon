@@ -100,3 +100,27 @@ cd spike/media/tauri && cargo run --release
 ```
 
 The table prints in the server log, and the raw JSON is written to `spike/media/results/`. Use `SPIKE_URL='http://127.0.0.1:47831/spike/?exit=1&only=multiview'` to run a subset. Push changes under `spike/media/` to `migration/tauri` to run the Windows jobs on CI. The migration is Windows-first, so CI no longer runs macOS and Linux. The workflow with those jobs is at commit `c34f854`; restore them for Phase 9 of the plan.
+
+## Phase 0.2: popups
+
+**Question:** do picture-in-picture and the Mirror window work as built? Both depend on `window.open` giving a scriptable window linked to the opener.
+
+**Setup:** `page/popup.js` runs what `player.js` and `mirror.js` do, once per answer the Tauri app gives `window.open` (`on_new_window` in `tauri/src/main.rs`). CI: [run #10](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44106426697), job `windows-webview2-popups`, WebView2 on Windows Server.
+
+| Check | No handler / `Deny` (Tauri default) | `Allow` (WebView2's own popup) | **`Create`** (Tauri window), run twice |
+|---|---|---|---|
+| `window.open('about:blank')` | ❌ `null` → "Picture-in-picture is not available" | ✅ | ✅ ✅ |
+| App writes into `w.document` at once, document kept | – | ✅ | ✅ ✅ |
+| `movePlayer`: playing `<video>` moved in keeps playing | – | ✅ 3.5 s | ✅ 3.5 s ✅ 3.5 s |
+| Frameless, always on top, 480×270 | – | ➖ not controllable | ✅ ✅ |
+| `pagehide` on close (app moves the player back) | – | ✅ | ✅ ✅ |
+| Tauri window gone after `window.close()` | – | – | ❌ **stays visible** ❌ |
+| … after Rust `destroy()` by label | – | – | ✅ ✅ |
+| Mirror: `window.opener.tunerMirrorReady`, opener document read | ❌ `null` | ✅ | ✅ ✅ |
+| Mirror: `captureStream()` picture shows | – | ✅ 640px | ✅ ✅ |
+| Mirror fullscreen from Rust (mirror to a monitor) | – | ➖ | ✅ ✅ |
+| `window.moveTo` from the page (Mirror drag) | – | ✅ moves | ❌ no effect → `startDragging()` |
+
+**Verdict: go.** Use `Create`, with fixed labels `pip` and `mirror`, and destroy the window from Rust when the page closes it. `MIGRATION_PLAN.md` 4.3 and 4.4 have the details.
+
+On WebKitGTK (local, Phase 9 notes): `Create` passes the same mechanics, except that there is no `captureStream`, and always-on-top can't be judged under Xvfb. The same close leak shows up there. WebKitGTK also blocks script-opened windows without a click, so the spike enables that setting on Linux; the app opens them on a click anyway.
