@@ -102,6 +102,14 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 #topbar button, #topbar .top-search { -webkit-app-region: no-drag; }
 /* a drag region takes the mouse even under a dialog's backdrop: switch it off while one is open */
 body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
+/* The Tauri app on Windows (public/js/tauri-shell.js, MIGRATION_PLAN.md 4.2): no system title bar at all, so the
+   window's own minimise / maximise / close buttons sit at the top bar's right end, in the theme's colours. */
+html.tauri-shell #topbar { padding-right: 0; }
+.win-ctl { display: flex; align-self: stretch; margin-left: 6px; flex: none; }
+.win-ctl button { appearance: none; border: 0; background: none; color: var(--text); width: 46px; height: 100%; display: grid; place-items: center; cursor: default; opacity: .9; }
+.win-ctl button:hover, .win-ctl button:focus-visible { background: var(--panel-2); opacity: 1; outline: none; }
+.win-ctl button.close:hover, .win-ctl button.close:focus-visible { background: #c42b1c; color: #fff; }
+.win-ctl svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }
 .tb-btn { appearance: none; border: 0; background: none; color: var(--text); cursor: pointer; width: 32px; height: 30px; border-radius: 8px; display: inline-grid; place-items: center; flex: none; opacity: .92; }
 .tb-btn:hover { background: var(--panel-2); }
 .tb-btn.on { color: var(--accent); background: var(--sel); }

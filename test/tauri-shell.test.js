@@ -27,7 +27,12 @@ function load({ tauri = true, existing = null, tv = false } = {}) {
       },
     };
   }
-  const ctx = { window, navigator: { userAgent: 'Mozilla/5.0 (Windows NT 10.0)' }, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), atob: (s) => Buffer.from(s, 'base64').toString('binary'), Promise, Uint8Array, String, Math };
+  window.open = () => null;
+  const document = {   // just enough for the adapter's Phase 4 set-up: no #topbar here, so no window buttons
+    readyState: 'complete', visibilityState: 'visible', addEventListener() {}, getElementById: () => null,
+    querySelectorAll: () => [], documentElement: { classList: { add() {} } },
+  };
+  const ctx = { window, document, setInterval: () => 0, clearInterval() {}, setTimeout: (f) => f, navigator: { userAgent: 'Mozilla/5.0 (Windows NT 10.0)' }, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), atob: (s) => Buffer.from(s, 'base64').toString('binary'), Promise, Uint8Array, String, Math };
   vm.runInNewContext(SRC, ctx);
   return { td: window.tunerDesktop, calls, listeners };
 }
