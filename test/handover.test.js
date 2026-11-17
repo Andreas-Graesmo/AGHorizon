@@ -64,9 +64,12 @@ test('the installer must come from this repository\'s releases over https', () =
   assert.strictEqual(h.windowsInstaller({ platforms: {} }, { owner: 'o', repo: 'r' }), null);
 });
 
-test('without a public key file the hand-over is off', () => {
-  assert.strictEqual(fs.existsSync(h.PUBKEY_FILE), false, 'electron/tauri-updater.key.pub is added in MIGRATION_PLAN.md 5.1');
-  assert.strictEqual(h.publicKey(), '');
+test('the release public key (MIGRATION_PLAN.md 1.0) is in place, so the hand-over is on', () => {
+  const key = h.parsePublicKey(h.publicKey());
+  // minisign prints the key id as hex of the 8 bytes in reverse order
+  assert.strictEqual(Buffer.from(key.keyId).reverse().toString('hex').toUpperCase(), 'F074C66F1E88511B');
+  // the throwaway test key is a different one: a signature made with it must not pass with the release key
+  assert.strictEqual(h.verify(file, sig, h.publicKey()).ok, false);
 });
 
 test('the plain-JS BLAKE2b-512 (for Electron) equals Node\'s, whole or in chunks', () => {

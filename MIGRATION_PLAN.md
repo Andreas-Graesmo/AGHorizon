@@ -122,9 +122,11 @@ It changes nothing a user notices until a Tauri release exists. The code is port
   - **Download:** the installer is accepted only from `https://github.com/<owner>/<repo>/releases/download/…`. It is hashed (BLAKE2b-512) while downloading, then **its minisign signature is verified** against `electron/tauri-updater.key.pub`, the same check Tauri's updater makes. Electron 45's BoringSSL has no `blake2b512`, so `electron/blake2b.js` provides a plain-JS one, checked against Node's.
   - **Install:** export with the sync code first. **If the export fails, nothing is installed.** Then run the installer with `/P`, and quit.
   - **Off until `electron/tauri-updater.key.pub` exists** (see 1.0 below).
-- [ ] **1.0 Before the bridge ships: create the Tauri updater key pair** (moved up from 5.1, because the bridge must embed the public key).
-  - **You run:** `npx @tauri-apps/cli signer generate -w ~/.tauri/aghorizon.key`. Keep the private key and its password safe, and store them as the CI secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. If they are lost, users can no longer be updated.
-  - **Commit:** the **public** key (`aghorizon.key.pub`) as `electron/tauri-updater.key.pub`. It also goes into `plugins.updater.pubkey` in Phase 5.
+- [x] **1.0 Before the bridge ships: create the Tauri updater key pair** (moved up from 5.1, because the bridge must embed the public key).
+  - Done on 2026-11-17: the owner generated it on their own PC (`npx @tauri-apps/cli signer generate -w ~/.tauri/aghorizon.key`). The minisign key ID is `F074C66F1E88511B`.
+  - The **public** key is committed as `electron/tauri-updater.key.pub`, which switches the hand-over on. `test/handover.test.js` checks the key ID. The key also goes into `plugins.updater.pubkey` in Phase 5.
+  - The private key and its password stay with the owner, backed up off the PC. If they are lost, users can no longer be updated.
+  - [ ] **The owner adds the CI secrets** `TAURI_SIGNING_PRIVATE_KEY` (the content of `aghorizon.key`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. They are needed by the release workflow in Phase 5.
 - [ ] **1.4** Ship the bridge (with 1.0 done) on both channels, and leave it out for at least one release cycle before the first Tauri release.
 - **Checks:**
   - `npm test`: 67/67, including `test/handover.test.js`: signatures made by `tauri signer` (throwaway key in `test/fixtures/handover/`), tampering, wrong key, an edited trusted comment, release choice per channel, and the installer URL guard.
@@ -132,7 +134,7 @@ It changes nothing a user notices until a Tauri release exists. The code is port
   - `spike/migration/check-roundtrip.js` (Chromium, real UI): Xtream credentials with special characters, a 3 MB file playlist, favourites, history, progress and settings all survive export → empty profile → import, 13/13. A second import doesn't overwrite.
   - `spike/migration/check-electron-export.js`: the real Electron app writes `migration.json` with the stored data and no sync code, on Linux and **on Windows** (`%APPDATA%\Tuner IPTV`; CI `bridge.yml` [run #2](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44115287363), where `npm test` also passes). The first Windows run showed Git turning the signed fixture's LF into CRLF; `.gitattributes` now keeps `test/fixtures/**` byte-exact.
   - **Not testable before a Tauri release exists:** the full download → verify → install path against a real release. That is covered by the Phase 6 gate (Electron 2.5 → bridge → Tauri on clean VMs).
-- [ ] **Gate:** `migration.json` appears on Windows with real data (**done**, CI), the round trip restores everything (**done**), and **1.0 is done (waiting on you: the key pair)**. Then 1.4 ships the bridge.
+- [ ] **Gate:** `migration.json` appears on Windows with real data (**done**, CI), the round trip restores everything (**done**), and **1.0 is done** (the key pair; the CI secrets are still to be added). Then 1.4 ships the bridge.
 
 ### Phase 2: Tauri scaffold and server sidecar
 
