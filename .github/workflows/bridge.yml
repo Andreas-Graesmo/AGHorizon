@@ -5,8 +5,9 @@ name: Bridge release checks (Tauri migration, phase 1)
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
-    branches: [migration/tauri]
+    branches: [migration/tauri, bridge/handover]
     paths: ['desktop/**', 'electron/**', 'public/js/**', 'spike/migration/**', 'test/**', '.gitattributes', '!**/*.md', '.github/workflows/bridge.yml']
 
 permissions:
