@@ -315,3 +315,177 @@ mod js_tests {
         assert_eq!(js_to_fixed(1.005, 2), "1.00"); // 1.005 is really 1.00499…
     }
 }
+
+/* ───────────── Node's paths, dates and directory listings ───────────── */
+
+/// path.join + path.normalize, as Node does on this system ("\" on Windows, "/" elsewhere)
+pub fn pjoin(parts: &[&str]) -> String {
+    let joined = parts.iter().filter(|p| !p.is_empty()).cloned().collect::<Vec<_>>().join(if cfg!(windows) { "\\" } else { "/" });
+    pnormalize(if joined.is_empty() { "." } else { &joined })
+}
+
+pub fn pnormalize(p: &str) -> String {
+    let win = cfg!(windows);
+    let sep = if win { '\\' } else { '/' };
+    let is_sep = |c: char| c == '/' || (win && c == '\\');
+    // the root: "/" (posix); "C:\", "C:", "\\server\share\" or "\" (Windows)
+    let mut root = String::new();
+    let mut rest = p;
+    if win {
+        let b = p.as_bytes();
+        if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+            root.push_str(&p[..2]);
+            rest = &p[2..];
+        } else if p.starts_with("\\\\") || p.starts_with("//") {
+            let parts: Vec<&str> = p[2..].split(is_sep).collect();
+            if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+                root = format!("\\\\{}\\{}\\", parts[0], parts[1]);
+                rest = &p[2 + parts[0].len() + 1 + parts[1].len()..];
+            }
+        }
+    }
+    let absolute = rest.starts_with(is_sep) || root.ends_with('\\');
+    if absolute && !root.ends_with('\\') {
+        root.push(sep);
+    }
+    let mut out: Vec<&str> = Vec::new();
+    for seg in rest.split(is_sep) {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                if out.last().map(|l| *l != "..").unwrap_or(false) {
+                    out.pop();
+                } else if !absolute {
+                    out.push("..");
+                }
+            }
+            s => out.push(s),
+        }
+    }
+    let trailing = rest.ends_with(is_sep) && !out.is_empty();
+    let mut s = format!("{root}{}", out.join(&sep.to_string()));
+    if trailing {
+        s.push(sep);
+    }
+    if s.is_empty() { ".".into() } else { s }
+}
+
+/// path.dirname
+pub fn pdirname(p: &str) -> String {
+    let win = cfg!(windows);
+    let is_sep = |c: char| c == '/' || (win && c == '\\');
+    let t = p.trim_end_matches(is_sep);
+    if t.is_empty() {
+        return if p.starts_with(is_sep) { p[..1].to_string() } else { ".".into() };
+    }
+    match t.rfind(is_sep) {
+        Some(0) => p[..1].to_string(),
+        Some(i) => {
+            let d = t[..i].trim_end_matches(is_sep);
+            if d.is_empty() { p[..1].to_string() } else if win && d.len() == 2 && d.as_bytes()[1] == b':' { t[..i + 1].to_string() } else { d.to_string() }
+        }
+        None => if win && t.len() >= 2 && t.as_bytes()[1] == b':' { t[..2].to_string() } else { ".".into() },
+    }
+}
+
+/// path.basename
+pub fn pbasename(p: &str) -> String {
+    let win = cfg!(windows);
+    let is_sep = |c: char| c == '/' || (win && c == '\\');
+    let t = p.trim_end_matches(is_sep);
+    t.rsplit(is_sep).next().unwrap_or("").to_string()
+}
+
+/// path.extname: from the last "." of the name, unless the name starts with it
+pub fn pextname(p: &str) -> String {
+    let b = pbasename(p);
+    match b.rfind('.') {
+        Some(i) if i > 0 => b[i..].to_string(),
+        _ => String::new(),
+    }
+}
+
+/// path.resolve (one argument)
+pub fn presolve(p: &str) -> String {
+    let abs = if cfg!(windows) {
+        let b = p.as_bytes();
+        (b.len() >= 3 && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/')) || p.starts_with("\\\\") || p.starts_with("//")
+    } else {
+        p.starts_with('/')
+    };
+    let trim = |s: String| -> String {
+        // no trailing separator, unless it is the root itself
+        let t = s.trim_end_matches(|c| c == '/' || (cfg!(windows) && c == '\\'));
+        if t.is_empty() || (cfg!(windows) && t.len() == 2 && t.as_bytes()[1] == b':') { s } else { t.to_string() }
+    };
+    if abs {
+        trim(pnormalize(p))
+    } else {
+        let cwd = std::env::current_dir().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+        trim(pnormalize(&pjoin(&[&cwd, p])))
+    }
+}
+
+/// A folder's entries in the order Node's fs.readdir gives them: libuv sorts them byte-wise on Linux and macOS;
+/// on Windows both take the system's order.
+pub async fn readdir_node(dir: &std::path::Path) -> std::io::Result<Vec<(String, std::fs::FileType)>> {
+    let mut rd = tokio::fs::read_dir(dir).await?;
+    let mut out = Vec::new();
+    while let Some(e) = rd.next_entry().await? {
+        let ft = e.file_type().await?;
+        out.push((e.file_name().to_string_lossy().into_owned(), ft));
+    }
+    if !cfg!(windows) {
+        out.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    }
+    Ok(out)
+}
+
+/// new Date(ms).toISOString()
+pub fn iso_ms(ms: f64) -> String {
+    let ms = ms.floor() as i64;
+    let (secs, milli) = (ms.div_euclid(1000), ms.rem_euclid(1000));
+    let (days, sod) = (secs.div_euclid(86400), secs.rem_euclid(86400));
+    // civil from days (Howard Hinnant)
+    let z = days + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{milli:03}Z", sod / 3600, sod % 3600 / 60, sod % 60)
+}
+
+/// a file time in ms as Node's stat gives it (mtimeMs: seconds * 1000 + nanoseconds / 1e6)
+pub fn time_ms(t: std::time::SystemTime) -> f64 {
+    match t.duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as f64 * 1000.0 + d.subsec_nanos() as f64 / 1e6,
+        Err(e) => -(e.duration().as_secs() as f64 * 1000.0 + e.duration().subsec_nanos() as f64 / 1e6),
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    #[test]
+    #[cfg(not(windows))]
+    fn paths_as_node_has_them() {
+        assert_eq!(pjoin(&["/a/b", "Movies", "X (2020)"]), "/a/b/Movies/X (2020)");
+        assert_eq!(pjoin(&["/a/b/", "../c", "./d"]), "/a/c/d");
+        assert_eq!(pnormalize("a//b/../c/"), "a/c/");
+        assert_eq!(pdirname("/a/b/c.mp4"), "/a/b");
+        assert_eq!(pdirname("/a"), "/");
+        assert_eq!(pdirname("a"), ".");
+        assert_eq!(pbasename("/a/b/c.mp4"), "c.mp4");
+        assert_eq!(pextname("/a/b/c.d.mp4"), ".mp4");
+        assert_eq!(pextname("/a/.hidden"), "");
+        assert_eq!(presolve("/a/../b/"), "/b");
+        assert_eq!(presolve("/"), "/");
+        assert_eq!(iso_ms(0.0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(iso_ms(1794941007117.0), "2026-11-17T18:43:27.117Z");
+    }
+}

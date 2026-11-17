@@ -6,27 +6,11 @@ use crate::util::*;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+
 use std::sync::{Arc, LazyLock};
 
 /// (id, "video" | "poster") -> the file, or None (server.js: setLocalFiles)
 pub type LocalFiles = Arc<dyn Fn(&str, &str) -> Option<PathBuf> + Send + Sync>;
-
-/// Until the downloads engine is ported (MIGRATION_PLAN.md 8.5): its list, read where it keeps it
-/// (<AGH_DATA_DIR>/downloads.json), as desktop/downloads-core.js localFile() answers.
-pub fn from_downloads_json(data_dir: PathBuf) -> LocalFiles {
-    Arc::new(move |id: &str, what: &str| {
-        let text = std::fs::read_to_string(data_dir.join("downloads.json")).ok()?;
-        let j: Value = serde_json::from_str(&text).ok()?;
-        let it = j.get("items")?.as_array()?.iter().find(|x| x.get("id").and_then(|v| v.as_str()) == Some(id))?;
-        let s = |k: &str| it.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-        if what == "poster" {
-            let p = s("posterFile");
-            return (!p.is_empty() && Path::new(&p).exists()).then(|| PathBuf::from(p));
-        }
-        let f = s("file");
-        (s("state") == "done" && !f.is_empty() && Path::new(&f).exists()).then(|| PathBuf::from(f))
-    })
-}
 
 fn local_mime(p: &Path) -> &'static str {
     match p.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
