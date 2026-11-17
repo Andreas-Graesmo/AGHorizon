@@ -112,6 +112,8 @@ const srv = http.createServer((req, res) => {
     if (!f) { res.writeHead(403); return res.end(); }
     return sendFile(req, res, f);
   }
+  // which byte ranges the webview asks of a conversion (WebKit's progressive player wants ranges)
+  if (u.pathname === '/api/transcode') console.log(`[${LABEL}] transcode request: range=${req.headers.range || '-'} video=${u.searchParams.get('video')} ua=${(req.headers['user-agent'] || '').slice(0, 60)}`);
   return appHandler(req, res);   // the real app: /api/*, /vendor/*, the UI
 });
 
