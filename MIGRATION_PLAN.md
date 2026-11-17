@@ -210,7 +210,7 @@ All 34 preload members are listed in Appendix A.
   - `test/tauri-shell.test.js`: shape against `preload.js`; inert in Electron, Android TV and a browser; operations and arguments; base64 round trip; displays.
   - `test/sidecar-rpc.test.js`: a real download over the sidecar protocol, played back through `/api/local`; folder-sync round trip; bad vault and device refused; `quit` saves.
   - `npm test`: 74/74, on Linux and Windows.
-- [ ] **Gate** (Windows CI `e2e/tauri-windows.js`, plus Electron).
+- [x] **Gate: passed.** Windows CI `e2e/tauri-windows.js` 18/18 ([run #3](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44124087557)), bridge CI `npm test` 74/74 on Windows, Android TV CI (Node 18 tests and emulator smoke) green, plus Electron.
   - **Tauri on Windows:**
     - downloads folder from `downloads.json`;
     - a 4.6 MB film downloads with progress events, plays back through `/api/local` byte for byte, lands in `Movies/E2E Film (2024)/`, and is **still listed after a kill and restart**;
