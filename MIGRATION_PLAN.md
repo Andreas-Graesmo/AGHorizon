@@ -109,21 +109,30 @@ Each phase ends with a **gate**. Do not start the next phase until the gate pass
 
 This is the last Windows Electron version, for example `2.9.0`, on **both** the stable and test channels. Its job is to make data migration possible.
 
-The code is portable and harmless on macOS and Linux. There it only writes the export file, which Phase 9 will reuse.
+It changes nothing a user notices until a Tauri release exists. The code is portable; the export runs only on Windows (or with `AGH_MIGRATION_EXPORT=1`), and the hand-over only on Windows with the updater public key present.
 
-- [ ] **1.1 Export renderer storage.**
-  - Trigger: the main process asks the renderer through a new IPC call, for example `migration:export`.
-  - Contents: all `tuner.*` localStorage keys, plus the IndexedDB `tuner` / `files` store (local-file playlists, `core.js:31-50`).
-  - Destination: `<appData>/Tuner IPTV/migration.json`, written atomically.
-  - When: at startup and again on `before-quit`.
-- [ ] **1.2 Export the sync code.** Decrypt `sync-code` with `safeStorage` (`electron/sync.js:31-63`). Write it either to Windows Credential Manager under the name the Tauri build will read with the `keyring` crate, or into `migration.json`.
-- [ ] **1.3 Updater handover (Windows only)** in `electron/updater.js`.
-  - Trigger: the newest release has a Tauri `latest.json` with a `windows-x86_64` entry.
-  - Download the Tauri `-setup.exe` and verify it (minisign `.sig` against the embedded pubkey, or a sha256 published in the release body).
-  - Run it with `/P`, then `app.quit()`.
-  - On macOS and Linux the Electron updater stays exactly as it is.
-- [ ] **1.4** Change no other behaviour. Ship it and leave it out for at least one release cycle.
-- [ ] **Gate:** `migration.json` appears on Windows with real data, and a round-trip import into a scratch WebView2 profile restores every playlist.
+- [x] **1.1 Export renderer storage** (`electron/migration.js`).
+  - `EXPORT_SCRIPT` runs in the page through `webContents.executeJavaScript`, so there are no preload or renderer changes. It collects every localStorage key, plus every record of IndexedDB `tuner/files` (playlist file text and the downloads' `dlinfo` map).
+  - It writes `{ format: 1, appVersion, exportedAt, origin, localStorage, indexedDB }` atomically to `%APPDATA%\Tuner IPTV\migration.json`.
+  - **When:** 5 s after start and every 10 minutes, plus at hand-over. **Changed from the plan's "on `before-quit`":** an async page script during quit could get in the way of electron-updater's quit-and-install. The worst case is losing the last ≤10 minutes before a *manual* Tauri install; the hand-over itself exports right before running the installer.
+  - `IMPORT_SCRIPT` (for 6.2) lives in the same file. It never overwrites keys or records the new app already has.
+- [x] **1.2 Sync code: exported only at hand-over.** `sync.readCode()` (pulled out of the `sync:code:get` handler) decrypts it with `safeStorage`, and it goes into `migration.json` as `syncCode` **only right before the installer runs**, never on an ordinary start. That keeps today's at-rest protection for everyone who doesn't move. Users who install Tauri by hand re-enter it (6.3). The Tauri side must store it in Credential Manager and remove it from `migration.json` after import (6.3).
+- [x] **1.3 Updater hand-over (Windows)** (`electron/handover.js`, wired into `electron/updater.js`).
+  - **Check:** the newest published release on the user's channel that carries a Tauri `latest.json` (test: newest of all published; stable: GitHub's latest), newer than the running version. It is offered through the existing `available` → `downloading` → `ready` states, so there are no UI changes. If there's none, electron-updater runs as before.
+  - **Download:** the installer is accepted only from `https://github.com/<owner>/<repo>/releases/download/…`. It is hashed (BLAKE2b-512) while downloading, then **its minisign signature is verified** against `electron/tauri-updater.key.pub`, the same check Tauri's updater makes. Electron 45's BoringSSL has no `blake2b512`, so `electron/blake2b.js` provides a plain-JS one, checked against Node's.
+  - **Install:** export with the sync code first. **If the export fails, nothing is installed.** Then run the installer with `/P`, and quit.
+  - **Off until `electron/tauri-updater.key.pub` exists** (see 1.0 below).
+- [ ] **1.0 Before the bridge ships: create the Tauri updater key pair** (moved up from 5.1, because the bridge must embed the public key).
+  - **You run:** `npx @tauri-apps/cli signer generate -w ~/.tauri/aghorizon.key`. Keep the private key and its password safe, and store them as the CI secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. If they are lost, users can no longer be updated.
+  - **Commit:** the **public** key (`aghorizon.key.pub`) as `electron/tauri-updater.key.pub`. It also goes into `plugins.updater.pubkey` in Phase 5.
+- [ ] **1.4** Ship the bridge (with 1.0 done) on both channels, and leave it out for at least one release cycle before the first Tauri release.
+- **Checks:**
+  - `npm test`: 67/67, including `test/handover.test.js`: signatures made by `tauri signer` (throwaway key in `test/fixtures/handover/`), tampering, wrong key, an edited trusted comment, release choice per channel, and the installer URL guard.
+  - Signature verification also checked inside Electron 45 itself.
+  - `spike/migration/check-roundtrip.js` (Chromium, real UI): Xtream credentials with special characters, a 3 MB file playlist, favourites, history, progress and settings all survive export → empty profile → import, 13/13. A second import doesn't overwrite.
+  - `spike/migration/check-electron-export.js`: the real Electron app writes `migration.json` with the stored data and no sync code. Linux done; Windows in `.github/workflows/bridge.yml`.
+  - **Not testable before a Tauri release exists:** the full download → verify → install path against a real release. That is covered by the Phase 6 gate (Electron 2.5 → bridge → Tauri on clean VMs).
+- [ ] **Gate:** `migration.json` appears on Windows with real data (CI: `bridge.yml`), the round trip restores everything (done), and 1.0 is done.
 
 ### Phase 2: Tauri scaffold and server sidecar
 
@@ -240,7 +249,7 @@ All 34 preload members are listed in Appendix A.
 
 ### Phase 5: Updater, packaging and CI (mixed release)
 
-- [ ] **5.1 Signing.** `npx tauri signer generate`. Put the pubkey in `plugins.updater.pubkey`, and add the CI secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Document key custody in `RELEASING.md` next to the Android keystore: if the key is lost, updates stop.
+- [ ] **5.1 Signing.** The key pair already exists from 1.0. `npx tauri signer generate`. Put the pubkey in `plugins.updater.pubkey`, and add the CI secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Document key custody in `RELEASING.md` next to the Android keystore: if the key is lost, updates stop.
 - [ ] **5.2** Set `bundle.createUpdaterArtifacts: true`, and `plugins.updater.windows.installMode: "passive"`.
 - [ ] **5.3 Rust updater commands.** They keep the status shape `{state, version, percent, notes, manual, checkedAt, message}` and push `updater:status` events.
   - [ ] `updater_check`: `updater_builder().endpoints([url_for(channel)])`.

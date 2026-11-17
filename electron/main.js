@@ -10,6 +10,7 @@ const { start, server, setLocalFiles } = require('../server');
 const updater = require('./updater');
 const downloads = require('./downloads');
 const sync = require('./sync');
+const migration = require('./migration');
 
 // The UI stores playlists in localStorage, which is tied to the page's origin (including the port).
 // So the port must be the same on every launch, otherwise your playlists would "disappear".
@@ -155,7 +156,17 @@ app.on('second-instance', () => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
 
-updater.init();
+// Moving to the Tauri build (MIGRATION_PLAN.md Phase 1, Windows): keep <userData>/migration.json up to date with the
+// page's own storage, which the new app can't read. The sync code goes in only right before the hand-over.
+const exportFor = (extra) => migration.exportNow(win && win.webContents, app.getPath('userData'), { appVersion: app.getVersion(), extra });
+function startMigrationExports() {
+  if (process.platform !== 'win32' && !process.env.AGH_MIGRATION_EXPORT) return;   // the env: to test it on another system
+  const quiet = () => exportFor().catch((e) => console.warn('migration export failed:', e && e.message));
+  setTimeout(quiet, 5000);
+  setInterval(quiet, 10 * 60 * 1000).unref();
+}
+
+updater.init({ exportForHandover: async () => exportFor({ syncCode: await sync.readCode() }) });
 sync.init();
 setLocalFiles(downloads.localFile);
 
@@ -207,6 +218,7 @@ app.whenReady().then(async () => {
   origin = `http://127.0.0.1:${port}`;
   downloads.init();
   createWindow();
+  startMigrationExports();
 
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
