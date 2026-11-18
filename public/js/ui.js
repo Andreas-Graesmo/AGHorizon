@@ -786,6 +786,12 @@ const ffmpegCredit = () => {
   else if (window.__TAURI__ && /Mac/.test(navigator.userAgent)) what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} 8.1 (${gpl}), built for this app with x264, dav1d and OpenSSL. ${link(FFMPEG_SOURCE_MAC, 'Its complete source code')}.`;
   else if (window.__TAURI__) what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} 8.1 (${gpl}), built by ${link('https://github.com/BtbN/FFmpeg-Builds', 'BtbN/FFmpeg-Builds')}. ${link(FFMPEG_SOURCE, 'Its complete source code')}.`;
   else what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} (${gpl}), from the ${link('https://github.com/eugeneware/ffmpeg-static', 'ffmpeg-static')} package.`;
+  // the Linux AppImage also bundles libraries from Ubuntu (GStreamer, WebKitGTK…; MIGRATION_PLAN.md 9.8): each release
+  // has a file that lists them and says where their source is
+  const v = upd.info && upd.info.version;
+  if (!TV && window.__TAURI__ && /Linux/.test(navigator.userAgent) && v) {
+    what += ` This AppImage also contains open-source libraries from Ubuntu (GStreamer, WebKitGTK and others): ${link(`https://github.com/Andreas-Graesmo/AGHorizon/releases/download/v${v}/AG-Horizon-${v}-AppImage-sources.txt`, 'which, and their source code')}.`;
+  }
   return `<p class="muted center">${what}</p>`;
 };
 function updatesCard() {
