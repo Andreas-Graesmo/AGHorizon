@@ -88,10 +88,6 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev file xvfb \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
           for p in /usr/lib/x86_64-linux-gnu/gstreamer-1.0/*.so; do ldd "$p" | grep -q 'libsoup-2.4' && sudo rm "$p"; done; true
-      - name: ffmpeg (Homebrew's; development only, see tauri-macos.yml)
-        if: runner.os == 'macOS'
-        timeout-minutes: 15
-        run: brew install ffmpeg && echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
       - name: npm ci (without Electron's binary; not needed here)
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
         env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
@@ -103,7 +99,7 @@ jobs:
           workspaces: |
             src-tauri -> target
             server-rs -> target
-      - name: Sidecars (the Rust server, ffmpeg)
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
         run: node scripts/tauri-prep.js
       - name: Throwaway signing key, and a config that uses it (and allows the local http server)
         run: |

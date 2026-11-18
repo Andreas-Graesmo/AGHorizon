@@ -9,7 +9,9 @@
  *       Windows and Linux x64: BtbN's ffmpeg 8.1 GPL build from their October 2026 month-end autobuild (kept by BtbN
  *       until 2028-10), refused unless the archive and the unpacked ffmpeg match their SHA-256 (MIGRATION_PLAN.md
  *       5.9, Option B: every library in it is pinned in BtbN's public scripts, so its source can be published).
- *       FFMPEG_PATH overrides it; macOS (development only, until MIGRATION_PLAN.md 9.8): FFMPEG_PATH or `ffmpeg`.
+ *       macOS arm64: our own build of the same FFmpeg commit with BtbN's library pins (scripts/ffmpeg-macos.sh,
+ *       MIGRATION_PLAN.md 9.8), from this repository's release, checked the same way.
+ *       FFMPEG_PATH overrides it (any system: development only).
  * Usage: node scripts/tauri-prep.js [--skip-server] [--node-server]
  */
 const { execFileSync } = require('child_process');
@@ -29,12 +31,20 @@ if (!triple) throw new Error(`no target triple for ${process.platform}-${process
 const ext = process.platform === 'win32' ? '.exe' : '';
 
 // MIGRATION_PLAN.md 5.9 (Option B). The matching source: scripts/ffmpeg-source.sh and the release FFMPEG.sourceTag.
+const BTBN = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59';
+const OWN = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/download';
 const FFMPEG = {
-  base: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59',
-  // the same autobuild for each system (MIGRATION_PLAN.md 9.8): one source release covers both
+  // Windows and Linux: the same BtbN autobuild (MIGRATION_PLAN.md 9.8), one source release for both.
+  // macOS: our build (scripts/ffmpeg-macos.sh), its release carrying its own complete source.
   builds: {
-    'win32-x64': { archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip', sha256: '401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f', exe: 'ffmpeg.exe', exeSha256: 'c46215f8889634396f0ac0acac738ef2145175e5b6caf28b3daa8ac9a9980c5f' },
-    'linux-x64': { archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-linux64-gpl-8.1.tar.xz', sha256: '41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380', exe: 'ffmpeg', exeSha256: '6ad8e7b802374502e927fdcf6de8019f4f24cac3c80fbfe3b41eda6f08648b55' },
+    'win32-x64': { base: BTBN, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip', sha256: '401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f', exe: 'bin/ffmpeg.exe', exeSha256: 'c46215f8889634396f0ac0acac738ef2145175e5b6caf28b3daa8ac9a9980c5f', license: 'LICENSE.txt' },
+    'linux-x64': { base: BTBN, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-linux64-gpl-8.1.tar.xz', sha256: '41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380', exe: 'bin/ffmpeg', exeSha256: '6ad8e7b802374502e927fdcf6de8019f4f24cac3c80fbfe3b41eda6f08648b55', license: 'LICENSE.txt' },
+    'darwin-arm64': {
+      base: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2`, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64.tar.xz',
+      sha256: '5dbee38075d565c115fce13e4d8d872d86b01d09d13d343903e77c375751e329', exe: 'ffmpeg', exeSha256: '8c6c723f3156e48388c9f3c97025b990a9c0377a11c58d1eb34abc0ac281e264', license: 'LICENSE',
+      builtBy: 'scripts/ffmpeg-macos.sh (x264, dav1d and OpenSSL at BtbN/FFmpeg-Builds\' pins)',
+      sourceUrl: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2`.replace('/download/', '/tag/'),
+    },
   },
   license: { sha256: '8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903' },   // GPL v3 (LICENSE.txt in the zip)
   btbnCommit: '5031c6f1082414e53688d39e521849905071070d',   // BtbN/FFmpeg-Builds at that autobuild: every library's pin
@@ -43,10 +53,10 @@ const FFMPEG = {
 };
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-async function fetchChecked(name, want) {
+async function fetchChecked(base, name, want) {
   for (let i = 1; ; i++) {
     try {
-      const r = await fetch(`${FFMPEG.base}/${name}`, { signal: AbortSignal.timeout(600000) });
+      const r = await fetch(`${base}/${name}`, { signal: AbortSignal.timeout(600000) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const buf = Buffer.from(await r.arrayBuffer());
       const got = sha256(buf);
@@ -78,28 +88,30 @@ async function fetchChecked(name, want) {
   const licOut = path.join(out, 'ffmpeg.LICENSE');
   const ff = FFMPEG.builds[`${process.platform}-${process.arch}`];
   if (ff && !process.env.FFMPEG_PATH) {
-    if (fs.existsSync(ffOut) && sha256(fs.readFileSync(ffOut)) === ff.exeSha256 && fs.existsSync(licOut) && fs.readFileSync(licOut, 'utf8').includes(FFMPEG.sourceTag)) {
+    const sourceUrl = ff.sourceUrl || `https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/${FFMPEG.sourceTag}`;
+    if (fs.existsSync(ffOut) && sha256(fs.readFileSync(ffOut)) === ff.exeSha256 && fs.existsSync(licOut) && fs.readFileSync(licOut, 'utf8').includes(sourceUrl)) {
       console.log('ffmpeg: already in place, checksum ok');
     } else {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-ffmpeg-'));
       const archive = path.join(tmp, ff.archive);
-      fs.writeFileSync(archive, await fetchChecked(ff.archive, ff.sha256));
+      fs.writeFileSync(archive, await fetchChecked(ff.base, ff.archive, ff.sha256));
       // Windows' own tar (bsdtar) unpacks zip files; Git Bash's GNU tar, which may come first on PATH, can't
       const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
       const dir = ff.archive.replace(/\.(zip|tar\.xz)$/, '');
-      execFileSync(tar, ['-xf', archive, '-C', tmp, `${dir}/bin/${ff.exe}`, `${dir}/LICENSE.txt`], { stdio: 'inherit' });
-      const exe = fs.readFileSync(path.join(tmp, dir, 'bin', ff.exe));
-      const lic = fs.readFileSync(path.join(tmp, dir, 'LICENSE.txt'));
+      execFileSync(tar, ['-xf', archive, '-C', tmp, `${dir}/${ff.exe}`, `${dir}/${ff.license}`], { stdio: 'inherit' });
+      const exe = fs.readFileSync(path.join(tmp, dir, ff.exe));
+      const lic = fs.readFileSync(path.join(tmp, dir, ff.license));
       if (sha256(exe) !== ff.exeSha256) throw new Error(`${ff.exe}: checksum mismatch after unpacking. Refusing it.`);
       if (sha256(lic) !== FFMPEG.license.sha256) throw new Error('ffmpeg LICENSE.txt: checksum mismatch. Refusing it.');
       fs.writeFileSync(ffOut, exe);
       fs.chmodSync(ffOut, 0o755);
-      fs.writeFileSync(licOut, `${lic.toString('utf8')}\n\n---\nffmpeg n8.1.3-27-g8dca1586f4, built by BtbN/FFmpeg-Builds (commit ${FFMPEG.btbnCommit}).\nThe complete corresponding source: https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/${FFMPEG.sourceTag}\n`);
+      const builtBy = ff.builtBy || `BtbN/FFmpeg-Builds (commit ${FFMPEG.btbnCommit})`;
+      fs.writeFileSync(licOut, `${lic.toString('utf8')}\n\n---\nffmpeg n8.1.3-27-g8dca1586f4, built by ${builtBy}.\nThe complete corresponding source: ${sourceUrl}\n`);
       fs.rmSync(tmp, { recursive: true, force: true });
-      console.log(`ffmpeg 8.1 (BtbN, GPL v3, checksums ok) → src-tauri/binaries/ffmpeg-${triple}${ext}`);
+      console.log(`ffmpeg 8.1 (${ff.builtBy ? 'our macOS build' : 'BtbN'}, GPL v3, checksums ok) → src-tauri/binaries/ffmpeg-${triple}${ext}`);
     }
   } else {
-    // FFMPEG_PATH (any system), or macOS until its release ffmpeg is decided (MIGRATION_PLAN.md 9.8): development only
+    // FFMPEG_PATH (any system), or a system with no pinned build (e.g. an Intel Mac): development only
     const src = process.env.FFMPEG_PATH || execFileSync(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg']).toString().split(/\r?\n/)[0].trim();
     fs.copyFileSync(src, ffOut);
     fs.chmodSync(ffOut, 0o755);

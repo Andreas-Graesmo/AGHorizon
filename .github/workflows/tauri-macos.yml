@@ -1,6 +1,5 @@
 # MIGRATION_PLAN.md 9.7 / 9.8: build the Tauri app for macOS (Apple silicon, ad hoc signed like the Electron app) and
-# check it end to end (e2e/tauri-unix.js). Its ffmpeg here is Homebrew's: fine on this runner, not shippable (it
-# needs Homebrew's libraries), until the macOS release ffmpeg is decided (9.8).
+# check it end to end (e2e/tauri-unix.js), with its pinned ffmpeg (our build, scripts/ffmpeg-macos.sh).
 name: Tauri app on macOS (migration, phase 9)
 
 on:
@@ -24,11 +23,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - name: ffmpeg (Homebrew's; development only)
-        timeout-minutes: 15
-        run: |
-          brew install ffmpeg
-          echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
       - name: npm ci (without Electron's binary; not needed here)
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
         env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
@@ -40,7 +34,7 @@ jobs:
           workspaces: |
             src-tauri -> target
             server-rs -> target
-      - name: Sidecars (the Rust server, ffmpeg)
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
         run: node scripts/tauri-prep.js
       # no updater files yet (MIGRATION_PLAN.md 9.9): they need the release signing key
       - name: Build the app and the dmg
@@ -51,9 +45,9 @@ jobs:
           du -sh src-tauri/target/release/bundle/macos/*.app
           codesign -dv src-tauri/target/release/bundle/macos/*.app 2>&1 | head -5
       - name: End to end
-        run: node e2e/tauri-unix.js src-tauri/target/release/bundle/macos/*.app "$FFMPEG_PATH"
+        run: node e2e/tauri-unix.js src-tauri/target/release/bundle/macos/*.app src-tauri/binaries/ffmpeg-aarch64-apple-darwin
       - uses: actions/upload-artifact@v4
         with:
-          name: AG-Horizon-Tauri-macOS-dmg (development ffmpeg)
+          name: AG-Horizon-Tauri-macOS-dmg
           path: src-tauri/target/release/bundle/dmg/*.dmg
           retention-days: 7
