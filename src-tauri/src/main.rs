@@ -127,6 +127,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![downloads, sync, popups, migration, keep_awake, updater::updater])
         .setup(|app| {
             updater::init(app.handle());
+            updater::auto_for_tests(app.handle());
             start_server(app.handle().clone())?;
             Ok(())
         })
@@ -152,14 +153,14 @@ fn focus_main(app: &AppHandle) {
 
 fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let port = port();
-    let public = app.path().resource_dir()?.join("public");
+    let public = app.path().resource_dir().map_err(|e| format!("the resource folder: {e}"))?.join("public");
     // externalBin programs sit next to the app's executable, without the target triple
-    let exe_dir = std::env::current_exe()?.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let exe_dir = std::env::current_exe().map_err(|e| format!("the program's path: {e}"))?.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let ffmpeg = exe_dir.join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
 
     // the downloads list and the sync folder setting live in the app's data folder (MIGRATION_PLAN.md 3.4/3.5)
-    let data_dir = app.path().app_data_dir()?;
-    std::fs::create_dir_all(&data_dir)?;
+    let data_dir = app.path().app_data_dir().map_err(|e| format!("the data folder: {e}"))?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("the data folder {}: {e}", data_dir.display()))?;
     // before the server reads downloads.json and sync.json
     from_electron(&app, &data_dir);
     let documents = app.path().document_dir().unwrap_or_else(|_| data_dir.clone());

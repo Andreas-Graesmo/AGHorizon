@@ -11,7 +11,8 @@
  *           releases is accepted; anything else falls back to Stable.
  * Whatever is found, the installer is installed only if it carries a valid signature from the release key
  * (plugins.updater.pubkey in tauri.conf.json, MIGRATION_PLAN.md 1.0), and only if it is newer than this version.
- * AGH_UPDATER_ENDPOINT replaces the endpoint, for e2e/tauri-update.js only (its test builds have their own key).
+ * AGH_UPDATER_ENDPOINT replaces the endpoint, for e2e/tauri-update.js and e2e/tauri-update-unix.js only (their test
+ * builds have their own key); AGH_UPDATER_AUTO (auto_for_tests) is for the latter.
  */
 use std::sync::Mutex;
 
@@ -47,13 +48,39 @@ pub fn init(app: &AppHandle) {
     *st.status.lock().unwrap() = json!({ "state": "idle" });
 }
 
-// why updates can't be installed here ("" = they can)
-fn reason() -> &'static str {
-    if cfg!(windows) {
-        ""
-    } else {
-        "On this system, download new versions from GitHub."   // macOS and Linux: MIGRATION_PLAN.md Phase 9
-    }
+// why updates can't be installed here ("" = they can). MIGRATION_PLAN.md 9.9.
+fn reason() -> String {
+    #[cfg(windows)]
+    return String::new();
+    // Linux: the updater replaces the AppImage file it was started from ($APPIMAGE), so only an AppImage in a folder
+    // this user can write to updates itself
+    #[cfg(target_os = "linux")]
+    return match std::env::var_os("APPIMAGE").map(std::path::PathBuf::from) {
+        Some(p) if p.parent().is_some_and(writable) => String::new(),
+        Some(_) => "The folder this AppImage is in can't be changed: download new versions from GitHub.".into(),
+        None => "Only the AppImage updates itself: download new versions from GitHub.".into(),
+    };
+    // macOS: the updater replaces the .app, so not while it runs from the disk image or from a copy macOS made to
+    // run it from (App Translocation, for an app opened where it was downloaded), nor where it can't be written
+    #[cfg(target_os = "macos")]
+    return match std::env::current_exe().ok().and_then(|e| e.ancestors().nth(3).map(|p| p.to_path_buf())) {
+        Some(app) if app.starts_with("/Volumes") || app.to_string_lossy().contains("/AppTranslocation/") => {
+            "Move AG Horizon to the Applications folder to get new versions by itself.".into()
+        }
+        Some(app) if app.parent().is_some_and(writable) => String::new(),
+        _ => "The folder AG Horizon is in can't be changed: download new versions from GitHub.".into(),
+    };
+    #[allow(unreachable_code)]
+    "On this system, download new versions from GitHub.".into()
+}
+
+// a file can be made (and removed) in this folder
+#[cfg(not(windows))]
+fn writable(dir: &std::path::Path) -> bool {
+    let probe = dir.join(format!(".agh-update-check-{}", std::process::id()));
+    let ok = std::fs::OpenOptions::new().write(true).create_new(true).open(&probe).is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
 }
 
 fn send(app: &AppHandle, next: Value) -> Value {
@@ -202,9 +229,42 @@ fn install(app: &AppHandle) -> Value {
     };
     let version = update.version.clone();
     match update.install(&bytes) {
-        Ok(()) => send(app, json!({ "state": "idle" })),   // not on Windows, which exits in install()
+        // Windows exits in install(), and the installer starts the new version. macOS and Linux have replaced the
+        // .app or the AppImage: start it again (through RunEvent::Exit, which stops the server first)
+        Ok(()) => {
+            let next = send(app, json!({ "state": "idle" }));
+            app.request_restart();
+            next
+        }
         Err(e) => send(app, json!({ "state": "error", "version": version, "message": short(&e.to_string()) })),
     }
+}
+
+// AGH_UPDATER_AUTO=1, for e2e/tauri-update-unix.js only (with AGH_UPDATER_ENDPOINT): at start, check, download and
+// install as the page would, logging each status. WebKitGTK has no DevTools protocol for a test to drive the page
+// with. Nothing is installed that the release key didn't sign.
+pub fn auto_for_tests(app: &AppHandle) {
+    if std::env::var("AGH_UPDATER_AUTO").ok().as_deref() != Some("1") {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let log = |s: &Value| eprintln!("[updater-auto] {s}");
+        let c = check(&app, None).await;
+        log(&c);
+        if c.get("state").and_then(|v| v.as_str()) != Some("available") {
+            return;
+        }
+        let d = download(&app).await;
+        log(&d);
+        if d.get("state").and_then(|v| v.as_str()) == Some("ready") {
+            let app2 = app.clone();
+            let i = std::thread::spawn(move || install(&app2)).join();
+            if let Ok(i) = i {
+                log(&i);
+            }
+        }
+    });
 }
 
 // The app is closing with an update downloaded: install it now, without starting the app again (as Electron's
