@@ -508,6 +508,18 @@ fn open_main(app: &AppHandle, port: u16) -> tauri::Result<()> {
         }
     }
 
+    // 9.7 macOS: the system's traffic lights over the top bar's left end, as in the Electron app (titleBarStyle
+    // 'hidden'); the top bar stays the title bar (tauri-shell.js leaves room for them and adds no buttons)
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .decorations(true)
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            // centred in the 42 px top bar (--topbar in style.css)
+            .traffic_light_position(tauri::LogicalPosition::new(14.0, 21.0));
+    }
+
     #[cfg(windows)]
     {
         let mut args = BROWSER_ARGS.to_string();

@@ -105,6 +105,9 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 /* The Tauri app on Windows (public/js/tauri-shell.js, MIGRATION_PLAN.md 4.2): no system title bar at all, so the
    window's own minimise / maximise / close buttons sit at the top bar's right end, in the theme's colours. */
 html.tauri-shell #topbar { padding-right: 0; }
+/* The Tauri app on macOS: the system's traffic lights over the top bar's left end (src-tauri/src/main.rs); room for them */
+html.tauri-mac #topbar { padding-left: 80px; padding-right: 10px; }
+html.tauri-mac.win-full #topbar { padding-left: 8px; }
 .win-ctl { display: flex; align-self: stretch; margin-left: 6px; flex: none; }
 .win-ctl button { appearance: none; border: 0; background: none; color: var(--text); width: 46px; height: 100%; display: grid; place-items: center; cursor: default; opacity: .9; }
 .win-ctl button:hover, .win-ctl button:focus-visible { background: var(--panel-2); opacity: 1; outline: none; }

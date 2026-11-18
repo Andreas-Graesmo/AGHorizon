@@ -1,0 +1,59 @@
+# MIGRATION_PLAN.md 9.7 / 9.8: build the Tauri app for macOS (Apple silicon, ad hoc signed like the Electron app) and
+# check it end to end (e2e/tauri-unix.js). Its ffmpeg here is Homebrew's: fine on this runner, not shippable (it
+# needs Homebrew's libraries), until the macOS release ffmpeg is decided (9.8).
+name: Tauri app on macOS (migration, phase 9)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', '!**/*.md', '.github/workflows/tauri-macos.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: ffmpeg (Homebrew's; development only)
+        timeout-minutes: 15
+        run: |
+          brew install ffmpeg
+          echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+      - name: npm ci (without Electron's binary; not needed here)
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - name: Player libraries into public/vendor
+        run: for i in 1 2 3; do npm run setup && break; sleep 10; done
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, ffmpeg)
+        run: node scripts/tauri-prep.js
+      # no updater files yet (MIGRATION_PLAN.md 9.9): they need the release signing key
+      - name: Build the app and the dmg
+        run: |
+          echo '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/no-updater.json"
+          npx --yes @tauri-apps/cli@2.12.4 build --bundles app,dmg --config "$RUNNER_TEMP/no-updater.json"
+          ls -la src-tauri/target/release/bundle/macos/ src-tauri/target/release/bundle/dmg/
+          du -sh src-tauri/target/release/bundle/macos/*.app
+          codesign -dv src-tauri/target/release/bundle/macos/*.app 2>&1 | head -5
+      - name: End to end
+        run: node e2e/tauri-unix.js src-tauri/target/release/bundle/macos/*.app "$FFMPEG_PATH"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AG-Horizon-Tauri-macOS-dmg (development ffmpeg)
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          retention-days: 7
