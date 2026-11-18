@@ -131,7 +131,7 @@ test('what can be replaced: an AppImage in a writable folder; a Mac app not on a
   fs.rmSync(d, { recursive: true, force: true });
 });
 
-test('Linux: the new AppImage takes the old one\'s name, and starts once this app has quit', () => {
+test('Linux: the new AppImage takes the old one\'s name, and starts once this app has quit', { skip: process.platform === 'win32' }, () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-install-'));
   const img = path.join(d, 'AG-Horizon.AppImage');
   fs.writeFileSync(img, 'old');
