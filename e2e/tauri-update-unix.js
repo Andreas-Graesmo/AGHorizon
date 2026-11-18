@@ -33,7 +33,8 @@ const results = [];
 const check = (name, ok, note = '') => { results.push(!!ok); console.log(`${ok ? 'pass' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`); };
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
-const work = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-update-'));
+// the real path: on macOS Tauri refuses to start from a path with a symlink in it, and /var (os.tmpdir()) is one
+const work = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'agh-update-'));
 const home = path.join(work, 'home');
 fs.mkdirSync(home);
 // the installed app: an AppImage in a folder of the user's, or the .app in ~/Applications

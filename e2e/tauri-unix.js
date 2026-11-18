@@ -71,7 +71,8 @@ function clipServer(dir) {
 }
 
 (async () => {
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-e2e-'));
+  // the real path: on macOS Tauri refuses to start from a path with a symlink in it, and /var (os.tmpdir()) is one
+  const work = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'agh-e2e-'));
   const home = path.join(work, 'home');
   const clips = path.join(work, 'clips');
   fs.mkdirSync(home); fs.mkdirSync(clips);
