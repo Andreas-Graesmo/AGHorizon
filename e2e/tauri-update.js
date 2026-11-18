@@ -133,8 +133,12 @@ async function connect() {
   let restarted = [];
   for (let i = 0; i < 120 && !restarted.length; i++) { restarted = appPaths(); if (!restarted.length) await sleep(500); }
   check('3: the app started again by itself, from the install folder', restarted.length === 1 && restarted[0].toLowerCase() === path.join(after.dir, 'ag-horizon.exe').toLowerCase(), JSON.stringify(restarted));
-  for (const n of ['ag-horizon.exe', 'aghorizon-server.exe']) spawnSync('taskkill', ['/F', '/IM', n], { stdio: 'ignore' });
-  await sleep(1500);
+  // and its WebView2 processes: left over, they keep its profile, and the copy started here (with a DevTools port, a
+  // different browser argument) then gets no webview at all ("could not reach the app's webview", now and then on CI)
+  for (const n of ['ag-horizon.exe', 'aghorizon-server.exe', 'msedgewebview2.exe']) spawnSync('taskkill', ['/F', '/T', '/IM', n], { stdio: 'ignore' });
+  const webviews = () => (spawnSync('tasklist', ['/FI', 'IMAGENAME eq msedgewebview2.exe', '/NH'], { encoding: 'utf8' }).stdout || '').includes('msedgewebview2');
+  for (let i = 0; i < 30 && (webviews() || appPaths().length); i++) await sleep(500);
+  await sleep(1000);
   spawn(path.join(after.dir, 'ag-horizon.exe'), [], { env: { ...process.env, AGH_DEVTOOLS_PORT: String(DEVTOOLS), AGH_NO_DIALOG: '1' }, stdio: 'ignore', detached: true }).unref();
   ({ browser, page } = await connect());
   const back = await page.evaluate(async () => ({ version: (await window.tunerDesktop.appInfo()).version, kept: LS.get('tuner.e2eUpdate', null) }));
