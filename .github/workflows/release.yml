@@ -31,7 +31,8 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, name: windows, bundles: nsis }
-          - { os: macos-latest, name: macos, bundles: 'app,dmg', args: '--target universal-apple-darwin', targets: 'aarch64-apple-darwin,x86_64-apple-darwin' }
+          # an Intel Mac builds the universal app (GitHub's Apple silicon runners were short for hours on 2026-11-18)
+          - { os: macos-15-intel, name: macos, bundles: 'app,dmg', args: '--target universal-apple-darwin', targets: 'aarch64-apple-darwin,x86_64-apple-darwin' }
           - { os: ubuntu-22.04, name: linux, bundles: appimage }   # the oldest runner: the AppImage's glibc baseline
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90

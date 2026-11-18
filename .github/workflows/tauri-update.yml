@@ -71,7 +71,7 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-22.04, bundles: appimage }
-          - { os: macos-latest, bundles: app }
+          - { os: macos-15-intel, bundles: app }   # (GitHub's Apple silicon runners were short, 2026-11-18)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     env:
