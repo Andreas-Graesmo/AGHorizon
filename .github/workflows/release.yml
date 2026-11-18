@@ -1,5 +1,6 @@
-# MIGRATION_PLAN.md 5.6: a mixed release while Windows has moved to Tauri and macOS/Linux are still Electron.
-# Before the first tag with this file: the bridge release (MIGRATION_PLAN.md 1.4) must be out for a while.
+# MIGRATION_PLAN.md 5.6 / 9.10: every desktop system is the Tauri app; the Android TV app as before.
+# Before the first tag with this file: the bridge release that hands over on macOS and Linux (MIGRATION_PLAN.md 9.10)
+# must be out, as the Windows one (1.4) was before Windows moved.
 name: Release
 
 on:
@@ -10,20 +11,44 @@ permissions:
   contents: write
 
 jobs:
-  # Windows: the Tauri app (MIGRATION_PLAN.md 5.6). One installer, AG-Horizon-Setup-<version>.exe, with its updater
-  # signature and latest.json, which the Tauri app and the Electron app's hand-over read. Signed with the release key
-  # (repository secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, MIGRATION_PLAN.md 1.0).
-  # No Windows Electron installer and no latest.yml / beta.yml: old Windows Electron apps must only ever find the
-  # bridge release, which hands over to this one (MIGRATION_PLAN.md 1.3).
-  windows:
-    runs-on: windows-latest
+  # The Tauri app (MIGRATION_PLAN.md 5.6, 9.8, 9.9), signed for its updater with the release key (repository secrets
+  # TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, MIGRATION_PLAN.md 1.0). scripts/tauri-release.js
+  # names the files as the website and README link to them:
+  #   Windows  AG-Horizon-Setup-<version>.exe (+ .sig)
+  #   macOS    AG-Horizon-<version>-arm64.dmg, AG-Horizon-<version>-arm64.app.tar.gz (+ .sig, the update)
+  #   Linux    AG-Horizon-<version>.AppImage (+ .sig)
+  # and each system's latest.json entries, merged into one by the latest-json job. No Electron files any more
+  # (latest.yml, latest-mac.yml, latest-linux.yml, beta*.yml): old Electron apps must only ever find the bridge
+  # releases, which hand over to this app (MIGRATION_PLAN.md 1.3, 9.10).
+  tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows, bundles: nsis }
+          - { os: macos-latest, name: macos, bundles: 'app,dmg' }
+          - { os: ubuntu-22.04, name: linux, bundles: appimage }   # the oldest runner: the AppImage's glibc baseline
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     defaults:
       run: { shell: bash }
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+      # see tauri-linux.yml: GStreamer is bundled, without its libsoup 2 plugins (they kill WebKitGTK 4.1's web process)
+      - name: Linux packages (WebKitGTK, GStreamer)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev file \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
+          for p in /usr/lib/x86_64-linux-gnu/gstreamer-1.0/*.so; do ldd "$p" | grep -q 'libsoup-2.4' && sudo rm "$p"; done; true
       - name: Install
         run: |
           for i in 1 2 3; do
@@ -57,96 +82,70 @@ jobs:
           fi
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      - name: Build the installer
-        run: npx --yes @tauri-apps/cli@2.12.4 build --bundles nsis
+      - name: Build
+        run: npx --yes @tauri-apps/cli@2.12.4 build --bundles ${{ matrix.bundles }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # built into the app (src-tauri/src/main.rs), as secrets.json is in the Electron app
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-      - name: Release files (AG-Horizon-Setup-<version>.exe, .sig, latest.json)
-        run: node scripts/tauri-release.js release-out
+      - name: Release files
+        run: |
+          node scripts/tauri-release.js release-out
+          mkdir -p latest && mv release-out/latest.json "latest/latest-${{ matrix.name }}.json"
+          ls -la release-out
+      # Linux: the source of every Ubuntu package the AppImage bundles (owner's decision 2026-11-18), fetched right
+      # after the build, while Ubuntu still has those versions. Published once per set of source packages, as a
+      # pre-release whose tag is not a version number; the app release gets a file that says where.
+      - name: The AppImage's third-party sources
+        if: runner.os == 'Linux'
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          grep -q '^deb-src' /etc/apt/sources.list 2>/dev/null || sudo sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee -a /etc/apt/sources.list > /dev/null
+          sudo apt-get update -qq
+          app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
+          scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/src" --list-only
+          tag="appimage-sources-ubuntu22.04-$(awk '/^== source packages/,/^$/' "$RUNNER_TEMP/src/MANIFEST.txt" | sha256sum | cut -c1-12)"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            rm -rf "$RUNNER_TEMP/src" && scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/src"
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Third-party sources for the Linux AppImage" \
+              --notes "The source of every Ubuntu package bundled in AG Horizon's Linux AppImage (GStreamer, gst-libav and the libraries it uses, WebKitGTK, GTK and others; GPL and LGPL among them). MANIFEST.txt lists each bundled file and its package. This is not an app release."
+            ( cd "$RUNNER_TEMP/src" && gh release upload "$tag" -- * )
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          { echo "The source of the third-party software in AG-Horizon-$version.AppImage: https://github.com/$GH_REPO/releases/tag/$tag"; echo; cat "$RUNNER_TEMP/src/MANIFEST.txt"; } > "release-out/AG-Horizon-$version-AppImage-sources.txt"
       - name: Add them to the draft release
         run: |
           version="${GITHUB_REF_NAME#v}"
           pre=""; case "$GITHUB_REF_NAME" in *-*) pre="--prerelease";; esac
-          # whichever build is first makes the draft (electron-builder on macOS/Linux also finds and fills it)
+          # whichever build is first makes the draft
           gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft $pre --title "$version" --notes "" || true
           gh release upload "$GITHUB_REF_NAME" release-out/* --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: latest-${{ matrix.name }}
+          path: latest/
 
-  # macOS and Linux: still the Electron app until MIGRATION_PLAN.md Phase 9. --mac / --linux only, so electron-builder
-  # never builds anything for Windows; it makes latest-mac.yml, latest-linux.yml and their beta-*.yml,
-  # which the Electron updaters there read.
-  desktop:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: macos-latest, platform: --mac }
-          - { os: ubuntu-latest, platform: --linux }
-    runs-on: ${{ matrix.os }}
+  # One latest.json for the release, with every system's entries (what the Tauri updater and the hand-over read)
+  latest-json:
+    needs: tauri
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      # Electron (~100 MB) and electron-builder's tools come from GitHub's file servers on every build; keep them
-      # between builds, so a build rarely depends on those downloads (a new Electron version downloads once).
-      - name: Cache Electron and electron-builder downloads
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
-          restore-keys: ${{ runner.os }}-electron-
-      # downloads can fail for a moment (e.g. "504 Gateway Time-out"): try again before giving up
-      - name: Install
-        shell: bash
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'latest-*', merge-multiple: true, path: latest }
+      - name: latest.json
         run: |
-          for i in 1 2 3; do
-            npm ci && exit 0
-            echo "npm ci failed (try $i of 3), trying again in 30 seconds"; sleep 30
-          done
-          exit 1
-      - name: Test
-        run: npm test
-      - name: Download the video libraries so the app also works offline
-        shell: bash
-        run: |
-          for i in 1 2 3; do
-            npm run setup && exit 0
-            echo "Download failed (try $i of 3), trying again in 30 seconds"; sleep 30
-          done
-          exit 1
-      - name: Add the API keys (repository secrets OPENSUBTITLES_API_KEY and TMDB_API_KEY)
-        shell: bash
-        run: |
-          node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '', tmdbApiKey: process.env.TMDB_API_KEY || '' }))"
-        env:
-          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-      - name: Build the installers
-        run: npx electron-builder ${{ matrix.platform }} --publish never
-      # not electron-builder's own publishing: it skips every file once the Windows job has made the draft a
-      # pre-release (a test version) and still reports success, which left v3.1.0-beta.1 without its Mac files
-      - name: Add them to the draft release
-        shell: bash
-        run: scripts/release-upload-electron.sh
-        env:
-          TAG: ${{ github.ref_name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
+          ls latest
+          node scripts/tauri-release.js --merge latest.json latest/*.json
+          gh release upload "$GITHUB_REF_NAME" latest.json --clobber
 
-  # The Android TV app: one APK, added to the same draft release. It doesn't wait for the desktop builds (a Mac
-  # build can sit in GitHub's queue for a long time): by the time the APK is built, the Linux or Windows build has
-  # normally made the draft, and the last step waits a little for it if not.
   android-tv:
     runs-on: ubuntu-latest
     steps:
@@ -210,7 +209,7 @@ jobs:
   # Once the desktop and Android TV builds are done, it is published by itself:
   # only apps on the Test update channel pick it up. Stable versions stay drafts until you press Publish.
   publish-test:
-    needs: [windows, desktop, android-tv]
+    needs: [tauri, latest-json, android-tv]
     if: ${{ !cancelled() && contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     env:
@@ -222,5 +221,5 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then gh release edit "$GITHUB_REF_NAME" --prerelease
           else echo "::warning::No release $GITHUB_REF_NAME was made (every build failed?)"; fi
       - name: Publish it
-        if: ${{ needs.windows.result == 'success' && needs.desktop.result == 'success' && needs.android-tv.result == 'success' }}
+        if: ${{ needs.tauri.result == 'success' && needs.latest-json.result == 'success' && needs.android-tv.result == 'success' }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease
