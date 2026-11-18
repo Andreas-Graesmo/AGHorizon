@@ -1,5 +1,5 @@
 #!/bin/bash
-# ffmpeg for the macOS app (Apple silicon), built from pinned sources (MIGRATION_PLAN.md 9.8, owner's decision
+# ffmpeg for the macOS app (one universal program: Apple silicon and Intel), built from pinned sources (MIGRATION_PLAN.md 9.8, owner's decision
 # 2026-11-18: BtbN/FFmpeg-Builds has no macOS builds). The same FFmpeg commit as the Windows and Linux builds, and
 # the libraries the app needs at the exact versions BtbN pins at the same commit (scripts.d/<stage>.sh):
 #   x264    H.264 encoding (compatibility mode converts to H.264)      GPL v2+
@@ -8,12 +8,14 @@
 # plus macOS's own VideoToolbox, AudioToolbox, zlib, bzip2 and iconv (system libraries). Everything is linked
 # statically except those, so the program runs on any Mac with macOS 12 or later; the build stops if it links
 # anything else. The licence is GPL v3 (--enable-gpl --enable-version3, as BtbN's).
-# Writes to <out dir>:
-#   ffmpeg-<ffmpeg version>-macos-arm64.tar.xz   ffmpeg, LICENSE (GPL v3), BUILD-INFO.txt (versions, configure line)
-#   source/                                      the complete corresponding source: each package as fetched, and
-#                                                this script; SHA256SUMS
-# Needs: macOS on Apple silicon, Xcode command line tools, git, meson, ninja, pkg-config.
-# Usage: scripts/ffmpeg-macos.sh <out dir>
+# Built once on each kind of Mac, natively (ffmpeg-macos.yml), then the two joined into one program with lipo:
+#   scripts/ffmpeg-macos.sh <out dir>        on this Mac's processor (arm64 or x86_64), writing:
+#     ffmpeg-<ffmpeg version>-macos-<arch>.tar.xz   ffmpeg, LICENSE (GPL v3), BUILD-INFO.txt (versions, configure line)
+#     source/                                       the complete corresponding source: each package as fetched, and
+#                                                   this script; SHA256SUMS (the same for both: the same pins)
+#   scripts/ffmpeg-macos.sh --combine <arm64 .tar.xz> <x86_64 .tar.xz> <out dir>
+#     ffmpeg-<ffmpeg version>-macos-universal.tar.xz   both in one program, with both BUILD-INFO texts
+# Needs: macOS, Xcode command line tools, git, meson, ninja, pkg-config; on Intel also nasm (x264 and dav1d).
 set -euo pipefail
 
 FFMPEG_COMMIT=8dca1586f4                     # n8.1.3-27-g8dca1586f4, on release/8.1 (= scripts/tauri-prep.js)
@@ -25,7 +27,29 @@ DAV1D_COMMIT=b8b2d726b4b78a2fb174cb45baff441b5969672c  # BtbN scripts.d/50-dav1d
 OPENSSL_TAG=openssl-3.6.5                              # BtbN scripts.d/25-openssl.sh
 export MACOSX_DEPLOYMENT_TARGET=12.0
 
-[ "$(uname -s)-$(uname -m)" = Darwin-arm64 ] || { echo "run this on macOS on Apple silicon"; exit 1; }
+[ "$(uname -s)" = Darwin ] || { echo "run this on macOS"; exit 1; }
+
+# the two builds joined into one universal program
+if [ "${1:-}" = --combine ]; then
+  A="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; X="$(cd "$(dirname "$3")" && pwd)/$(basename "$3")"
+  mkdir -p "$4"; OUT="$(cd "$4" && pwd)"
+  WORK="$(mktemp -d)"; trap 'rm -rf -- "$WORK"' EXIT
+  tar -C "$WORK" -xJf "$A"; tar -C "$WORK" -xJf "$X"
+  DA="$(basename "$A" .tar.xz)"; DX="$(basename "$X" .tar.xz)"
+  NAME="${DA%-arm64}-universal"
+  mkdir -p "$WORK/$NAME"
+  lipo -create "$WORK/$DA/ffmpeg" "$WORK/$DX/ffmpeg" -output "$WORK/$NAME/ffmpeg"
+  lipo -info "$WORK/$NAME/ffmpeg"
+  cmp -s "$WORK/$DA/LICENSE" "$WORK/$DX/LICENSE" || { echo "the two builds have different licences"; exit 1; }
+  cp "$WORK/$DA/LICENSE" "$WORK/$NAME/LICENSE"
+  { echo "One program for Apple silicon (arm64) and Intel (x86_64): the two builds below, joined with lipo."; echo
+    echo "== arm64"; cat "$WORK/$DA/BUILD-INFO.txt"; echo; echo "== x86_64"; cat "$WORK/$DX/BUILD-INFO.txt"; } > "$WORK/$NAME/BUILD-INFO.txt"
+  tar -C "$WORK" -cJf "$OUT/$NAME.tar.xz" "$NAME"
+  (cd "$OUT" && shasum -a 256 "$NAME.tar.xz")
+  shasum -a 256 "$WORK/$NAME/ffmpeg"
+  exit 0
+fi
+ARCH="$(uname -m)"   # arm64 or x86_64
 OUT="$(cd "$(dirname "${1:?usage: scripts/ffmpeg-macos.sh <out dir>}")" && pwd)/$(basename "$1")"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
@@ -67,7 +91,7 @@ git -C "$WORK/ffmpeg" archive --format=tar --prefix="ffmpeg-$FFMPEG_FULL/" --add
 cp "$0" "$SRC/ffmpeg-macos.sh"
 
 echo "== OpenSSL"
-(cd "$WORK/openssl" && ./Configure darwin64-arm64-cc no-shared no-tests no-docs no-apps --prefix="$PREFIX" --libdir=lib > /dev/null \
+(cd "$WORK/openssl" && ./Configure darwin64-$ARCH-cc no-shared no-tests no-docs no-apps --prefix="$PREFIX" --libdir=lib > /dev/null \
   && make -j"$JOBS" > /dev/null && make install_sw > /dev/null)
 echo "== x264"
 (cd "$WORK/x264" && ./configure --prefix="$PREFIX" --enable-static --disable-cli --enable-pic --disable-lavf --disable-swscale > /dev/null \
@@ -102,12 +126,12 @@ for need in "libx264" "aac "; do "$BIN" -hide_banner -encoders 2>/dev/null | gre
 [ -s "$WORK/check.mp4" ]
 
 VERSION="$("$BIN" -hide_banner -version | head -1 | awk '{print $3}')"
-NAME="ffmpeg-$VERSION-macos-arm64"
+NAME="ffmpeg-$VERSION-macos-$ARCH"
 mkdir -p "$WORK/$NAME"
 cp "$BIN" "$WORK/$NAME/ffmpeg"
 cp "$WORK/ffmpeg/COPYING.GPLv3" "$WORK/$NAME/LICENSE"
 {
-  echo "ffmpeg $VERSION for macOS 12+ on Apple silicon, built by scripts/ffmpeg-macos.sh (AG Horizon)."
+  echo "ffmpeg $VERSION for macOS 12+ on $ARCH, built by scripts/ffmpeg-macos.sh (AG Horizon)."
   echo "Licence: GNU GPL version 3 (LICENSE). The complete corresponding source is published with it (source/)."
   echo
   echo "FFmpeg   $FFMPEG_BRANCH at $FFMPEG_FULL"
