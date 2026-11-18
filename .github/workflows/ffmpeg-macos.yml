@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, arch: arm64 }      # (not macos-latest: GitHub's macOS 15 arm64 runners were short for hours, 2026-11-18)
+          - { os: macos-26, arch: arm64 }      # (not macos-latest: GitHub's macOS 15 arm64 runners were short for hours, 2026-11-18; macos-14 is retired)
           - { os: macos-15-intel, arch: x86_64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
