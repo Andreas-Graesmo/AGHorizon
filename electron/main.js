@@ -156,11 +156,10 @@ app.on('second-instance', () => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
 
-// Moving to the Tauri build (MIGRATION_PLAN.md Phase 1, Windows): keep <userData>/migration.json up to date with the
-// page's own storage, which the new app can't read. The sync code goes in only right before the hand-over.
+// Moving to the Tauri build (MIGRATION_PLAN.md Phase 1; macOS and Linux 9.10): keep <userData>/migration.json up to
+// date with the page's own storage, which the new app can't read. The sync code goes in only right before the hand-over.
 const exportFor = (extra) => migration.exportNow(win && win.webContents, app.getPath('userData'), { appVersion: app.getVersion(), extra });
 function startMigrationExports() {
-  if (process.platform !== 'win32' && !process.env.AGH_MIGRATION_EXPORT) return;   // the env: to test it on another system
   const quiet = () => exportFor().catch((e) => console.warn('migration export failed:', e && e.message));
   setTimeout(quiet, 5000);
   setInterval(quiet, 10 * 60 * 1000).unref();
