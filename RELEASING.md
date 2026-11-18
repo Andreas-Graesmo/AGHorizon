@@ -54,6 +54,8 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
    (This runs `npm version`, which edits `package.json`, commits, tags `vX.Y.Z`, and then pushes both. Your working folder must have no uncommitted changes.)
 3. Wait for the Action to finish, open **Releases**, edit the new draft's notes and **Publish release**.
 
+**Without a computer (or where tags can't be pushed):** once `package.json` has the new version on the branch (for example committed from the GitHub website, or by Claude), open **Actions → Tag a release → Run workflow**, enter the version (`2.6.0`, or `3.2.0-beta.1`) and the branch (`main`; test versions may also come from `migration/tauri`). It tags the branch's newest commit and starts the release build. It refuses a version `package.json` doesn't have, a tag that exists, and a stable version from any branch but `main`.
+
 ## 4. Test versions (the Test update channel)
 
 There are two update channels, chosen in the app under **Settings → About & updates → Update channel**:
