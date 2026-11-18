@@ -34,28 +34,31 @@ function applyChannel() {
 
 let status = { state: 'idle' };
 
-/* Hand-over to the Tauri build (handover.js, MIGRATION_PLAN.md 1.3): on Windows, when the newest release on the
- * channel is a Tauri build, it is offered through the same states as an ordinary update. Off until the Tauri updater's
- * public key is in electron/tauri-updater.key.pub. */
+/* Hand-over to the Tauri build (handover.js, MIGRATION_PLAN.md 1.3, 9.10): when the newest release on the channel is
+ * a Tauri build for this system, it is offered through the same states as an ordinary update. On Windows always; on
+ * Linux for the AppImage, on macOS for an app that can be replaced where it is (handover.target()), and on a Mac also
+ * though the app has no updater of its own. Off until the Tauri updater's public key is in
+ * electron/tauri-updater.key.pub. */
 let handoverDeps = { exportForHandover: null };
-let pending = null;   // { rel, inst, file, hash }
-const handoverOn = () => process.platform === 'win32' && !!handover.publicKey() && !!pub.owner;
+let pending = null;   // { rel, inst, file, target }
+const handoverOn = () => app.isPackaged && !!handover.publicKey() && !!pub.owner && (process.platform === 'win32' || !!handover.target());
 
 async function checkHandover() {
   const rel = await handover.findRelease({ channel, current: app.getVersion(), api });
   if (!rel) return false;
   const r = await fetch(rel.latestJsonUrl, { headers: { 'User-Agent': 'AG-Horizon' }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error('latest.json: GitHub answered ' + r.status);
-  const inst = handover.windowsInstaller(await r.json(), pub);
+  const inst = handover.updateFor(await r.json(), pub);
   if (!inst) return false;
-  pending = { rel, inst };
+  pending = { rel, inst, target: process.platform === 'win32' ? null : handover.target() };
   send({ state: 'available', version: rel.version, notes: rel.notes });
   return true;
 }
 
 async function downloadHandover() {
-  const { rel, inst } = pending;
-  const dest = path.join(app.getPath('temp'), `AG-Horizon-Setup-${rel.version}.exe`);
+  const { rel, inst, target } = pending;
+  // Windows: the installer, to the temp folder; macOS and Linux: next to the app it replaces
+  const dest = target ? handover.stagingFile(target, rel.version) : path.join(app.getPath('temp'), `AG-Horizon-Setup-${rel.version}.exe`);
   send({ state: 'downloading', version: rel.version, percent: 0 });
   try {
     const got = await handover.download(inst.url, dest, (percent) => send({ state: 'downloading', version: rel.version, percent }));
@@ -83,7 +86,16 @@ async function installHandover() {
     send({ state: 'error', version: pending.rel.version, message: `Couldn't save your playlists and settings for the new version (${String((e && e.message) || e).slice(0, 120)}). Nothing was installed.` });
     return status;
   }
-  handover.runInstaller(pending.file);
+  if (pending.target) {
+    try {
+      handover.install(pending.file, pending.target);
+    } catch (e) {
+      send({ state: 'error', version: pending.rel.version, message: `The new version couldn't be put in place (${String((e && e.message) || e).slice(0, 120)}). This version is unchanged.` });
+      return status;
+    }
+  } else {
+    handover.runInstaller(pending.file);
+  }
   setImmediate(() => app.quit());
   return status;
 }
@@ -157,10 +169,19 @@ function init(deps = {}) {
   });
 
   if (reason()) {
-    // No in-app installer here (started from source, or no repository configured): still tell the person whether a newer release exists.
-    ipcMain.handle('updater:check', () => manualCheck());
-    ipcMain.handle('updater:download', () => status);
-    ipcMain.handle('updater:install', () => status);
+    // No in-app installer here (a Mac, started from source, or no repository configured): still tell the person
+    // whether a newer release exists; on a Mac, the hand-over to the Tauri build can still install itself
+    ipcMain.handle('updater:check', async () => {
+      if (pending && (status.state === 'downloading' || status.state === 'ready')) return status;
+      pending = null;
+      if (handoverOn()) {
+        send({ state: 'checking' });
+        try { if (await checkHandover()) return status; } catch (e) { console.warn('hand-over check failed:', e && e.message); }
+      }
+      return manualCheck();
+    });
+    ipcMain.handle('updater:download', () => (pending ? downloadHandover() : status));
+    ipcMain.handle('updater:install', () => (pending && pending.file ? installHandover() : status));
     return;
   }
 
