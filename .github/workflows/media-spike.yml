@@ -48,6 +48,9 @@ jobs:
           - { os: ubuntu-22.04, label: linux-webkitgtk-mvtranscode, url: 'http://127.0.0.1:47831/spike/?exit=1&only=mvtranscode' }
           # plan task 0.2: PiP and Mirror popups (window.open in deny / allow / create mode)
           - { os: windows-latest, label: windows-webview2-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
+          # 9.5 / 9.1: the same on WKWebView and WebKitGTK (the app's PiP and Mirror are such popups)
+          - { os: macos-latest, label: macos-wkwebview-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
+          - { os: ubuntu-22.04, label: linux-webkitgtk-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
