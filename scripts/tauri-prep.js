@@ -46,11 +46,11 @@ const FFMPEG = {
   builds: {
     'win32-x64': { base: BTBN, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip', sha256: '401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f', exe: 'bin/ffmpeg.exe', exeSha256: 'c46215f8889634396f0ac0acac738ef2145175e5b6caf28b3daa8ac9a9980c5f', license: 'LICENSE.txt' },
     'linux-x64': { base: BTBN, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-linux64-gpl-8.1.tar.xz', sha256: '41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380', exe: 'bin/ffmpeg', exeSha256: '6ad8e7b802374502e927fdcf6de8019f4f24cac3c80fbfe3b41eda6f08648b55', license: 'LICENSE.txt' },
-    darwin: {   // one program for both processors (build 3 on: Apple silicon and Intel)
-      base: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2`, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64.tar.xz',
-      sha256: '5dbee38075d565c115fce13e4d8d872d86b01d09d13d343903e77c375751e329', exe: 'ffmpeg', exeSha256: '8c6c723f3156e48388c9f3c97025b990a9c0377a11c58d1eb34abc0ac281e264', license: 'LICENSE',
+    darwin: {   // build 3: one program for both processors (Apple silicon and Intel)
+      base: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3`, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal.tar.xz',
+      sha256: '5632299012dbb5f2a98c7c65715d38e40d166d9839ab3f8c1ec3dc31662bf2fa', exe: 'ffmpeg', exeSha256: '764ff1eb70c24dd410f17b1abebb4b96877b64f5667a7ae872ddf5db63f06328', license: 'LICENSE',
       builtBy: 'scripts/ffmpeg-macos.sh (x264, dav1d and OpenSSL at BtbN/FFmpeg-Builds\' pins)',
-      sourceUrl: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2`.replace('/download/', '/tag/'),
+      sourceUrl: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3`.replace('/download/', '/tag/'),
     },
   },
   license: { sha256: '8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903' },   // GPL v3 (LICENSE.txt in the zip)

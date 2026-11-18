@@ -777,7 +777,7 @@ const tmdbCredit = () => (state.tmdb ? '<p class="muted center">This product use
 // system browser (Electron and the Tauri app both send target=_blank there).
 const FFMPEG_SOURCE = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source';
 // macOS: our own build of the same ffmpeg (scripts/ffmpeg-macos.sh), its release carrying its source (MIGRATION_PLAN.md 9.8)
-const FFMPEG_SOURCE_MAC = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2';
+const FFMPEG_SOURCE_MAC = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3';
 const ffmpegCredit = () => {
   const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
   const gpl = link('https://www.gnu.org/licenses/gpl-3.0.html', 'GPL v3');
