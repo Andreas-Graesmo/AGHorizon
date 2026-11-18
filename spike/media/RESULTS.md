@@ -22,6 +22,10 @@ CI [run 44196981013](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/4
 - **Unchanged:** `video.captureStream()` is missing on both, `canvas.captureStream()` works on both (9.4), and `navigator.wakeLock` is denied on both (9.6).
 - **The shipped AppImage:** `e2e/tauri-linux.js` (`.github/workflows/tauri-linux.yml`) checks that H.264/AAC plays inside the AppImage through the GStreamer it bundles, both as a plain `<video>` and through MSE.
 
+## Phase 0.2 popups on macOS and Linux (2026-11-18)
+
+CI run 44282278130 (`macos-wkwebview-popups`, `linux-webkitgtk-popups`): in Tauri's create mode (what the app does) the PiP popup opens, the playing `<video>` moves into it and plays on, and the mirror page reaches `window.opener`. macOS: frameless and always on top; **no `pagehide` when the popup closes** (`w.closed` is true), so `player.js` also watches `w.closed`. Linux: frameless; not on top on CI (Xvfb has no window manager). On both a closed popup leaves its Tauri window behind until it is destroyed from Rust, which `tauri-shell.js` does. `video.captureStream()` is missing on both (the app's Mirror uses a canvas there, 9.4).
+
 ## How far to trust these numbers
 
 - **CI machines are not users' machines.** They are VMs with no GPU, no HEVC extension or Dolby decoder on Windows, Xvfb and software GL on Linux, and a virtualised Mac. Hardware decoding (HEVC on Windows) cannot show up here. Treat "plays on CI" as *the path works*, and "fails on CI" as *check on real hardware* unless the cause is structural (for example, an API is missing).

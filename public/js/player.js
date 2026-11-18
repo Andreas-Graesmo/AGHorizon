@@ -576,7 +576,13 @@ async function openPipWindow() {
   w.addEventListener('resize', layoutPlayer);
   layoutPlayer();
 
-  w.addEventListener('pagehide', () => {   // closed: by its own ×, "go to this video", stop, or the app
+  // closed: by its own ×, "go to this video", stop, or the app. Chromium fires pagehide; WKWebView (the macOS app)
+  // doesn't (popup spike on CI), so also notice that the window is closed, whichever comes first
+  let done = false;
+  const closed = () => {
+    if (done) return;
+    done = true;
+    clearInterval(watch);
     rootObserver.disconnect();
     pipWin = null;
     pipDoc = null;
@@ -584,7 +590,9 @@ async function openPipWindow() {
     movePlayer(() => home.parent.insertBefore(el, home.next), { later: true });
     $('#menu').hidden = true;
     uiPlayback();
-  });
+  };
+  w.addEventListener('pagehide', closed);
+  const watch = setInterval(() => { if (w.closed) closed(); }, 250);
 }
 
 // Moving the <video> into another window makes Chromium reload its source, which a running conversion or a live
