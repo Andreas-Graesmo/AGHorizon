@@ -17,6 +17,7 @@
 set -euo pipefail
 
 FFMPEG_COMMIT=8dca1586f4                     # n8.1.3-27-g8dca1586f4, on release/8.1 (= scripts/tauri-prep.js)
+FFMPEG_VERSION=n8.1.3-27-g8dca1586f4        # what `git describe` gives with the tags (a shallow checkout has none)
 FFMPEG_BRANCH=release/8.1
 BTBN_COMMIT=5031c6f1082414e53688d39e521849905071070d
 X264_COMMIT=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee   # BtbN scripts.d/50-x264.sh
@@ -60,7 +61,9 @@ git init -q "$WORK/ffmpeg"
 git -C "$WORK/ffmpeg" fetch -q --depth 300 https://github.com/FFmpeg/FFmpeg.git "$FFMPEG_BRANCH"
 FFMPEG_FULL="$(git -C "$WORK/ffmpeg" rev-parse "$FFMPEG_COMMIT")"
 git -C "$WORK/ffmpeg" checkout -q "$FFMPEG_FULL"
-git -C "$WORK/ffmpeg" archive --format=tar --prefix="ffmpeg-$FFMPEG_FULL/" HEAD | xz -T0 -9 > "$SRC/ffmpeg-$FFMPEG_FULL.tar.xz"
+# ffmpeg -version names this, as the Windows and Linux builds do (ffbuild/version.sh reads a VERSION file first)
+echo "$FFMPEG_VERSION" > "$WORK/ffmpeg/VERSION"
+git -C "$WORK/ffmpeg" archive --format=tar --prefix="ffmpeg-$FFMPEG_FULL/" --add-file="$WORK/ffmpeg/VERSION" HEAD | xz -T0 -9 > "$SRC/ffmpeg-$FFMPEG_FULL.tar.xz"
 cp "$0" "$SRC/ffmpeg-macos.sh"
 
 echo "== OpenSSL"
