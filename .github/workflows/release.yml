@@ -3,12 +3,15 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # started by tag-release.yml on the tag it made (a tag a workflow pushes starts nothing by itself); on a tag only
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:
@@ -68,6 +71,7 @@ jobs:
   # build can sit in GitHub's queue for a long time): by the time the APK is built, the Linux or Windows build has
   # normally made the draft, and the last step waits a little for it if not.
   android-tv:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
