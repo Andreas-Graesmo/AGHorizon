@@ -115,11 +115,18 @@ async function killAll() {
     check('N+1 is downloaded and installed', !!done, JSON.stringify(statuses()));
     const replaced = await waitFor(() => fingerprint() === wantNext, 30000);
     check(`the installed app is now N+1 (${latest.version})`, !!replaced, mac ? plistVersion() : '');
-    // the new version checks again at its start: nothing newer than itself
-    const again = await waitFor(() => statuses().filter((s) => s.state === 'current').length > 0, 120000);
-    check('it started again by itself and finds nothing newer', !!again, JSON.stringify(statuses().slice(-2)));
+    if (mac) {
+      // macOS starts it again through LaunchServices, which passes on neither this test's environment nor its log:
+      // see that a new copy runs from the updated .app (whose version was checked above)
+      const back = await waitFor(() => running().some((l) => l.includes(path.join(installed, 'Contents', 'MacOS', 'ag-horizon'))), 60000);
+      check('it started again by itself, from the updated .app', !!back, running().join(' | '));
+    } else {
+      // the new version checks again at its start: nothing newer than itself
+      const again = await waitFor(() => statuses().filter((s) => s.state === 'current').length > 0, 120000);
+      check('it started again by itself and finds nothing newer', !!again, JSON.stringify(statuses().slice(-2)));
+    }
     // the app's own program (its command line may be just "ag-horizon"), not the AppImage runtime or the server
-    const apps = running().filter((l) => /^\d+\s+(\S*\/)?ag-horizon(\s|$)/.test(l));
+    const apps = running().filter((l) => /(^\d+\s+|\/)ag-horizon(\s|$)/.test(l));
     check('exactly one copy of the app runs', apps.length === 1, running().join(' | '));
   } finally {
     await killAll();
