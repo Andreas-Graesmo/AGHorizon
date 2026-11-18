@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
 
 permissions:
   contents: read
@@ -66,6 +66,16 @@ jobs:
           rm -rf squashfs-root
       - name: End to end
         run: node e2e/tauri-unix.js src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+      # 9.10: from the Electron app to this one: the real Electron app writes its export, this AppImage imports it;
+      # the sync code goes into GNOME Keyring (a Secret Service on a private session bus)
+      - name: Electron → Tauri (data and sync code)
+        run: |
+          sudo apt-get install -y -qq gnome-keyring > /dev/null
+          node node_modules/electron/install.js
+          npm install --no-save --no-audit --no-fund playwright@1.63.0
+          app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
+          dbus-run-session -- bash -c 'eval "$(echo -n e2e | gnome-keyring-daemon --unlock --components=secrets)" > /dev/null; xvfb-run -a node e2e/tauri-migration-unix.js "$1"' sh "$app"
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
       # the bundled Ubuntu packages and their source packages (scripts/appimage-sources.sh): listed on every build;
       # run by hand, also fetched, to see that every source can be (the release job publishes them, MIGRATION_PLAN.md 9.8)
       - name: Third-party sources (the list; fetched too when run by hand)

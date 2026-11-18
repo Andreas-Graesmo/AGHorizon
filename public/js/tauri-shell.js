@@ -210,8 +210,11 @@
   // MIGRATION_PLAN.md 6.2: the first start imported the Electron app's storage (initialization script from main.rs);
   // tell the app it went through, so it is never offered again
   if (window.__aghMigrating) {
+    // not at once: WebKit (macOS, Linux) writes localStorage to disk seconds later, and an app closed before that
+    // would lose the imported playlists for good (found by e2e/tauri-migration-unix.js). Until marked done, the next
+    // start imports again, which leaves what the app already has alone.
     window.__aghMigrating.then(
-      (result) => invoke('migration', { op: 'done', result }),
+      (result) => new Promise((r) => setTimeout(r, 10000)).then(() => invoke('migration', { op: 'done', result })),
       (e) => console.error('migration import failed:', e),
     ).catch(() => {});
   }

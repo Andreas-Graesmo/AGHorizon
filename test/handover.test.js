@@ -89,3 +89,100 @@ test('a signature checks out with a precomputed BLAKE2b (as download() gives)', 
   const { blake2b512 } = require('../electron/blake2b');
   assert.deepStrictEqual(h.verify(null, sig, pub, blake2b512(file)), { ok: true });
 });
+
+/* ─────────────── macOS and Linux (MIGRATION_PLAN.md 9.10) ─────────────── */
+const os = require('os');
+const { execFileSync } = require('child_process');
+const latestAll = {
+  version: '3.2.0',
+  platforms: {
+    'windows-x86_64-nsis': { url: 'https://github.com/O/R/releases/download/v3.2.0/AG-Horizon-Setup-3.2.0.exe', signature: 'w' },
+    'linux-x86_64-appimage': { url: 'https://github.com/O/R/releases/download/v3.2.0/AG-Horizon-3.2.0.AppImage', signature: 'l' },
+    'darwin-aarch64-app': { url: 'https://github.com/O/R/releases/download/v3.2.0/AG-Horizon-3.2.0-arm64.app.tar.gz', signature: 'm' },
+  },
+};
+
+test('each system gets its own update from latest.json, and only for the Tauri builds\' processors', () => {
+  const pub = { owner: 'o', repo: 'r' };
+  assert.strictEqual(h.updateFor(latestAll, pub, 'linux', 'x64').signature, 'l');
+  assert.strictEqual(h.updateFor(latestAll, pub, 'darwin', 'arm64').signature, 'm');
+  assert.strictEqual(h.updateFor(latestAll, pub, 'win32', 'x64').signature, 'w');
+  assert.strictEqual(h.updateFor(latestAll, pub, 'darwin', 'x64'), null);   // an Intel Mac: no Tauri build for it
+  assert.strictEqual(h.updateFor(latestAll, pub, 'linux', 'arm64'), null);
+  // the right kind of file, from this repository only
+  const wrong = { platforms: { 'linux-x86_64-appimage': { url: 'https://github.com/O/R/releases/download/v3.2.0/AG-Horizon-3.2.0-arm64.app.tar.gz', signature: 'l' } } };
+  assert.strictEqual(h.updateFor(wrong, pub, 'linux', 'x64'), null);
+  const elsewhere = { platforms: { 'darwin-aarch64-app': { url: 'https://example.com/O/R/releases/download/v3.2.0/x.app.tar.gz', signature: 'm' } } };
+  assert.strictEqual(h.updateFor(elsewhere, pub, 'darwin', 'arm64'), null);
+});
+
+test('what can be replaced: an AppImage in a writable folder; a Mac app not on a disk image or translocated', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-target-'));
+  const img = path.join(d, 'AG-Horizon.AppImage');
+  fs.writeFileSync(img, 'x');
+  assert.deepStrictEqual(h.target({ platform: 'linux', env: { APPIMAGE: img } }), { kind: 'appimage', path: img });
+  assert.strictEqual(h.target({ platform: 'linux', env: {} }), null);                       // not started as an AppImage
+  assert.strictEqual(h.target({ platform: 'linux', env: { APPIMAGE: path.join(d, 'gone.AppImage') } }), null);
+  const app = path.join(d, 'AG Horizon.app');
+  assert.deepStrictEqual(h.target({ platform: 'darwin', execPath: `${app}/Contents/MacOS/AG Horizon` }), { kind: 'app', path: app });
+  assert.strictEqual(h.target({ platform: 'darwin', execPath: '/Volumes/AG Horizon/AG Horizon.app/Contents/MacOS/AG Horizon' }), null);
+  assert.strictEqual(h.target({ platform: 'darwin', execPath: '/private/var/folders/x/AppTranslocation/1/d/AG Horizon.app/Contents/MacOS/AG Horizon' }), null);
+  assert.strictEqual(h.target({ platform: 'win32' }), null);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('Linux: the new AppImage takes the old one\'s name, and starts once this app has quit', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-install-'));
+  const img = path.join(d, 'AG-Horizon.AppImage');
+  fs.writeFileSync(img, 'old');
+  const t = { kind: 'appimage', path: img };
+  const staged = h.stagingFile(t, '3.2.0');
+  assert.strictEqual(path.dirname(staged), d);   // next to it: one rename puts it in place
+  fs.writeFileSync(staged, 'new');
+  const runs = [];
+  h.install(staged, t, { pid: 4242, env: { APPIMAGE: img, APPDIR: '/tmp/.mount', HOME: '/home/x' }, spawnFn: (cmd, args, opts) => { runs.push({ cmd, args, opts }); return { unref() {} }; } });
+  assert.strictEqual(fs.readFileSync(img, 'utf8'), 'new');
+  assert.ok(fs.statSync(img).mode & 0o100, 'executable');
+  assert.ok(!fs.existsSync(staged));
+  assert.strictEqual(runs.length, 1);
+  assert.match(runs[0].args[1], /kill -0 4242/);   // waits for this app to quit first (the port, the file)
+  assert.strictEqual(runs[0].args[3], img);
+  assert.strictEqual(runs[0].opts.env.APPIMAGE, undefined);   // not this AppImage's environment
+  assert.strictEqual(runs[0].opts.env.HOME, '/home/x');
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('macOS: the new .app takes the old one\'s place; the old one is removed after this app has quit', { skip: !fs.existsSync('/usr/bin/tar') }, () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-install-'));
+  const app = path.join(d, 'AG Horizon.app');
+  fs.mkdirSync(path.join(app, 'Contents'), { recursive: true });
+  fs.writeFileSync(path.join(app, 'Contents', 'version'), 'old');
+  // the update as Tauri makes it: "AG Horizon.app" in a .tar.gz
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-src-'));
+  fs.mkdirSync(path.join(src, 'AG Horizon.app', 'Contents'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'AG Horizon.app', 'Contents', 'version'), 'new');
+  const t = { kind: 'app', path: app };
+  const staged = h.stagingFile(t, '3.2.0');
+  execFileSync('tar', ['-czf', staged, '-C', src, 'AG Horizon.app']);
+  const runs = [];
+  h.install(staged, t, { pid: 4242, env: {}, spawnFn: (cmd, args) => { runs.push(args); return { unref() {} }; } });
+  assert.strictEqual(fs.readFileSync(path.join(app, 'Contents', 'version'), 'utf8'), 'new');
+  const left = fs.readdirSync(d).sort();
+  assert.deepStrictEqual(left, ['.ag-horizon-old-4242.app', 'AG Horizon.app']);   // the old one, until this app quits
+  assert.match(runs[0][1], /kill -0 4242.*rm -rf -- "\$2".*open -n "\$1"/);
+  assert.deepStrictEqual(runs[0].slice(3), [app, path.join(d, '.ag-horizon-old-4242.app')]);
+  fs.rmSync(d, { recursive: true, force: true });
+  fs.rmSync(src, { recursive: true, force: true });
+});
+
+test('macOS: an update that can\'t be unpacked leaves the app as it was', { skip: !fs.existsSync('/usr/bin/tar') }, () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-install-'));
+  const app = path.join(d, 'AG Horizon.app');
+  fs.mkdirSync(app);
+  const t = { kind: 'app', path: app };
+  const staged = h.stagingFile(t, '3.2.0');
+  fs.writeFileSync(staged, 'not a tar.gz');
+  assert.throws(() => h.install(staged, t, { pid: 1, env: {}, spawnFn: () => assert.fail('nothing may start') }), /unpacked/);
+  assert.deepStrictEqual(fs.readdirSync(d), ['AG Horizon.app']);
+  fs.rmSync(d, { recursive: true, force: true });
+});
