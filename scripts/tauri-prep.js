@@ -29,6 +29,13 @@ const TRIPLES = {
 const triple = TRIPLES[`${process.platform}-${process.arch}`];
 if (!triple) throw new Error(`no target triple for ${process.platform}-${process.arch}`);
 const ext = process.platform === 'win32' ? '.exe' : '';
+// macOS: one universal app for Apple silicon and Intel (owner's decision 2026-11-19; `tauri build --target
+// universal-apple-darwin`). Each program is both in one file (lipo), under Tauri's universal name, and under each
+// processor's name too, which a plain `cargo build` on a Mac looks for.
+const mac = process.platform === 'darwin';
+const MAC_TRIPLES = ['aarch64-apple-darwin', 'x86_64-apple-darwin'];
+const names = (prog) => (mac ? ['universal-apple-darwin', ...MAC_TRIPLES] : [triple]).map((t) => path.join(out, `${prog}-${t}${ext}`));
+const place = (file, prog) => { for (const n of names(prog)) { fs.copyFileSync(file, n); fs.chmodSync(n, 0o755); } };
 
 // MIGRATION_PLAN.md 5.9 (Option B). The matching source: scripts/ffmpeg-source.sh and the release FFMPEG.sourceTag.
 const BTBN = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59';
@@ -39,7 +46,7 @@ const FFMPEG = {
   builds: {
     'win32-x64': { base: BTBN, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip', sha256: '401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f', exe: 'bin/ffmpeg.exe', exeSha256: 'c46215f8889634396f0ac0acac738ef2145175e5b6caf28b3daa8ac9a9980c5f', license: 'LICENSE.txt' },
     'linux-x64': { base: BTBN, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-linux64-gpl-8.1.tar.xz', sha256: '41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380', exe: 'bin/ffmpeg', exeSha256: '6ad8e7b802374502e927fdcf6de8019f4f24cac3c80fbfe3b41eda6f08648b55', license: 'LICENSE.txt' },
-    'darwin-arm64': {
+    darwin: {   // one program for both processors (build 3 on: Apple silicon and Intel)
       base: `${OWN}/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2`, archive: 'ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64.tar.xz',
       sha256: '5dbee38075d565c115fce13e4d8d872d86b01d09d13d343903e77c375751e329', exe: 'ffmpeg', exeSha256: '8c6c723f3156e48388c9f3c97025b990a9c0377a11c58d1eb34abc0ac281e264', license: 'LICENSE',
       builtBy: 'scripts/ffmpeg-macos.sh (x264, dav1d and OpenSSL at BtbN/FFmpeg-Builds\' pins)',
@@ -79,14 +86,28 @@ async function fetchChecked(base, name, want) {
     console.log(`server sidecar (Node) → src-tauri/binaries/aghorizon-server-${triple}${ext}`);
   } else if (!process.argv.includes('--skip-server')) {
     // the same name the Node one had: tauri.conf.json's externalBin and src-tauri/src/main.rs don't change
-    execFileSync('cargo', ['build', '--release', '--manifest-path', path.join(root, 'server-rs', 'Cargo.toml')], { stdio: 'inherit' });
-    fs.copyFileSync(path.join(root, 'server-rs', 'target', 'release', `aghorizon-server-rs${ext}`), path.join(out, `aghorizon-server-${triple}${ext}`));
-    console.log(`server sidecar (Rust) → src-tauri/binaries/aghorizon-server-${triple}${ext}`);
+    const manifest = path.join(root, 'server-rs', 'Cargo.toml');
+    if (mac) {
+      // both processors (rustup target add aarch64-apple-darwin x86_64-apple-darwin), joined into one program
+      const built = MAC_TRIPLES.map((t) => {
+        execFileSync('cargo', ['build', '--release', '--target', t, '--manifest-path', manifest], { stdio: 'inherit' });
+        return path.join(root, 'server-rs', 'target', t, 'release', 'aghorizon-server-rs');
+      });
+      const uni = path.join(os.tmpdir(), `aghorizon-server-universal-${process.pid}`);
+      execFileSync('lipo', ['-create', ...built, '-output', uni], { stdio: 'inherit' });
+      place(uni, 'aghorizon-server');
+      fs.rmSync(uni, { force: true });
+      console.log('server sidecar (Rust, Apple silicon + Intel) → src-tauri/binaries/aghorizon-server-universal-apple-darwin');
+    } else {
+      execFileSync('cargo', ['build', '--release', '--manifest-path', manifest], { stdio: 'inherit' });
+      place(path.join(root, 'server-rs', 'target', 'release', `aghorizon-server-rs${ext}`), 'aghorizon-server');
+      console.log(`server sidecar (Rust) → src-tauri/binaries/aghorizon-server-${triple}${ext}`);
+    }
   }
 
-  const ffOut = path.join(out, `ffmpeg-${triple}${ext}`);
+  const ffOut = names('ffmpeg')[0];
   const licOut = path.join(out, 'ffmpeg.LICENSE');
-  const ff = FFMPEG.builds[`${process.platform}-${process.arch}`];
+  const ff = FFMPEG.builds[mac ? 'darwin' : `${process.platform}-${process.arch}`];
   if (ff && !process.env.FFMPEG_PATH) {
     const sourceUrl = ff.sourceUrl || `https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/${FFMPEG.sourceTag}`;
     if (fs.existsSync(ffOut) && sha256(fs.readFileSync(ffOut)) === ff.exeSha256 && fs.existsSync(licOut) && fs.readFileSync(licOut, 'utf8').includes(sourceUrl)) {
@@ -103,19 +124,18 @@ async function fetchChecked(base, name, want) {
       const lic = fs.readFileSync(path.join(tmp, dir, ff.license));
       if (sha256(exe) !== ff.exeSha256) throw new Error(`${ff.exe}: checksum mismatch after unpacking. Refusing it.`);
       if (sha256(lic) !== FFMPEG.license.sha256) throw new Error('ffmpeg LICENSE.txt: checksum mismatch. Refusing it.');
-      fs.writeFileSync(ffOut, exe);
-      fs.chmodSync(ffOut, 0o755);
+      fs.writeFileSync(path.join(tmp, 'ffmpeg-checked'), exe);
+      place(path.join(tmp, 'ffmpeg-checked'), 'ffmpeg');
       const builtBy = ff.builtBy || `BtbN/FFmpeg-Builds (commit ${FFMPEG.btbnCommit})`;
       fs.writeFileSync(licOut, `${lic.toString('utf8')}\n\n---\nffmpeg n8.1.3-27-g8dca1586f4, built by ${builtBy}.\nThe complete corresponding source: ${sourceUrl}\n`);
       fs.rmSync(tmp, { recursive: true, force: true });
-      console.log(`ffmpeg 8.1 (${ff.builtBy ? 'our macOS build' : 'BtbN'}, GPL v3, checksums ok) → src-tauri/binaries/ffmpeg-${triple}${ext}`);
+      console.log(`ffmpeg 8.1 (${ff.builtBy ? 'our macOS build' : 'BtbN'}, GPL v3, checksums ok) → ${path.relative(root, ffOut)}`);
     }
   } else {
     // FFMPEG_PATH (any system), or a system with no pinned build (e.g. an Intel Mac): development only
     const src = process.env.FFMPEG_PATH || execFileSync(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg']).toString().split(/\r?\n/)[0].trim();
-    fs.copyFileSync(src, ffOut);
-    fs.chmodSync(ffOut, 0o755);
+    place(src, 'ffmpeg');
     fs.writeFileSync(licOut, `Development build: ffmpeg copied from ${src}. See its own licence.\n`);
-    console.log(`ffmpeg (development: ${src}) → src-tauri/binaries/ffmpeg-${triple}${ext}`);
+    console.log(`ffmpeg (development: ${src}) → ${path.relative(root, ffOut)}`);
   }
 })().catch((e) => { console.error(e.message || e); process.exit(1); });

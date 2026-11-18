@@ -5,8 +5,8 @@
  * system it ran on, under the names the website and README link to:
  *   Windows  AG-Horizon-Setup-<version>.exe (+ .sig)       the installer, which is also the update
  *   Linux    AG-Horizon-<version>.AppImage (+ .sig)         the AppImage, which is also the update
- *   macOS    AG-Horizon-<version>-arm64.dmg                 to install
- *            AG-Horizon-<version>-arm64.app.tar.gz (+ .sig) the update
+ *   macOS    AG-Horizon-<version>-universal.dmg             to install (one app: Apple silicon and Intel)
+ *            AG-Horizon-<version>-universal.app.tar.gz (+ .sig)   the update, for both
  *   latest.json   what the Tauri updater (and on Windows the Electron hand-over, electron/handover.js) reads, with
  *                 this system's entries
  * A release built on several systems needs one latest.json with every system's entries:
@@ -36,7 +36,8 @@ const out = process.argv[2] && !process.argv[2].startsWith('--') ? path.resolve(
 if (!out) { console.error('usage: node scripts/tauri-release.js <out dir> [--base-url <url>] [--notes <text>]'); process.exit(2); }
 
 const version = require(path.join(root, 'package.json')).version;
-const bundle = path.join(root, 'src-tauri', 'target', 'release', 'bundle');
+// macOS: `tauri build --target universal-apple-darwin` puts it under that target
+const bundle = path.join(root, 'src-tauri', 'target', ...(process.platform === 'darwin' ? ['universal-apple-darwin'] : []), 'release', 'bundle');
 const base = (arg('--base-url') || `https://github.com/Andreas-Graesmo/AGHorizon/releases/download/v${version}`).replace(/\/+$/, '');
 
 // [built file, release name, updater keys (the file is the update), or null (just a download)]
@@ -44,8 +45,8 @@ const files = {
   win32: [[path.join(bundle, 'nsis', `AG Horizon_${version}_x64-setup.exe`), `AG-Horizon-Setup-${version}.exe`, ['windows-x86_64-nsis', 'windows-x86_64']]],
   linux: [[path.join(bundle, 'appimage', `AG Horizon_${version}_amd64.AppImage`), `AG-Horizon-${version}.AppImage`, ['linux-x86_64-appimage', 'linux-x86_64']]],
   darwin: [
-    [path.join(bundle, 'macos', 'AG Horizon.app.tar.gz'), `AG-Horizon-${version}-arm64.app.tar.gz`, ['darwin-aarch64-app', 'darwin-aarch64']],
-    [path.join(bundle, 'dmg', `AG Horizon_${version}_aarch64.dmg`), `AG-Horizon-${version}-arm64.dmg`, null],
+    [path.join(bundle, 'macos', 'AG Horizon.app.tar.gz'), `AG-Horizon-${version}-universal.app.tar.gz`, ['darwin-aarch64-app', 'darwin-aarch64', 'darwin-x86_64-app', 'darwin-x86_64']],
+    [path.join(bundle, 'dmg', `AG Horizon_${version}_universal.dmg`), `AG-Horizon-${version}-universal.dmg`, null],
   ],
 }[process.platform];
 if (!files) throw new Error(`no release files for ${process.platform}`);

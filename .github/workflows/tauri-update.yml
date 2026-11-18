@@ -94,6 +94,7 @@ jobs:
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
       - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}" }
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -114,11 +115,12 @@ jobs:
           export TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/e2e.key")"
           for v in 9.0.0 9.0.1; do
             node -e "const f='package.json',p=require('./'+f);p.version='$v';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
-            [ "$RUNNER_OS" = macOS ] && rm -rf src-tauri/target/release/bundle/dmg   # tauri-release.js wants the dmg on macOS
-            npx --yes @tauri-apps/cli@2.12.4 build --bundles ${{ matrix.bundles }}$([ "$RUNNER_OS" = macOS ] && echo ,dmg) --config src-tauri/tauri.e2e.json
+            # macOS: the universal app, as released (tauri-release.js wants its dmg too)
+            [ "$RUNNER_OS" = macOS ] && rm -rf src-tauri/target/universal-apple-darwin/release/bundle/dmg
+            npx --yes @tauri-apps/cli@2.12.4 build $([ "$RUNNER_OS" = macOS ] && echo --target universal-apple-darwin) --bundles ${{ matrix.bundles }}$([ "$RUNNER_OS" = macOS ] && echo ,dmg) --config src-tauri/tauri.e2e.json
             node scripts/tauri-release.js "e2e-out/$v" --base-url http://127.0.0.1:47900
             # N is run from what was built, not from the release copy (the .app itself, on macOS)
-            [ "$RUNNER_OS" = macOS ] && rm -rf "e2e-out/$v/AG Horizon.app" && cp -R "src-tauri/target/release/bundle/macos/AG Horizon.app" "e2e-out/$v/"
+            [ "$RUNNER_OS" = macOS ] && rm -rf "e2e-out/$v/AG Horizon.app" && cp -R "src-tauri/target/universal-apple-darwin/release/bundle/macos/AG Horizon.app" "e2e-out/$v/"
           done
           ls -la e2e-out/*
           cat e2e-out/9.0.1/latest.json

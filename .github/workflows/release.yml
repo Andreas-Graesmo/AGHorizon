@@ -18,7 +18,8 @@ jobs:
   # TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, MIGRATION_PLAN.md 1.0). scripts/tauri-release.js
   # names the files as the website and README link to them:
   #   Windows  AG-Horizon-Setup-<version>.exe (+ .sig)
-  #   macOS    AG-Horizon-<version>-arm64.dmg, AG-Horizon-<version>-arm64.app.tar.gz (+ .sig, the update)
+  #   macOS    AG-Horizon-<version>-universal.dmg, AG-Horizon-<version>-universal.app.tar.gz (+ .sig, the update):
+  #            one app for Apple silicon and Intel (owner's decision 2026-11-19)
   #   Linux    AG-Horizon-<version>.AppImage (+ .sig)
   # and each system's latest.json entries, merged into one by the latest-json job. No Electron files any more
   # (latest.yml, latest-mac.yml, latest-linux.yml, beta*.yml): old Electron apps must only ever find the bridge
@@ -30,7 +31,7 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, name: windows, bundles: nsis }
-          - { os: macos-latest, name: macos, bundles: 'app,dmg' }
+          - { os: macos-latest, name: macos, bundles: 'app,dmg', args: '--target universal-apple-darwin', targets: 'aarch64-apple-darwin,x86_64-apple-darwin' }
           - { os: ubuntu-22.04, name: linux, bundles: appimage }   # the oldest runner: the AppImage's glibc baseline
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -71,6 +72,7 @@ jobs:
           done
           exit 1
       - uses: dtolnay/rust-toolchain@stable
+        with: { targets: '${{ matrix.targets }}' }
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -87,7 +89,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       - name: Build
-        run: npx --yes @tauri-apps/cli@2.12.4 build --bundles ${{ matrix.bundles }}
+        run: npx --yes @tauri-apps/cli@2.12.4 build ${{ matrix.args }} --bundles ${{ matrix.bundles }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

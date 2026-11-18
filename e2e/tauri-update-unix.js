@@ -23,7 +23,7 @@ const [appN, dirNext] = process.argv.slice(2).map((p) => p && path.resolve(p));
 if (!appN || !dirNext) { console.error('usage: node e2e/tauri-update-unix.js <N AppImage or .app> <dir of N+1>'); process.exit(2); }
 const mac = appN.endsWith('.app');
 const latest = JSON.parse(fs.readFileSync(path.join(dirNext, 'latest.json'), 'utf8'));
-const key = mac ? 'darwin-aarch64-app' : 'linux-x86_64-appimage';
+const key = mac ? (process.arch === 'arm64' ? 'darwin-aarch64-app' : 'darwin-x86_64-app') : 'linux-x86_64-appimage';
 const entry = latest.platforms[key];
 if (!entry) throw new Error(`latest.json has no ${key}`);
 const updateFile = path.join(dirNext, decodeURIComponent(path.basename(new URL(entry.url).pathname)));
