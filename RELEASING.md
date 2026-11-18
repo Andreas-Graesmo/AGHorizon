@@ -141,7 +141,7 @@ You need [Android Studio](https://developer.android.com/studio) (or the Android 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The build copies `server.js`, `subtitles.js` and `public/` into the app, and downloads Node.js for Android once (about 100 MB). A debug build's pages can be inspected from Chrome on your computer: `chrome://inspect`. To see the pages in TV mode without a TV, that is the way; in a normal browser they are the desktop app.
+The build copies `public/` into the app and builds the app's server, the Rust server (`server-rs/jni`), for each processor type with [cargo-ndk](https://github.com/bbqsrc/cargo-ndk): it needs Rust with the Android targets (`rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android`), `cargo install cargo-ndk`, and the Android NDK (`ANDROID_NDK_HOME`). A debug build's pages can be inspected from Chrome on your computer: `chrome://inspect`. To see the pages in TV mode without a TV, that is the way; in a normal browser they are the desktop app.
 
 ### Things to know
 

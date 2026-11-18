@@ -108,9 +108,9 @@ The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 a
 
 ## How it works
 
-The window shows the UI from a small server (`server.js`) that runs inside the app on `127.0.0.1`. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
+The window shows the UI from a small server that runs inside the app on `127.0.0.1`: the Rust server in `server-rs/` (the Tauri app and Android TV), ported from `server.js` (the Electron app), which the tests still hold it to. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
 
-On Android TV it is the same pages and the same `server.js`: the app (`android/`) shows the pages in a WebView and runs the server with Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile)) inside the app. The pages notice the TV (`public/js/tv.js`), switch to the remote, and hand what should play to ExoPlayer.
+On Android TV it is the same pages and the same server: the app (`android/`) shows the pages in a WebView and runs the Rust server (`server-rs/`, built for Android as `server-rs/jni`) inside the app. The pages notice the TV (`public/js/tv.js`), switch to the remote, and hand what should play to ExoPlayer.
 
 ## Notes
 
@@ -146,7 +146,7 @@ public/mirror.html/js   the mirror window
 scripts/get-vendor.js   optional: download player libraries locally
 public/js/tv.js         Android TV: the remote, what a TV leaves out, handing playback to the TV's player
 unicode-ln.js           letters and numbers, for the Node.js inside the Android TV app (made by scripts/gen-unicode-ln.js)
-android/                the Android TV app: WebView, Node.js for Android running server.js, ExoPlayer
+android/                the Android TV app: WebView, the Rust server (server-rs/jni), ExoPlayer
 android/ci/smoke.js     tries the Android TV app on an emulator
 ```
 
@@ -156,6 +156,6 @@ Navigation icons (Live TV, Series, Movies) are from [Font Awesome Free](https://
 
 Cast photos come from [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
 
-The Android TV app runs its server with [nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile) and plays with [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media); sound the TV can't decode is decoded by ffmpeg, as built by the [Jellyfin project](https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder) (GPL-licensed, like the desktop app's ffmpeg: that matters only if you redistribute the app).
+The Android TV app runs the same Rust server as the desktop app and plays with [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media); sound the TV can't decode is decoded by ffmpeg, as built by the [Jellyfin project](https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder) (GPL-licensed, like the desktop app's ffmpeg: that matters only if you redistribute the app).
 
 The desktop app's ffmpeg is [ffmpeg](https://ffmpeg.org) (GPL v3); see *Compatibility mode* above for which build each system gets and where its source is.
