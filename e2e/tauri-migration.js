@@ -105,7 +105,7 @@ async function closeTauri({ child, browser, page }) {
   let t = await launchTauri();
   const imported = await t.page.evaluate(async () => (window.__aghMigrating ? window.__aghMigrating : null));
   check('the import ran on the first start', !!imported && imported.localStorage > 0 && imported.files === 1, JSON.stringify(imported));
-  for (let i = 0; i < 40 && !fs.existsSync(marker); i++) await sleep(250);
+  for (let i = 0; i < 120 && !fs.existsSync(marker); i++) await sleep(250);   // marked 10 s after the import (tauri-shell.js)
   const got = await t.page.evaluate(async () => ({
     playlists: LS.get('tuner.playlists', []).map((p) => p.name),
     favs: LS.get('tuner.favs', []),
