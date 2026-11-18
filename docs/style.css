@@ -136,7 +136,8 @@ code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 .sun-low { top: 100%; width: min(1300px, 160vw); opacity: .35; }
 .download .wrap { position: relative; z-index: 1; }
 .download .copy p:not(.eyebrow) { color: #c3cbdc; }
-.platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 26px; }
+.platforms { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 26px; }
+@media (max-width: 1180px) { .platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .platform { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-decoration: none; background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; transition: transform .15s, border-color .2s, background .2s; }
 .platform:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
 .platform.mine { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
