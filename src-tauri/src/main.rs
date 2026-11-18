@@ -374,16 +374,27 @@ async fn downloads(app: AppHandle, op: String, args: Vec<Value>) -> Result<Value
 
 // Sync (electron/preload.js `sync.*`): the code in the system's keychain, the folder through the sidecar
 // (desktop/sync-folder.js). The encrypted files travel as base64.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    tauri::async_runtime::spawn_blocking(f).await.expect("a keychain call panicked")
+}
+
 #[tauri::command]
 async fn sync(app: AppHandle, op: String, args: Vec<Value>) -> Result<Value, String> {
     match op.as_str() {
         "info" => {
             let mut info = rpc(&app, "sync.info", json!([])).await?;
-            info["keychain"] = json!(code_store::secure());
+            info["keychain"] = json!(blocking(code_store::secure).await);
             Ok(info)
         }
-        "getCode" => code_store::get(&app).map(Value::String),
-        "setCode" => code_store::set(&app, args.first().and_then(|v| v.as_str()).unwrap_or_default()).map(|_| Value::Null),
+        // the keychain calls block (and on Linux run D-Bus on their own): not on the async runtime's threads
+        "getCode" => {
+            let a = app.clone();
+            blocking(move || code_store::get(&a)).await.map(Value::String)
+        }
+        "setCode" => {
+            let (a, code) = (app.clone(), args.first().and_then(|v| v.as_str()).unwrap_or_default().to_string());
+            blocking(move || code_store::set(&a, &code)).await.map(|_| Value::Null)
+        }
         "chooseFolder" => {
             let current = rpc(&app, "sync.info", json!([])).await?;
             match pick_folder(&app, "Choose a folder to sync through", current["folder"].as_str().map(String::from)).await {
@@ -396,34 +407,60 @@ async fn sync(app: AppHandle, op: String, args: Vec<Value>) -> Result<Value, Str
     }
 }
 
-// The sync code: Windows Credential Manager. Elsewhere (development builds until MIGRATION_PLAN.md Phase 9) a file in
-// the app's data folder, as the Electron app does when it has no keychain.
+// The sync code, kept as the Electron app kept it: in the system's keychain (Windows Credential Manager, the macOS
+// Keychain, the Secret Service on Linux: GNOME Keyring, KWallet), and on a Linux without one in a file in the app's
+// data folder, as Electron's safeStorage then did too (MIGRATION_PLAN.md 9.10).
 mod code_store {
     use tauri::AppHandle;
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     use tauri::Manager;
 
-    #[cfg(windows)]
-    fn entry() -> Result<keyring::Entry, String> {
-        keyring::Entry::new("AG Horizon", "sync-code").map_err(|e| e.to_string())
+    fn entry() -> Result<keyring::Entry, keyring::Error> {
+        keyring::Entry::new("AG Horizon", "sync-code")
+    }
+
+    // the keychain answers (Linux: a Secret Service is running); else the file
+    #[cfg(target_os = "linux")]
+    fn keychain() -> bool {
+        static OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *OK.get_or_init(|| match entry() {
+            Ok(e) => !matches!(e.get_password(), Err(keyring::Error::PlatformFailure(_)) | Err(keyring::Error::NoStorageAccess(_))),
+            Err(_) => false,
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    fn keychain() -> bool {
+        true
     }
 
     pub fn secure() -> bool {
-        cfg!(windows)
+        keychain()
     }
 
-    #[cfg(windows)]
-    pub fn get(_app: &AppHandle) -> Result<String, String> {
-        match entry()?.get_password() {
+    pub fn get(#[allow(unused_variables)] app: &AppHandle) -> Result<String, String> {
+        #[cfg(target_os = "linux")]
+        if !keychain() {
+            return Ok(std::fs::read_to_string(file(app)?).unwrap_or_default());
+        }
+        match entry().and_then(|e| e.get_password()) {
             Ok(code) => Ok(code),
             Err(keyring::Error::NoEntry) => Ok(String::new()),
             Err(e) => Err(e.to_string()),
         }
     }
 
-    #[cfg(windows)]
-    pub fn set(_app: &AppHandle, code: &str) -> Result<(), String> {
-        let e = entry()?;
+    pub fn set(#[allow(unused_variables)] app: &AppHandle, code: &str) -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        if !keychain() {
+            let f = file(app)?;
+            return if code.is_empty() {
+                let _ = std::fs::remove_file(f);
+                Ok(())
+            } else {
+                std::fs::write(f, code).map_err(|e| e.to_string())
+            };
+        }
+        let e = entry().map_err(|e| e.to_string())?;
         if code.is_empty() {
             match e.delete_credential() {
                 Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -434,27 +471,10 @@ mod code_store {
         }
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     fn file(app: &AppHandle) -> Result<std::path::PathBuf, String> {
         Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("sync-code"))
     }
-
-    #[cfg(not(windows))]
-    pub fn get(app: &AppHandle) -> Result<String, String> {
-        Ok(std::fs::read_to_string(file(app)?).unwrap_or_default())
-    }
-
-    #[cfg(not(windows))]
-    pub fn set(app: &AppHandle, code: &str) -> Result<(), String> {
-        let f = file(app)?;
-        if code.is_empty() {
-            let _ = std::fs::remove_file(f);
-            Ok(())
-        } else {
-            std::fs::write(f, code).map_err(|e| e.to_string())
-        }
-    }
-
 }
 
 // As electron/main.js: tell the person, then quit. AGH_NO_DIALOG=1 (tests): just print it.

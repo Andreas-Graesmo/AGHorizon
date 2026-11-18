@@ -24,6 +24,13 @@ semver = "1"
 [target.'cfg(not(windows))'.dependencies]
 keepawake = "0.5"   # 9.6 the screen stays on during playback: WebKit denies the Wake Lock API (WebView2 grants it)
 
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }   # the sync code, in the Keychain
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# the sync code, through the Secret Service (GNOME Keyring, KWallet); zbus, so no libdbus to bundle
+keyring = { version = "3.6", features = ["async-secret-service", "tokio", "crypto-rust"] }
+
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6", features = ["windows-native"] }   # the sync code, in Windows Credential Manager
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
