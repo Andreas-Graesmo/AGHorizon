@@ -1,10 +1,17 @@
 'use strict';
 /**
- * Handing over to the Tauri build (MIGRATION_PLAN.md 1.3), Windows only.
- * When the newest release on the person's update channel is a Tauri build — it carries the Tauri updater's
- * latest.json — this Electron version offers it as an ordinary update. It downloads the Windows installer, checks its
- * minisign signature against the public key shipped in electron/tauri-updater.key.pub, saves the person's data for
- * the new app (migration.js), and runs the installer.
+ * Handing over to the Tauri build (MIGRATION_PLAN.md 1.3; macOS and Linux: 9.10).
+ * When the newest release on the person's update channel is a Tauri build for this system — its latest.json names
+ * one — this Electron version offers it as an ordinary update. It downloads it, checks its minisign signature against
+ * the public key shipped in electron/tauri-updater.key.pub, saves the person's data for the new app (migration.js),
+ * and puts it in place:
+ *   Windows  runs Tauri's installer, which replaces this app and starts the new one
+ *   Linux    the new AppImage replaces this one under the same file name ($APPIMAGE), so menus and shortcuts keep
+ *            working; started once this app has quit
+ *   macOS    the new .app replaces this one in its folder (as Tauri's own updater does, no Apple signature needed);
+ *            started once this app has quit
+ * Where that can't be done (an AppImage-less Linux, a Mac app on the disk image or translocated, a folder that can't
+ * be written to), the person gets the release page instead, as before.
  *
  * Without electron/tauri-updater.key.pub this is all switched off: the key pair is made in MIGRATION_PLAN.md 5.1.
  * Pure functions are exported for test/handover.test.js; nothing here needs Electron.
@@ -12,7 +19,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const versions = require('./versions');
 const { createBlake2b512 } = require('./blake2b');
 
@@ -84,17 +91,27 @@ async function findRelease({ channel, current, api }) {
   return { version: String(best.tag_name).replace(/^v/i, ''), tag: best.tag_name, notes: String(best.body || ''), latestJsonUrl: hasUpdaterJson(best).browser_download_url };
 }
 
-// The Windows installer named in a Tauri latest.json, only if it comes from this repository's releases.
-function windowsInstaller(latest, { owner, repo }) {
+// This system's update named in a Tauri latest.json (scripts/tauri-release.js), only if it comes from this
+// repository's releases over https.
+const UPDATE = {
+  win32: { keys: ['windows-x86_64-nsis', 'windows-x86_64'], file: /\.exe$/i },
+  linux: { keys: ['linux-x86_64-appimage', 'linux-x86_64'], file: /\.AppImage$/i },
+  darwin: { keys: ['darwin-aarch64-app', 'darwin-aarch64'], file: /\.app\.tar\.gz$/i },
+};
+function updateFor(latest, { owner, repo }, platform = process.platform, arch = process.arch) {
+  const want = UPDATE[platform];
+  // the Tauri builds: Windows and Linux x64, macOS Apple silicon
+  if (!want || (platform === 'darwin' ? arch !== 'arm64' : arch !== 'x64')) return null;
   const p = (latest && latest.platforms) || {};
-  const entry = p['windows-x86_64-nsis'] || p['windows-x86_64'];
+  const entry = want.keys.map((k) => p[k]).find(Boolean);
   if (!entry || !entry.url || !entry.signature) return null;
   let u;
   try { u = new URL(entry.url); } catch { return null; }
   const prefix = `/${owner}/${repo}/releases/download/`.toLowerCase();
-  if (u.protocol !== 'https:' || u.hostname !== 'github.com' || !u.pathname.toLowerCase().startsWith(prefix) || !/\.exe$/i.test(u.pathname)) return null;
+  if (u.protocol !== 'https:' || u.hostname !== 'github.com' || !u.pathname.toLowerCase().startsWith(prefix) || !want.file.test(u.pathname)) return null;
   return { url: u.href, signature: entry.signature, version: String(latest.version || '') };
 }
+const windowsInstaller = (latest, pub) => updateFor(latest, pub, 'win32', 'x64');
 
 /* ─────────────── download and run ─────────────── */
 // Saves the file and returns its BLAKE2b-512, hashed chunk by chunk as it arrives (no second pass that would
@@ -125,4 +142,61 @@ function runInstaller(file) {
   child.unref();
 }
 
-module.exports = { PUBKEY_FILE, publicKey, parsePublicKey, verify, findRelease, windowsInstaller, download, runInstaller };
+/* ─────────────── macOS and Linux: put it in place ─────────────── */
+// Where this app is and whether it can be replaced there; null when it can't (then: the release page).
+//   Linux: the AppImage it was started from ($APPIMAGE), in a folder this user can write to
+//   macOS: the .app, not on a disk image (/Volumes) or a translocated copy (an app opened where it was downloaded),
+//          in a folder this user can write to
+function target({ platform = process.platform, env = process.env, execPath = process.execPath } = {}) {
+  const writable = (dir) => { try { fs.accessSync(dir, fs.constants.W_OK); return true; } catch { return false; } };
+  if (platform === 'linux') {
+    const file = env.APPIMAGE;
+    return file && fs.existsSync(file) && writable(path.dirname(file)) ? { kind: 'appimage', path: file } : null;
+  }
+  if (platform === 'darwin') {
+    const app = execPath.split('/Contents/MacOS/')[0];
+    if (!app.endsWith('.app') || app.startsWith('/Volumes/') || app.includes('/AppTranslocation/')) return null;
+    return writable(path.dirname(app)) ? { kind: 'app', path: app } : null;
+  }
+  return null;
+}
+
+// Where the download goes: next to what it replaces (the same disk, so it moves into place in one step)
+const stagingFile = (t, version) => path.join(path.dirname(t.path), `.ag-horizon-${version}-${process.pid}${t.kind === 'appimage' ? '.AppImage' : '.app.tar.gz'}`);
+
+// A shell that waits for this app (pid) to quit, then removes what is left of it and starts the new one.
+function startAfterQuit(pid, open, remove) {
+  const script = `while kill -0 ${Number(pid)} 2>/dev/null; do sleep 0.3; done; ${remove ? 'rm -rf -- "$2"; ' : ''}exec ${open} "$1"`;
+  return script;
+}
+
+// Puts the verified download in place of this app and starts the new one once this app has quit. Throws (leaving
+// this app as it was) if it can't. file: the download; t: target().
+function install(file, t, { pid = process.pid, spawnFn = spawn, env = process.env } = {}) {
+  const dir = path.dirname(t.path);
+  // the new app's environment: not this AppImage's (its runtime sets its own)
+  const cleanEnv = { ...env };
+  for (const k of ['APPIMAGE', 'APPDIR', 'ARGV0', 'OWD']) delete cleanEnv[k];
+  if (t.kind === 'appimage') {
+    fs.chmodSync(file, 0o755);
+    fs.renameSync(file, t.path);   // the running AppImage keeps its (now unnamed) file until it quits
+    spawnFn('/bin/sh', ['-c', startAfterQuit(pid, '', false), 'sh', t.path], { detached: true, stdio: 'ignore', env: cleanEnv }).unref();
+    return;
+  }
+  // macOS: unpack next to the app, then swap the two bundles (renames: the old one runs on until it quits)
+  const unpack = fs.mkdtempSync(path.join(dir, '.ag-horizon-update-'));
+  try {
+    const tar = spawnSync('/usr/bin/tar', ['-xzf', file, '-C', unpack], { stdio: 'ignore' });
+    const app = fs.readdirSync(unpack).find((n) => n.endsWith('.app'));
+    if (tar.status !== 0 || !app) throw new Error('the update could not be unpacked');
+    const old = path.join(dir, `.ag-horizon-old-${pid}.app`);
+    fs.renameSync(t.path, old);
+    try { fs.renameSync(path.join(unpack, app), t.path); } catch (e) { fs.renameSync(old, t.path); throw e; }
+    spawnFn('/bin/sh', ['-c', startAfterQuit(pid, '/usr/bin/open -n', true), 'sh', t.path, old], { detached: true, stdio: 'ignore', env: cleanEnv }).unref();
+  } finally {
+    fs.rmSync(unpack, { recursive: true, force: true });
+    fs.rmSync(file, { force: true });
+  }
+}
+
+module.exports = { PUBKEY_FILE, publicKey, parsePublicKey, verify, findRelease, updateFor, windowsInstaller, download, runInstaller, target, stagingFile, startAfterQuit, install };
