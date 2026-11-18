@@ -315,7 +315,12 @@ function tvScopeKey(scope) {
 
 function tvItems(scope) {
   const out = [];
-  for (const el of scope.querySelectorAll(TV_ITEMS)) {
+  // the page: only the view that is showing, and what is around the views (top bar, menu rail); the hidden views can
+  // hold thousands of buttons, and this runs on every press of the remote
+  const all = scope === document.body
+    ? [...document.querySelectorAll(`:is(${TV_ITEMS}):not(#views *)`), ...document.querySelectorAll(`#views > .view:not([hidden]) :is(${TV_ITEMS})`)]
+    : scope.querySelectorAll(TV_ITEMS);
+  for (const el of all) {
     if (scope === document.body && el.closest('dialog, #menu, #player')) continue;
     if (el.id === 'liveList') continue;   // the channel list as a whole (it scrolls with the keyboard on a computer): its rows are the items
     const host = el.parentElement && el.parentElement.closest(TV_INSIDE);

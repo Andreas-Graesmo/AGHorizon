@@ -293,7 +293,9 @@ function appendLiveCards() {
   if (!next.length) return;
   $('#liveGrid').insertAdjacentHTML('beforeend', next.map((it) => cardHtml(it)).join(''));
   ws.liveShown += next.length;
-  requestAnimationFrame(() => { const r = $('#liveGridMore').getBoundingClientRect(); const vr = $('#liveGridScroll').getBoundingClientRect(); if (ws.liveShown < ws.chans.length && r.top < vr.bottom + 400) appendLiveCards(); });
+  // (not while the grid is hidden, e.g. the guide is showing: then everything measures 0 and this drew every channel,
+  // tens of thousands of tiles with a big playlist, which made the whole page slower, most of all on a TV)
+  requestAnimationFrame(() => { const r = $('#liveGridMore').getBoundingClientRect(); const vr = $('#liveGridScroll').getBoundingClientRect(); if (vr.height && ws.liveShown < ws.chans.length && r.top < vr.bottom + 400) appendLiveCards(); });
 }
 new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting) && ws.liveShown < ws.chans.length) appendLiveCards(); }, { root: $('#liveGridScroll'), rootMargin: '600px' }).observe($('#liveGridMore'));
 
@@ -605,7 +607,8 @@ function appendCards() {
   $('#vodGrid').insertAdjacentHTML('beforeend', next.map((it) => cardHtml(it)).join(''));
   ws.shown += next.length;
   // keep loading while the sentinel is still on screen
-  requestAnimationFrame(() => { const m = $('#vodMore'); const r = m.getBoundingClientRect(); const vr = $('#vodScroll').getBoundingClientRect(); if (ws.shown < ws.vodView.length && r.top < vr.bottom + 400) appendCards(); });
+  // (not while the grid is hidden: see appendLiveCards)
+  requestAnimationFrame(() => { const m = $('#vodMore'); const r = m.getBoundingClientRect(); const vr = $('#vodScroll').getBoundingClientRect(); if (vr.height && ws.shown < ws.vodView.length && r.top < vr.bottom + 400) appendCards(); });
 }
 new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting) && ws.shown < ws.vodView.length) appendCards(); }, { root: $('#vodScroll'), rootMargin: '600px' }).observe($('#vodMore'));
 
