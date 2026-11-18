@@ -36,7 +36,14 @@ for l in /var/lib/dpkg/info/*.list; do
   sed "s#^#$pkg\t#" "$l"
 done > "$WORK/all.tsv"
 awk -F'\t' '!($2 in seen) { seen[$2] = 1; print $2 "\t" $1 }' "$WORK/all.tsv" > "$WORK/bypath.tsv"
-awk -F'\t' '$2 ~ /\/lib\// { n = $2; sub(/.*\//, "", n); if (n != "" && !(n in seen)) { seen[n] = 1; print n "\t" $1 } }' "$WORK/all.tsv" > "$WORK/byname.tsv"
+# where the dynamic linker (and so linuxdeploy) finds a library first: the system's library folders. A program may
+# ship its own copy under the same name (Firefox, on GitHub's runners, has libnss3.so and others in /usr/lib/firefox),
+# and that copy is not the one bundled. Anything else only if no system folder has the name.
+awk -F'\t' '
+  $2 ~ /\/lib\// { n = $2; sub(/.*\//, "", n); if (n == "") next
+    sys = ($2 ~ /^\/(usr\/)?lib\/(x86_64-linux-gnu\/)?[^\/]+$/ || $2 ~ /^\/(usr\/)?lib\/x86_64-linux-gnu\/(gstreamer-1\.0|gstreamer1\.0\/gstreamer-1\.0|gdk-pixbuf-2\.0|gtk-3\.0|gio|webkit2gtk-4\.1)\//)
+    if (sys && !(n in s)) s[n] = $1; else if (!sys && !(n in o)) o[n] = $1 }
+  END { for (n in s) print n "\t" s[n]; for (n in o) if (!(n in s)) print n "\t" o[n] }' "$WORK/all.tsv" > "$WORK/byname.tsv"
 : > "$WORK/map.tsv"; : > "$WORK/unknown.txt"
 while IFS= read -r f; do
   pkg="$(awk -F'\t' -v p="/$f" '$1 == p { print $2; exit }' "$WORK/bypath.tsv")"
