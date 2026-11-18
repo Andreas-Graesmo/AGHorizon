@@ -79,7 +79,8 @@ CONF=(--prefix="$PREFIX" --enable-gpl --enable-version3 --enable-static --disabl
   --disable-autodetect --enable-libx264 --enable-libdav1d --enable-openssl
   --enable-videotoolbox --enable-audiotoolbox --enable-zlib --enable-bzlib --enable-iconv
   --disable-ffplay --disable-ffprobe --disable-doc --disable-debug
-  --extra-cflags="-I$PREFIX/include" --extra-ldflags="-L$PREFIX/lib")
+  --extra-cflags="-I$PREFIX/include" --extra-ldflags="-L$PREFIX/lib"
+  --extra-libs=-liconv)   # macOS's libiconv: --disable-autodetect leaves it out of the link (found on CI)
 (cd "$WORK/ffmpeg" && PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure "${CONF[@]}" > "$WORK/configure.log" 2>&1 \
   || { tail -40 ffbuild/config.log; exit 1; })
 (cd "$WORK/ffmpeg" && make -j"$JOBS" ffmpeg > /dev/null)
