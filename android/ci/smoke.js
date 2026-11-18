@@ -271,7 +271,7 @@ async function main() {
 main().catch((e) => { check('the test ran to its end', false, e.stack || String(e)); }).finally(() => {
   try {
     fs.mkdirSync(OUT, { recursive: true });
-    const log = adb('logcat', '-d', '-v', 'time', 'AGHorizon:V', 'AGHorizonNode:V', 'AGHorizonWeb:V', 'AndroidRuntime:E', '*:S');
+    const log = adb('logcat', '-d', '-v', 'time', 'AGHorizon:V', 'AGHorizonServer:V', 'AGHorizonWeb:V', 'AndroidRuntime:E', '*:S');
     fs.writeFileSync(path.join(OUT, 'logcat.txt'), adb('logcat', '-d', '-v', 'time'));
     // (the emulator's graphics driver chatters on the same output Node.js writes to)
     console.log('\n── the app’s log ──\n' + log.split('\n').filter((l) => l.trim() && !/s_glBindAttribLocation/.test(l)).slice(-40).map((l) => l.slice(0, 300)).join('\n'));

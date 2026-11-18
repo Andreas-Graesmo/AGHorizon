@@ -5,7 +5,7 @@ captures/
 .cxx/
 *.iml
 .idea/
-# Node.js for Android (libnode.so per processor type): downloaded by the build, see app/build.gradle.kts
+# what versions with Node.js downloaded (libnode.so; the app runs the Rust server since 3.x)
 app/libnode/
 # signing keys never belong in the repository
 *.jks

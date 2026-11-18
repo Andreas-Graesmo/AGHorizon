@@ -8,10 +8,7 @@ on:
     paths:
       - 'android/**'
       - 'public/**'
-      - 'server.js'
-      - 'subtitles.js'
-      - 'unicode-ln.js'
-      - 'test/**'
+      - 'server-rs/**'
       - 'package.json'
       - '.github/workflows/android.yml'
   workflow_dispatch:
@@ -33,23 +30,16 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      # The server runs on Node.js 18 inside the app: its tests must pass there too
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 18
-      - name: Test on Node.js 18
+      # the app's server: the Rust server for Android (server-rs/jni, MIGRATION_PLAN.md 8.7), built by the app's
+      # Gradle build with cargo-ndk and the runner's NDK
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: 'aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android' }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'server-rs/jni -> target', cache-bin: true }
+      - name: cargo-ndk and the NDK
         run: |
-          npm ci --ignore-scripts
-          node --test
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      # Node.js for Android (about 100 MB) is downloaded by the build once; keep it between builds
-      - name: Cache Node.js for Android
-        uses: actions/cache@v4
-        with:
-          path: android/app/libnode
-          key: libnode-${{ hashFiles('android/app/build.gradle.kts') }}
-          restore-keys: libnode-
+          command -v cargo-ndk > /dev/null || cargo install cargo-ndk --locked
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}" >> "$GITHUB_ENV"
       - name: Build
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
