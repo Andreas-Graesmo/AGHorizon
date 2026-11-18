@@ -120,6 +120,16 @@
     box.innerHTML = `<button type="button" class="min" aria-label="Minimise" title="Minimise">${ICON.min}</button>`
       + `<button type="button" class="max" aria-label="Maximise" title="Maximise">${ICON.max}</button>`
       + `<button type="button" class="close" aria-label="Close" title="Close">${ICON.close}</button>`;
+    // macOS: the system's own traffic lights sit over the top bar's left end (main.rs), so no buttons of our own
+    if (platform === 'darwin') {
+      const html = document.documentElement;
+      html.classList.add('tauri-mac');
+      // in macOS fullscreen the traffic lights hide: the top bar then needs no room for them
+      const full = async () => html.classList.toggle('win-full', await win().isFullscreen().catch(() => false));
+      win().onResized(full);
+      full();
+      return;
+    }
     bar.appendChild(box);
     const max = box.querySelector('.max');
     box.querySelector('.min').addEventListener('click', () => win().minimize());
