@@ -133,11 +133,30 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building AG Horizon")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
+        .run(|app, event| match event {
+            // macOS: closing the window leaves the app in the Dock, as the Electron app did (owner's decision,
+            // MIGRATION_PLAN.md 9.7); Cmd+Q, an update's restart (an exit code) and the other systems quit
+            #[cfg(target_os = "macos")]
+            RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
+            // clicking the Dock icon brings the window back (a new one, as Electron's 'activate')
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen { .. } => match app.get_webview_window("main") {
+                Some(w) => {
+                    let _ = w.unminimize();
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+                None => {
+                    if let Err(e) = open_main(app, port()) {
+                        eprintln!("could not open the window again: {e}");
+                    }
+                }
+            },
+            RunEvent::Exit => {
                 stop_server(app);
                 updater::install_on_quit(app);   // exits if an update was waiting
             }
+            _ => {}
         });
 }
 
