@@ -18,8 +18,14 @@ try {
   document.body.appendChild(app.querySelector('body > svg').cloneNode(true));
 } catch { /* not opened from the app: said further down */ }
 
+// the Tauri app moves this window itself (a native drag from tauri-shell.js, which also works on Wayland, where a page
+// can't move its window). Moving it here too broke the buttons there: the native drag took the mouse, the page never
+// saw the button come up, and its pointer capture then sent every later click to the page instead of the button.
+const nativeDrag = (() => { try { return !!(window.opener && window.opener.__TAURI__); } catch { return false; } })();
 if (!new URLSearchParams(location.search).has('d')) {   // no monitor picked: the small window that stays on top
   document.body.classList.add('float');
+}
+if (!new URLSearchParams(location.search).has('d') && !nativeDrag) {
   // Dragging the picture moves the window. Done here and not with -webkit-app-region: a drag region gets no
   // mouse events, so the controls could never appear on hover.
   let grab = null;

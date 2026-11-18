@@ -747,10 +747,12 @@ fn popup(app: &AppHandle, url: &Url, features: NewWindowFeatures) -> NewWindowRe
     }
     match builder.build() {
         Ok(window) => {
+            let floating = display.is_none();
             if let Some(key) = display {
                 fullscreen_on(&window, &key);
             }
-            if pip {
+            // the floating ones (picture-in-picture, the mirror without a monitor) keep the picture's shape, as in Electron
+            if pip || floating {
                 keep_16_9(&window);
             }
             NewWindowResponse::Create { window }
@@ -784,16 +786,39 @@ fn fullscreen_on(window: &WebviewWindow, key: &str) {
     }
 }
 
-// Tauri has no setAspectRatio: put the height back to 16:9 of the width after each resize
+// Tauri has no setAspectRatio. Once a resize has paused (250 ms), the window is put back to 16:9 by the side that was
+// dragged: the bottom edge sets the height and the width follows, a side edge the other way round. Not during the
+// resize: correcting it then fought the person's own drag (on Linux the picture got black bars above and below).
 fn keep_16_9(window: &WebviewWindow) {
+    use std::sync::atomic::AtomicU64;
+    use std::sync::Arc;
     let w = window.clone();
+    let start = window.inner_size().map(|s| (s.width, s.height)).unwrap_or((480, 270));
+    let last = Arc::new(Mutex::new(start));
+    let generation = Arc::new(AtomicU64::new(0));
     window.on_window_event(move |e| {
-        if let WindowEvent::Resized(size) = e {
-            let want = size.width * 9 / 16;
-            if size.height.abs_diff(want) > 2 && size.width > 0 {
-                let _ = w.set_size(tauri::PhysicalSize::new(size.width, want));
-            }
+        let WindowEvent::Resized(size) = e else { return };
+        if size.width == 0 || size.height == 0 || w.is_fullscreen().unwrap_or(false) {
+            return;
         }
+        let (size, w2, last, generation) = (*size, w.clone(), last.clone(), generation.clone());
+        let mine = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        tauri::async_runtime::spawn(async move {
+            tokio_sleep(Duration::from_millis(250)).await;
+            if generation.load(Ordering::SeqCst) != mine {
+                return; // still resizing
+            }
+            let (pw, ph) = *last.lock().unwrap();
+            let want = if size.height.abs_diff(ph) > size.width.abs_diff(pw) {
+                (size.height * 16 / 9, size.height)
+            } else {
+                (size.width, size.width * 9 / 16)
+            };
+            *last.lock().unwrap() = want;
+            if size.width.abs_diff(want.0) > 2 || size.height.abs_diff(want.1) > 2 {
+                let _ = w2.set_size(tauri::PhysicalSize::new(want.0, want.1));
+            }
+        });
     });
 }
 
