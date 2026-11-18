@@ -539,10 +539,14 @@ Everything the spike found for these platforms is collected here.
   - [x] `tauri-release.js` makes each system's release files and `latest.json` entries (`darwin-aarch64-app`, `linux-x86_64-appimage`); `--merge` combines the systems' `latest.json` into the release's one.
   - [x] `e2e/tauri-update-unix.js` (`tauri-update.yml`): N → N+1 on Linux and macOS, green on CI next to Windows (a tampered file is refused; the app restarts as N+1, one copy, nothing left). On macOS the restart goes through LaunchServices. It found that a build after only a version change kept the old version (fixed in `src-tauri/build.rs`).
   - Stop publishing `*-mac.yml` and `*-linux.yml` once the handover (9.10) is out.
-- [ ] **9.10 Bridge and migration.**
-  - Extend 1.3 with the Linux handover (new AppImage next to `$APPIMAGE` with the **same file name**, `chmod +x`, spawn, quit) and a macOS banner linking to the new `.dmg`.
-  - Extend 6.1 with `~/Library/Application Support/Tuner IPTV` and `~/.config/Tuner IPTV`.
-  - Sync code via Keychain or Secret Service.
+- [ ] **9.10 Bridge and migration.** Built and checked; what is left is releasing it, in this order:
+  1. **A bridge release from `main`** (Electron, e.g. 2.6.0): the Electron changes below on a branch from `main`, a pull request, a stable tag. Out for a while, as 2.5.0 was for Windows.
+  2. **Then the next tag from this branch**: `release.yml` now builds the Tauri app for all three desktop systems and no Electron files (no `latest-mac.yml` / `latest-linux.yml`), so old Electron apps only ever find the bridge. Before step 1 is out, Electron apps on macOS and Linux on the Test channel would find a release without their update files (an error in their update check).
+  - [x] Electron (`electron/handover.js`, `updater.js`, `main.js`): the hand-over on Linux replaces the AppImage it runs from (`$APPIMAGE`, the **same file name**) and on macOS the .app where it is (as Tauri's updater does, no Apple signature needed; better than the planned banner), both after the signature check, starting the new app once Electron has quit. Where it can't (no AppImage; a Mac app on the disk image, translocated, or in a folder that can't be written), the release page, as before. `migration.json` is now kept up to date on every system. 5 new unit tests (`test/handover.test.js`).
+  - [x] 6.1 on macOS and Linux: the import reads `~/Library/Application Support/Tuner IPTV` and `~/.config/Tuner IPTV` (it already did: the folder is found next to the app's own).
+  - [x] The sync code in the macOS Keychain and the Linux Secret Service (GNOME Keyring, KWallet), else a file, as Electron did (`code_store` in `main.rs`).
+  - [x] `e2e/tauri-migration-unix.js` (`tauri-linux.yml`): the real Electron app writes its export, the AppImage imports it (playlists, favourites, a playlist file, the sync code into GNOME Keyring or the file), once. It found that WebKit writes localStorage to disk seconds after the import: an app closed in between lost the imported playlists for good. The import is now marked done 10 s after it ran (`tauri-shell.js`); until then the next start imports again, which leaves what the app has alone.
+  - Not checked end to end: the hand-over itself on a Mac (CI can't run an old Electron .app being replaced); its parts are unit-tested and the same moves Tauri's updater makes (9.9).
 - [ ] **Gate:** the Phase 2–7 gates, repeated on macOS and Linux.
 
 ### Phase 10: Remove Electron (after Phase 9)
