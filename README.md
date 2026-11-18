@@ -101,7 +101,9 @@ The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 a
 
 - The app **bundles ffmpeg**, which is licensed under the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.html):
   - **Windows (from 3.x, the Tauri app):** ffmpeg 8.1, the win64 GPL build by [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (autobuild 2026-10-31), checked by SHA-256 when the app is built (`scripts/tauri-prep.js`). Its complete source code, every library in it included, is published as [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source) (`scripts/ffmpeg-source.sh` makes it).
-  - **macOS and Linux (the Electron app):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
+  - **Linux (the Tauri app, in testing):** the same ffmpeg 8.1 from the same BtbN autobuild (linux64 GPL); its source is in the same release.
+  - **macOS (the Tauri app, in testing):** ffmpeg 8.1 from the same commit, built for this app by `scripts/ffmpeg-macos.sh` with x264, dav1d and OpenSSL at BtbN's versions; its complete source is published with it in [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2).
+  - **macOS and Linux (the Electron app, today's release):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
 - The licence matters only if you redistribute installers to other people.
 
 ## How it works
