@@ -387,10 +387,16 @@ html.tauri-mac.win-full #topbar { padding-left: 8px; }
 .detail { overflow-y: auto; }
 .dt-slot-wrap { background: #000; }
 .detail-slot { max-height: 64vh; aspect-ratio: 16 / 9; margin: 0 auto; }
-.dt-hero { position: relative; min-height: 340px; overflow: hidden; }   /* the content's height, with room for the picture (#25: was 470, a gap above the cast) */
-.dt-bg { position: absolute; inset: 0; background-size: cover; background-position: right 20%; }
+.dt-main { position: relative; overflow: hidden; }   /* the details and the cast, on one picture */
+/* the backdrop behind both (#25): as tall as the window's width allows, at most as tall as what it is behind, so its
+   fade always ends where the cast does */
+.dt-bg, .dt-main::before { position: absolute; top: 0; left: 0; right: 0; height: clamp(460px, 40vw, 760px); max-height: 100%; }
+.dt-bg { background-size: cover; background-position: right 20%; }
 .dt-bg.blur { filter: blur(26px) brightness(.55) saturate(1.1); transform: scale(1.25); background-position: center; }
-.dt-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--bg) 6%, color-mix(in srgb, var(--bg) 72%, transparent) 42%, color-mix(in srgb, var(--bg) 30%, transparent) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 46%); }
+.dt-main::before { content: ""; z-index: 1; background: linear-gradient(90deg, var(--bg) 6%, color-mix(in srgb, var(--bg) 72%, transparent) 42%, color-mix(in srgb, var(--bg) 30%, transparent) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 46%); }
+.dt-hero, .dt-main > .dt-sec { position: relative; z-index: 2; }
+.dt-main > .dt-sec { padding-bottom: 28px; }
+.dt-end { height: 80px; }
 .dt-in { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 56px 24px 14px; }
 .dt-top { display: grid; grid-template-columns: 150px 1fr; gap: 26px; align-items: start; }
 .dt-poster { aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: var(--tile); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); display: grid; place-items: center; font-size: 28px; font-weight: 700; color: var(--muted); }

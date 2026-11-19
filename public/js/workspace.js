@@ -795,8 +795,9 @@ function renderDetail() {
 
   box.innerHTML = `<div class="detail-in">
     ${docked ? '<div class="dt-slot-wrap"><div id="detailSlot" class="player-slot detail-slot"></div></div>' : ''}
+    <div class="dt-main">
+    <div class="dt-bg${back ? '' : ' blur'}" style="${(back || art) ? `background-image:url('${esc(back || art)}')` : ''}"></div>
     <div class="dt-hero">
-      <div class="dt-bg${back ? '' : ' blur'}" style="${(back || art) ? `background-image:url('${esc(back || art)}')` : ''}"></div>
       <div class="dt-in"><div class="dt-top">
         <div class="dt-poster">${art ? `<img referrerpolicy="no-referrer" src="${esc(art)}" alt="">` : `<span>${esc(initials(it.name))}</span>`}</div>
         <div class="dt-info">
@@ -816,10 +817,9 @@ function renderDetail() {
         </div>
       </div></div>
     </div>
-    <div class="dt-sec">
-      ${crew.length ? `<h3>Cast &amp; crew<small>${crew.length}</small></h3><div class="cast-row">${crew.map(([n, r, ph]) => `<div class="cast"><div class="av">${esc(initials(n))}${ph ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(ph)}" alt="">` : ''}</div><b>${esc(n)}</b><small>${esc(r)}</small></div>`).join('')}</div>` : ''}
-      ${seriesBlock}
-    </div></div>`;
+    ${crew.length ? `<div class="dt-sec dt-cast"><h3>Cast &amp; crew<small>${crew.length}</small></h3><div class="cast-row">${crew.map(([n, r, ph]) => `<div class="cast"><div class="av">${esc(initials(n))}${ph ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(ph)}" alt="">` : ''}</div><b>${esc(n)}</b><small>${esc(r)}</small></div>`).join('')}</div></div>` : ''}
+    </div>
+    ${seriesBlock ? `<div class="dt-sec">${seriesBlock}</div>` : '<div class="dt-end"></div>'}</div>`;
   box.scrollTop = keep;
   layoutPlayer();
 }
