@@ -222,7 +222,7 @@ function renderLiveStatus() {
   else if (!ws.errors.length) {
     const st = state.epgState[p.id];
     if (st === 'loading') t = 'Loading the programme guide…';
-    else if (st && st.startsWith('error')) t = `<span class="err" title="${esc(st)}">Guide unavailable</span>`;
+    else if (st && st.startsWith('error')) t = `<span class="err" title="${esc(st)}">Guide unavailable: ${esc(st.slice(7))}</span>`;   // in words: a TV has no hover
     else if (st === 'none') t = 'No guide source for this playlist';
   }
   $('#liveStatus').innerHTML = t;
@@ -432,6 +432,7 @@ function drawGuide() {
     const st = state.epgState[ws.pid];
     $('#guideEmpty').textContent = !ws.items.length ? 'Load a playlist first.'
       : st === 'loading' ? 'Loading the programme guide…'
+      : st && st.startsWith('error') ? `The programme guide could not be loaded: ${st.slice(7)}`
       : 'No channels with guide data here. Untick the filter above to list every channel.';
   }
 

@@ -637,7 +637,7 @@ function tvLiveCard() {
     <div class="tv-ch-head"><div class="logo">${logoHtml(ch)}</div><div><b>${esc(ch.name)}</b><small>${esc(ch.group || '')}</small></div></div>
     ${now ? `<div class="tv-ch-now"><span class="live-badge"><i></i>NOW</span><span class="muted">${fmtTime(now[0])} – ${fmtTime(now[1])}</span></div>
       <h3>${esc(now[2] || 'On air')}</h3><div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>${now[3] ? `<p>${esc(now[3])}</p>` : ''}`
-    : `<p class="muted">${st === 'loading' ? 'Loading the programme guide…' : 'No programme information for this channel.'}</p>`}
+    : `<p class="muted">${st === 'loading' ? 'Loading the programme guide…' : st.startsWith('error') ? esc(`The programme guide could not be loaded: ${st.slice(7)}`) : 'No programme information for this channel.'}</p>`}
     ${next ? `<div class="tv-ch-next"><span class="muted">Next · ${fmtTime(next[0])}</span> ${esc(next[2] || '')}</div>` : ''}
     <div class="tv-ch-hint muted">OK watches the channel · hold OK for favorites</div>
   </div>`;
