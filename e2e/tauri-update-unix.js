@@ -125,9 +125,12 @@ async function killAll() {
       const again = await waitFor(() => statuses().filter((s) => s.state === 'current').length > 0, 120000);
       check('it started again by itself and finds nothing newer', !!again, JSON.stringify(statuses().slice(-2)));
     }
-    // the app's own program (its command line may be just "ag-horizon"), not the AppImage runtime or the server
-    const apps = running().filter((l) => /(^\d+\s+|\/)ag-horizon(\s|$)/.test(l));
-    check('exactly one copy of the app runs', apps.length === 1, running().join(' | '));
+    // the app's own program (its command line may be just "ag-horizon"), not the AppImage runtime or the server.
+    // The old copy may still be on its way out just after the new one has started: give it a moment to go, so this
+    // fails on two copies that stay, not on the overlap of a restart.
+    const apps = () => running().filter((l) => /(^\d+\s+|\/)ag-horizon(\s|$)/.test(l));
+    const one = await waitFor(() => apps().length === 1, 15000);
+    check('exactly one copy of the app runs', !!one, running().join(' | '));
   } finally {
     await killAll();
     const left = running();
