@@ -83,6 +83,7 @@ function guide() {
   <programme start="${at(48)}" stop="${at(49)}" channel="nrk1.no"><title>Too far ahead</title></programme>
   <programme start="garbage" stop="${at(1)}" channel="nrk1.no"><title>Bad time</title></programme>
   <programme start="${at(0)}" stop="${at(1)}"><title>No channel</title></programme>
+  <programme  start = '${at(2)}' stop='${at(3)}' xchannel="wrong" channel = 'tv2.no' ><title lang='no'>Quoted</title><desc lang="no">Søndag</desc></programme>
 </tv>`;
 }
 
@@ -469,6 +470,8 @@ test('guide: channels by id or name, the time window, decoding, gzip', async () 
     assert.strictEqual(nrk[0][3], '');
     assert.ok(nrk[0][0] < nrk[1][0] && nrk[0][1] === nrk[1][0]);
     assert.deepStrictEqual(j.programmes['tv2.no'][0].slice(2), ['Nyheter æøå &amp; &bogus;', 'spaced']);
+    // single quotes, spaces around =, and an attribute that only ends in "channel"
+    assert.deepStrictEqual(j.programmes['tv2.no'][1].slice(2), ['Quoted', 'Søndag']);
   }
   const none = (await epg({ url: `${P}/guide.xml`, ids: [], names: [] })).json();
   assert.deepStrictEqual([none.programmes, none.byName, none.totalChannels], [{}, {}, 4]);

@@ -48,7 +48,7 @@ fn js_trim(s: &str) -> &str {
 
 /// "20261023203000 +0200" -> epoch ms
 pub fn parse_xmltv_time(s: &str) -> Option<f64> {
-    static T: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?").unwrap());
+    static T: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})?\s*([+-][0-9]{4})?").unwrap());
     let m = T.captures(s)?;
     let n = |i: usize| m.get(i).map(|x| x.as_str().parse::<i64>().unwrap_or(0)).unwrap_or(0);
     let mut t = date_utc(n(1), n(2) - 1, n(3), n(4), n(5), n(6));
@@ -78,20 +78,45 @@ fn date_utc(y: i64, mo: i64, d: i64, h: i64, mi: i64, s: i64) -> f64 {
 }
 
 fn attr(attrs: &str, name: &str) -> String {
-    // JS: \bname\s*=\s*(["'])(.*?)\1 — the regex crate has no back-references: one branch per quote
-    let re = Regex::new(&format!(r#"\b{name}\s*=\s*(?:"([^"\n\r\u{{2028}}\u{{2029}}]*)"|'([^'\n\r\u{{2028}}\u{{2029}}]*)')"#)).unwrap();
-    re.captures(attrs).map(|c| c.get(1).or(c.get(2)).map(|m| m.as_str().to_string()).unwrap_or_default()).unwrap_or_default()
+    let re = match name {
+        "start" => &*ATTR_START,
+        "stop" => &*ATTR_STOP,
+        _ => &*ATTR_CHANNEL,
+    };
+    // the match is name\s*=\s*"value" (or 'value'): the value is between the first quote after the = and the last
+    // character (found, not captured: capture groups make the regex crate several times slower)
+    let Some(m) = re.find(attrs) else { return String::new() };
+    let t = m.as_str();
+    let q = t.find('=').map(|i| i + 1 + t[i + 1..].find(['"', '\'']).unwrap_or(0)).unwrap_or(0);
+    t[q + 1..t.len() - 1].to_string()
 }
+// JS: \bname\s*=\s*(["'])(.*?)\1 (the regex crate has no back-references: one branch per quote). Compiled once:
+// compiling them per programme made a large guide take minutes (4 for 176 MB here, far longer on a TV).
+// \b is ASCII's word boundary, as JavaScript's is; the regex crate's default, Unicode's, also sends every search
+// through a much slower engine once the text has a letter beyond ASCII (æ, ø, å ...).
+fn attr_re(name: &str) -> Regex {
+    Regex::new(&format!(r#"(?-u:\b){name}\s*=\s*(?:"([^"\n\r\u{{2028}}\u{{2029}}]*)"|'([^'\n\r\u{{2028}}\u{{2029}}]*)')"#)).unwrap()
+}
+static ATTR_START: LazyLock<Regex> = LazyLock::new(|| attr_re("start"));
+static ATTR_STOP: LazyLock<Regex> = LazyLock::new(|| attr_re("stop"));
+static ATTR_CHANNEL: LazyLock<Regex> = LazyLock::new(|| attr_re("channel"));
 
 fn tag(body: &str, name: &str) -> String {
     let re = match name {
         "title" => &*TITLE,
         _ => &*DESC,
     };
-    re.captures(body).map(|c| decode(&c[1])).unwrap_or_default()
+    re.find(body).map(|m| decode(element_body(m.as_str(), name.len() + 3))).unwrap_or_default()
 }
-static TITLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<title\b[^>]*>(.*?)</title>").unwrap());
-static DESC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<desc\b[^>]*>(.*?)</desc>").unwrap());
+
+/// What is inside <name ...>…</name>, from a match of <name\b[^>]*>(.*?)</name> (close_len is the length of
+/// </name>): after the first > and before the closing tag.
+fn element_body(t: &str, close_len: usize) -> &str {
+    let gt = t.find('>').map(|i| i + 1).unwrap_or(t.len());
+    &t[gt.min(t.len() - close_len)..t.len() - close_len]
+}
+static TITLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<title(?-u:\b)[^>]*>(.*?)</title>").unwrap());
+static DESC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<desc(?-u:\b)[^>]*>(.*?)</desc>").unwrap());
 
 
 /// A JavaScript object's own string keys in its iteration order: integer-like keys first, ascending, then the rest
@@ -159,11 +184,11 @@ pub struct XmltvParser {
 }
 
 static CH_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?s)<channel\b[^>]*?\bid\s*=\s*(?:"([^"\n\r\u{2028}\u{2029}]*)"|'([^'\n\r\u{2028}\u{2029}]*)')[^>]*>(.*?)</channel>"#).unwrap()
+    Regex::new(r#"(?s)<channel(?-u:\b)[^>]*?(?-u:\b)id\s*=\s*(?:"([^"\n\r\u{2028}\u{2029}]*)"|'([^'\n\r\u{2028}\u{2029}]*)')[^>]*>(.*?)</channel>"#).unwrap()
 });
-static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<display-name\b[^>]*>(.*?)</display-name>").unwrap());
-static P_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<programme\b([^>]*)>(.*?)</programme>").unwrap());
-static TV_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<tv\b").unwrap());
+static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<display-name(?-u:\b)[^>]*>(.*?)</display-name>").unwrap());
+static P_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<programme(?-u:\b)([^>]*)>(.*?)</programme>").unwrap());
+static TV_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<tv(?-u:\b)").unwrap());
 
 impl XmltvParser {
     pub fn new(from: f64, to: f64) -> Self {
@@ -176,17 +201,21 @@ impl XmltvParser {
             let names: Vec<String> = NAME_RE.captures_iter(&m[3]).map(|n| norm_name(&decode(&n[1]))).filter(|k| !k.is_empty()).collect();
             self.ch_names.set(&decode(id), names);
         }
-        for m in P_RE.captures_iter(xml) {
-            let (Some(start), Some(stop)) = (parse_xmltv_time(&attr(&m[1], "start")), parse_xmltv_time(&attr(&m[1], "stop"))) else { continue };
+        for m in P_RE.find_iter(xml) {
+            // <programme ATTRS>BODY</programme>: ATTRS up to the first >, BODY up to the closing tag
+            let t = m.as_str();
+            let gt = t.find('>').unwrap_or(t.len());
+            let (a, b) = (&t[10..gt], element_body(t, 12));
+            let (Some(start), Some(stop)) = (parse_xmltv_time(&attr(a, "start")), parse_xmltv_time(&attr(a, "stop"))) else { continue };
             if stop < self.from || start > self.to {
                 continue;
             }
-            let ch = decode(&attr(&m[1], "channel"));
+            let ch = decode(&attr(a, "channel"));
             if ch.is_empty() {
                 continue;
             }
-            let title = tag(&m[2], "title");
-            let desc = slice_utf16(&tag(&m[2], "desc"), 400);
+            let title = tag(b, "title");
+            let desc = slice_utf16(&tag(b, "desc"), 400);
             self.programmes.entry(&ch).push((start, stop, title, desc));
         }
     }
@@ -443,3 +472,4 @@ mod tests {
         assert_eq!(m.keys(), vec!["2", "10", "b", "a", "02"]);
     }
 }
+
