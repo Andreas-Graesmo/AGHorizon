@@ -41,8 +41,18 @@ function makeMedia() {
   if (!fs.existsSync(path.join(MEDIA, 'ac3.ts'))) ff(120, '-c:a', 'ac3', '-ac', '2', '-f', 'mpegts', path.join(MEDIA, 'ac3.ts'));
   if (!fs.existsSync(path.join(MEDIA, 'hls', 'index.m3u8'))) ff(120, '-c:a', 'aac', '-ac', '2', '-f', 'hls', '-hls_time', '2', '-hls_playlist_type', 'vod', '-hls_segment_filename', path.join(MEDIA, 'hls', 'seg%03d.ts'), path.join(MEDIA, 'hls', 'index.m3u8'));
   const base = `http://${HOST}:${PORT}`;
+  // a guide (gzipped XMLTV, as providers serve them): an hour-long programme each hour, from an hour ago
+  const t = (ms) => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
+  const hour = Math.floor(Date.now() / 3600e3) * 3600e3;
+  const guide = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv>'];
+  for (const id of ['one', 'two', 'three']) guide.push(`<channel id="${id}"><display-name>Channel ${id}</display-name></channel>`);
+  for (const id of ['one', 'two', 'three']) for (let h = -1; h < 6; h++) {
+    guide.push(`<programme start="${t(hour + h * 3600e3)}" stop="${t(hour + (h + 1) * 3600e3)}" channel="${id}"><title>Show ${h + 1} on ${id}</title><desc>Programme ${h + 1}.</desc></programme>`);
+  }
+  guide.push('</tv>', '');
+  fs.writeFileSync(path.join(MEDIA, 'guide.xml.gz'), require('zlib').gzipSync(guide.join('\n')));
   fs.writeFileSync(path.join(MEDIA, 'list.m3u'), [
-    '#EXTM3U',
+    `#EXTM3U url-tvg="${base}/guide.xml.gz"`,
     '#EXTINF:-1 tvg-id="one" group-title="Test",Channel One', `${base}/hls/index.m3u8`,
     '#EXTINF:-1 tvg-id="two" group-title="Test",Channel Two', `${base}/ac3.ts`,
     '#EXTINF:-1 tvg-id="three" group-title="Test",Channel Three', `${base}/hls/index.m3u8?c=3`,
@@ -176,6 +186,12 @@ async function main() {
   await ev(`(async () => { const p = { id: 'smoke', name: 'Smoke test', type: 'm3u', url: 'http://${HOST}:${PORT}/list.m3u', epgUrl: '', ua: '', added: Date.now() }; state.playlists.push(p); savePlaylists(); uiPlaylistsChanged(); await openWorkspace(p.id, 'live'); })()`);
   const counts = await until('the playlist', () => ev(`state.cache.smoke ? JSON.stringify({ live: state.cache.smoke.channels.length, movies: state.cache.smoke.movies.length }) : ''`));
   check('the playlist loads: 3 channels and a movie', counts === '{"live":3,"movies":1}', counts);
+
+  /* the guide: downloaded and read by the app's server (gzipped XMLTV) */
+  const epg = await until('the guide', () => ev(`(() => { const s = state.epgState.smoke; return s && s !== 'loading' ? s : ''; })()`), 60000);
+  check('the guide loads', epg === 'ready', epg || await ev(`String(state.epgState.smoke)`));
+  const now = await ev(`(() => { const c = state.cache.smoke.channels.find((x) => x.epgId === 'one'); const n = c && nowNext(c); return n && n.now ? n.now[2] : ''; })()`);
+  check('a channel shows what is on now', now === 'Show 1 on one', now);
   await wait(1000);
   screenshot('live-tv');
 
