@@ -387,11 +387,11 @@ html.tauri-mac.win-full #topbar { padding-left: 8px; }
 .detail { overflow-y: auto; }
 .dt-slot-wrap { background: #000; }
 .detail-slot { max-height: 64vh; aspect-ratio: 16 / 9; margin: 0 auto; }
-.dt-hero { position: relative; min-height: 470px; overflow: hidden; }
+.dt-hero { position: relative; min-height: 340px; overflow: hidden; }   /* the content's height, with room for the picture (#25: was 470, a gap above the cast) */
 .dt-bg { position: absolute; inset: 0; background-size: cover; background-position: right 20%; }
 .dt-bg.blur { filter: blur(26px) brightness(.55) saturate(1.1); transform: scale(1.25); background-position: center; }
 .dt-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--bg) 6%, color-mix(in srgb, var(--bg) 72%, transparent) 42%, color-mix(in srgb, var(--bg) 30%, transparent) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 46%); }
-.dt-in { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 56px 24px 30px; }
+.dt-in { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 56px 24px 14px; }
 .dt-top { display: grid; grid-template-columns: 150px 1fr; gap: 26px; align-items: start; }
 .dt-poster { aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: var(--tile); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); display: grid; place-items: center; font-size: 28px; font-weight: 700; color: var(--muted); }
 .dt-poster img { width: 100%; height: 100%; object-fit: cover; }
@@ -413,7 +413,8 @@ html.tauri-mac.win-full #topbar { padding-left: 8px; }
 .dt-facts { display: grid; grid-template-columns: 70px 1fr; gap: 5px 8px; font-size: 12px; }
 .dt-facts dt { color: var(--muted); }
 .dt-facts dd { margin: 0; }
-.dt-sec { max-width: 940px; margin: 0 auto; padding: 8px 24px 80px; }
+.dt-sec { max-width: 940px; margin: 0 auto; padding: 0 24px 80px; }
+.dt-sec > h3:first-child { margin-top: 6px; }
 .dt-sec h3 { font-size: 14.5px; font-weight: 650; margin: 18px 0 14px; }
 .dt-sec h3 small { color: var(--muted); font-weight: 500; margin-left: 6px; }
 .cast-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 12px; }
@@ -474,12 +475,21 @@ html.tauri-mac.win-full #topbar { padding-left: 8px; }
 .player.is-live .pc-skip { display: none; }   /* live TV can't seek */
 .player.mini .pc-skip { margin: 0 2px; }
 .player.mini .pc-skip .ic { width: 20px; height: 20px; }
-.pc-big { appearance: none; border: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); }
-.pc-big:hover { filter: brightness(1.1); }
+/* white at rest; the accent colour under the pointer or the keyboard's focus (#34) */
+.pc-big { appearance: none; border: 0; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #0b0f19; display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); transition: background-color .12s, color .12s; }
+.pc-big:hover, .pc-big:focus-visible { background: var(--accent); color: var(--accent-ink); }
 .pc-big .ic { width: 20px; height: 20px; }
 .pc-speed { font-size: 12px; font-weight: 700; min-width: 34px; }
-.p-ctl .live-badge { background: var(--red); color: #fff; padding: 2px 8px; border-radius: 5px; margin-right: 6px; }
+.p-ctl .live-badge { appearance: none; border: 1px solid transparent; font-family: inherit; background: var(--red); color: #fff; padding: 2px 8px; border-radius: 5px; margin-right: 6px; }
 .p-ctl .live-badge i { background: #fff; }
+.p-ctl .live-badge:disabled { cursor: default; }
+/* behind live (paused, or buffering): a grey button that goes back to live, with how far behind (#18) */
+.p-ctl .live-badge.behind { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .28); cursor: pointer; }
+.p-ctl .live-badge.behind i { background: #9aa3b8; }
+.p-ctl .live-badge.behind:hover, .p-ctl .live-badge.behind:focus-visible { background: var(--red); border-color: transparent; }
+.p-ctl .live-badge.behind:hover i, .p-ctl .live-badge.behind:focus-visible i { background: #fff; }
+.pc-behind { color: #c9cfdc; font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.player:not(.is-live) .pc-behind { display: none; }
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
 .player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini #pAudio, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }

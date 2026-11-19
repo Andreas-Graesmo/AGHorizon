@@ -322,8 +322,9 @@ async function subMenu(anchor) {
     for (const s of fromOs) items.push(subRemembering(c, s.lang, subSavedItem(d, s, mark, numbered)));
   }
   if (sub.key.startsWith('os:')) items.push({ label: mark(true) + `${sub.label} (OpenSubtitles)`, run: () => {} });
-  items.push({ label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
-  items.push({ label: 'Appearance…', run: subShowPanel });
+  // three groups: the tracks, finding more, and how they look
+  items.push({ sep: true }, { label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
+  items.push({ sep: true }, { label: 'Appearance…', run: subShowPanel });
   showMenu(anchor, items);
 }
 const subRemembering = (c, lang, item) => ({ ...item, run: () => { subRemember(c, lang); return item.run(); } });

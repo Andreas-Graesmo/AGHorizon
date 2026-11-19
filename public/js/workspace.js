@@ -530,6 +530,15 @@ function imgHtml(it, vod) {
     : vod ? '<svg class="ic ph-film"><use href="#i-film"/></svg>' : `<span class="ph">${esc(initials(it.name))}</span>`;
 }
 
+// An episode's series poster: kept with it since 3.1 (seriesLogo); for older history, the series if it is loaded
+// (opened, a favourite, or in a loaded playlist). Else the episode's own picture.
+function seriesPoster(ep) {
+  if (ep.seriesLogo) return ep.seriesLogo;
+  const s = cardIndex.get(ep.seriesUid) || state.favdata[ep.seriesUid]
+    || (state.cache[`${ep.pid}:series`] && state.cache[`${ep.pid}:series`].channels.find((x) => x.uid === ep.seriesUid));
+  return (s && s.logo) || ep.logo;
+}
+
 // Works for full items and for snapshots (Favorites, Recently viewed).
 function cardHtml(it, o = {}) {
   cardIndex.set(it.uid, it); // the global click handler (ui.js) looks the item up here
@@ -540,12 +549,16 @@ function cardHtml(it, o = {}) {
   const pct = pr && pr.d && !pr.w && pr.t > 10 ? Math.round((pr.t / pr.d) * 100) : 0;
   let title = it.name;
   let sub = o.sub || '';
-  if (kind === 'episode') { title = it.seriesName || it.name; sub = sub || `S${String(it.season || 1).padStart(2, '0')}E${String(it.num || 0).padStart(2, '0')}`; }
+  let pic = it;
+  if (kind === 'episode') {
+    title = it.seriesName || it.name; sub = sub || `S${String(it.season || 1).padStart(2, '0')}E${String(it.num || 0).padStart(2, '0')}`;
+    pic = { ...it, logo: seriesPoster(it) };   // the show's poster, not the episode's still (#26)
+  }
   const rating = vod && it.rating ? `<span class="badge"><svg class="ic"><use href="#i-star"/></svg>${esc(it.rating)}</span>` : '';
   const tag = o.tag ? `<span class="badge kind">${esc(o.tag)}</span>` : '';
   const remove = o.remove ? `<button class="c-remove" data-remove title="${esc(o.remove)}" aria-label="${esc(o.remove)}"><svg class="ic"><use href="#i-x"/></svg></button>` : '';
   return `<div class="card ${vod ? 'poster-card' : 'live-card'}${remove ? ' removable' : ''}" data-uid="${esc(it.uid)}" tabindex="0" role="button" title="${esc(title)}">
-    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}${o.fav === false ? '' : `<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>`}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+    <div class="c-img">${imgHtml(pic, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}${o.fav === false ? '' : `<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>`}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
     <div class="c-title">${esc(title)}</div>${sub ? `<div class="c-sub">${esc(sub)}</div>` : ''}</div>`;
 }
 

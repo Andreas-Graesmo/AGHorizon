@@ -160,6 +160,7 @@ function teardown() {
   if (tsPlayer) { try { tsPlayer.pause(); tsPlayer.unload(); tsPlayer.detachMediaElement(); tsPlayer.destroy(); } catch { /* ignore */ } tsPlayer = null; }
   clearTimeout(checkTimer);
   tcState.on = false;
+  liveClock.wall = 0;   // a new stream: live from its first picture (#18)
   $('#tcBadge').hidden = true;
   video.onerror = null;
   video.pause();
@@ -441,10 +442,12 @@ $('#pcMute').addEventListener('click', () => { video.muted = !video.muted; if (!
 $('#pcVol').addEventListener('input', (e) => { video.volume = Number(e.target.value); video.muted = false; syncCtl(); });
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 $('#pcSpeed').addEventListener('click', () => { const i = SPEEDS.indexOf(video.playbackRate || 1); video.playbackRate = SPEEDS[(i + 1) % SPEEDS.length]; syncCtl(); osd('Speed ' + video.playbackRate + '×'); });
-// one click toggles play, a double click goes full screen
+// one click toggles play, a double click goes full screen. Not in the PiP window (#32): there a click only shows the
+// controls, since moving the window starts with a click on the picture; the button, Space and K still pause.
 let clickTimer = 0;
 video.addEventListener('click', () => {
   clearTimeout(clickTimer);
+  if (pipDoc) { showCtl(); return; }
   clickTimer = setTimeout(() => { if (state.current) togglePlay(); }, 230);
 });
 video.addEventListener('dblclick', () => { clearTimeout(clickTimer); toggleFullscreen(); });
@@ -456,6 +459,60 @@ playerEl.addEventListener('mousemove', showCtl);
 playerEl.addEventListener('mouseenter', showCtl);
 playerEl.addEventListener('mouseleave', () => { clearTimeout(ctlTimer); playerEl.classList.remove('ctl-on'); });
 playerEl.addEventListener('focusin', showCtl);
+/* ─────────────────────────── live TV: how far behind live (#18) ─────────────────────────── */
+// The delay is the wall-clock time gone by minus the picture time played since the stream was last live. That holds
+// for every kind of stream, also those that stop downloading while paused (mpegts.js, compatibility mode), whose
+// buffer then can't show how far live has moved on. While the stream plays normally the reference follows it (so
+// the stream's clock drifting from the computer's never adds up); a pause or a stall holds it, and when the player
+// catches up by itself (hls.js / mpegts.js jumping ahead) the delay comes down again.
+const LIVE_BEHIND = 1.5;   // seconds: from here on, and whenever paused, the badge says GO LIVE
+const liveClock = { wall: 0, media: 0, held: false, lag: 0 };
+let liveShown = '';
+function liveAnchor() { Object.assign(liveClock, { wall: performance.now(), media: video.currentTime, held: false, lag: 0 }); }
+function liveTick() {
+  const c = state.current;
+  if (!c || isVod(c) || TV || !liveClock.wall) { liveClock.lag = 0; return; }
+  const lag = (performance.now() - liveClock.wall) / 1000 - (video.currentTime - liveClock.media);
+  if (!liveClock.held || (!video.paused && lag < 0.5)) liveAnchor();   // live, or caught up again: follow along
+  else liveClock.lag = lag;
+}
+const liveBehind = () => !!state.current && !isVod(state.current) && !!liveClock.wall && (video.paused || liveClock.lag >= LIVE_BEHIND);
+function liveRender() {
+  liveTick();
+  const behind = liveBehind();
+  const text = behind && liveClock.lag >= 1 ? '−' + fmtClock(Math.round(liveClock.lag)) : '';
+  const key = `${behind}|${text}`;
+  if (key === liveShown) return;
+  liveShown = key;
+  const b = $('#pcLive');
+  b.classList.toggle('behind', behind);
+  b.querySelector('span').textContent = behind ? 'GO LIVE' : 'LIVE';
+  b.title = behind ? 'Go back to live (behind because of a pause or buffering)' : 'Live';
+  b.disabled = !behind;
+  $('#pcBehind').textContent = text;
+  $('#pcBehind').hidden = !text;
+  mirrorCtl();
+}
+// Back to live: hls.js knows where live is, so jump there; other streams are tuned in again, which is live.
+function goLive() {
+  const c = state.current;
+  if (!c || isVod(c) || TV) return;
+  if (hlsPlayer && !tcState.on && hlsPlayer.liveSyncPosition != null) {
+    video.currentTime = hlsPlayer.liveSyncPosition;
+    video.play().catch(() => {});
+    liveAnchor();
+  } else {
+    const token = ++playToken;
+    if (tcState.on) startPlayback(c, ['tc'], token); else audStart(c, token);
+  }
+  liveRender();
+}
+video.addEventListener('playing', () => { if (!liveClock.wall) liveAnchor(); liveRender(); });   // first picture: live
+video.addEventListener('pause', () => { if (liveClock.wall) liveClock.held = true; liveRender(); });
+video.addEventListener('waiting', () => { if (liveClock.wall) liveClock.held = true; });   // a stall puts it behind too
+setInterval(() => { if (state.current && !isVod(state.current)) liveRender(); }, 500);   // the delay counts on while paused
+$('#pcLive').addEventListener('click', goLive);
+
 /* ─────────────────────────── play / stop / controls ─────────────────────────── */
 function playChannel(ch) {
   ch = dlLocal(ch);   // a downloaded copy plays from disk
@@ -664,6 +721,7 @@ function mirrorCtl() {
     mirrorWin.setCtl({
       on: !!state.current, paused: video.paused, vod, muted: video.muted || video.volume === 0, volume: video.volume,
       cur: curTime() || 0, dur: vod && isFinite(dur) && dur > 0 ? dur : 0,
+      behind: !vod && liveBehind(), behindText: $('#pcBehind') ? $('#pcBehind').textContent : '',
     });
   } catch { /* window closing */ }
 }

@@ -20,7 +20,7 @@
   body.float { user-select: none; }
   #player .p-top { -webkit-app-region: no-drag; }
   .m-side { flex: 1 1 0; display: flex; align-items: center; }
-  .m-side.end { justify-content: flex-end; }
+  .m-side.end { justify-content: flex-end; gap: 8px; }
   /* the speaker brings up a slider that stands on end */
   #vol { position: relative; display: inline-grid; }
   .m-volpop { position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); display: grid; padding: 10px 0; border-radius: 10px; background: rgba(0, 0, 0, .7); visibility: hidden; }
@@ -50,7 +50,7 @@
       <button class="p-btn pc-skip" id="pcBack" title="Back 15 seconds" aria-label="Back 15 seconds"><svg class="ic"><use href="#i-back15"/></svg></button>
       <button class="pc-big" id="pcPlay" title="Play / pause" aria-label="Play / pause"><svg class="ic fill"><use href="#i-pause"/></svg></button>
       <button class="p-btn pc-skip" id="pcFwd" title="Forward 15 seconds" aria-label="Forward 15 seconds"><svg class="ic"><use href="#i-fwd15"/></svg></button>
-      <span class="m-side end"><span class="live-badge"><i></i>LIVE</span></span>
+      <span class="m-side end"><span id="pcBehind" class="pc-behind" hidden></span><button id="pcLive" class="live-badge" title="Live" disabled><i></i><span>LIVE</span></button></span>
     </div>
   </div>
 </div>

@@ -111,6 +111,13 @@ function syncCtl() {
     $('pcCur').textContent = clock(ctl.cur);
   }
   $('pcDur').textContent = ctl.dur ? clock(ctl.dur) : '--:--';
+  // behind live: GO LIVE, as in the main player (#18)
+  const live = $('pcLive');
+  live.classList.toggle('behind', !!ctl.behind);
+  live.querySelector('span').textContent = ctl.behind ? 'GO LIVE' : 'LIVE';
+  live.disabled = !ctl.behind;
+  $('pcBehind').textContent = ctl.behindText || '';
+  $('pcBehind').hidden = !ctl.behindText;
 }
 window.setCtl = (s) => { ctl = s; syncCtl(); };
 function muteTo(m) {
@@ -125,6 +132,7 @@ function volumeTo(x) {
 }
 function openVol(open) { volBox.classList.toggle('open', open); $('mVol').setAttribute('aria-expanded', open); }
 $('pcPlay').addEventListener('click', () => main('togglePlay'));
+$('pcLive').addEventListener('click', () => main('goLive'));
 $('pcBack').addEventListener('click', () => main('seekBy', -15));
 $('pcFwd').addEventListener('click', () => main('seekBy', 15));
 seek.addEventListener('input', () => { seeking = true; $('pcCur').textContent = clock(Number(seek.value)); setFill(seek, Number(seek.value) / (Number(seek.max) || 1)); });

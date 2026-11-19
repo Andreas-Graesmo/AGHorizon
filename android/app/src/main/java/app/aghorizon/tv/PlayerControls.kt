@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.format.DateFormat
 import android.util.TypedValue
 import android.view.Gravity
@@ -49,7 +50,7 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
     private val btnBack: View = layer.findViewById(R.id.btnBack)
     private val btnPlay: ImageView = layer.findViewById(R.id.btnPlay)
     private val btnFwd: View = layer.findViewById(R.id.btnFwd)
-    private val liveBadge: View = layer.findViewById(R.id.liveBadge)
+    private val liveBadge: TextView = layer.findViewById(R.id.liveBadge)
     private val tracks: View = layer.findViewById(R.id.tracks)
     private val tracksTitle: TextView = layer.findViewById(R.id.tracksTitle)
     private val tracksList: LinearLayout = layer.findViewById(R.id.tracksList)
@@ -57,6 +58,10 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
     private val names = DefaultTrackNameProvider(res)
 
     var player: ExoPlayer? = null
+        set(v) {
+            field = v
+            if (v == null) liveTicker.removeCallbacksAndMessages(null)   // closed: nothing to measure until the next reset()
+        }
     private var live = false
     private var now: JSONArray? = null    // [start ms, end ms, title] of what is on now, for a channel
     private var next: JSONArray? = null
@@ -73,6 +78,7 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         btnFwd.setOnClickListener { player?.seekForward(); update() }
         btnAudio.setOnClickListener { pick(C.TRACK_TYPE_AUDIO, it) }
         btnSubs.setOnClickListener { pick(C.TRACK_TYPE_TEXT, it) }
+        liveBadge.setOnClickListener { goLive() }
         seek.max = 1000
         seek.nextFocusDownId = R.id.btnPlay
         restyle()
@@ -91,7 +97,75 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         btnFwd.visibility = btnBack.visibility
         liveBadge.visibility = if (live) View.VISIBLE else View.GONE
         btnPlay.tag = null
+        liveTicker.removeCallbacksAndMessages(null)
+        liveReset()
+        if (live) liveTicker.post(liveTick)
         tracksChanged()
+    }
+
+    /* ───────────── live TV: how far behind live (#18), as the desktop player measures it ───────────── */
+    // HLS: ExoPlayer knows how far behind the live edge it plays (currentLiveOffset); the delay is how much more that
+    // is than when it was live. Other streams (MPEG-TS over HTTP): the wall-clock time gone by minus the picture time
+    // played since it was last live. While it plays normally the reference follows it; a pause or a stall holds it.
+    private val liveTicker = Handler(Looper.getMainLooper())   // not `handler`: hide() clears that one
+    private val liveTick = object : Runnable {
+        override fun run() {
+            if (!live) return   // not live TV: stops until the next reset()
+            tickLive()
+            liveTicker.postDelayed(this, 500)
+        }
+    }
+    private var anchorWall = 0L
+    private var anchorPos = 0L
+    private var anchorOffset = C.TIME_UNSET
+    private var held = false
+    private var lagMs = 0L
+    private var liveShown = ""
+
+    private fun liveReset() { anchorWall = 0L; held = false; lagMs = 0L; liveShown = ""; renderLive(false) }
+
+    private fun anchor(p: ExoPlayer) {
+        anchorWall = SystemClock.elapsedRealtime()
+        anchorPos = p.currentPosition
+        anchorOffset = p.currentLiveOffset
+        held = false
+        lagMs = 0L
+    }
+
+    private fun tickLive() {
+        val p = player ?: return
+        if (!live) return
+        val playing = p.isPlaying
+        if (anchorWall == 0L) { if (playing) anchor(p); renderLive(false); return }   // live from its first picture
+        if (!playing) held = true   // paused, or buffering
+        val offset = p.currentLiveOffset
+        val lag = if (offset != C.TIME_UNSET && anchorOffset != C.TIME_UNSET) offset - anchorOffset
+            else (SystemClock.elapsedRealtime() - anchorWall) - (p.currentPosition - anchorPos)
+        if (!held || (playing && lag < 500)) anchor(p) else lagMs = lag
+        renderLive(!p.playWhenReady || (held && lagMs >= LIVE_BEHIND_MS))
+    }
+
+    /** LIVE in red, or a grey GO LIVE with how far behind, which OK takes back to live. */
+    private fun renderLive(behind: Boolean) {
+        val text = if (!behind) "●  LIVE" else if (lagMs >= 1000) "GO LIVE   −${hms(lagMs)}" else "GO LIVE"
+        if (text == liveShown) return
+        liveShown = text
+        liveBadge.text = text
+        liveBadge.background = StateListDrawable().apply {
+            if (behind) addState(intArrayOf(android.R.attr.state_focused), round(Color.parseColor("#ff5a63"), 5f).apply { setStroke(dp(2), Color.WHITE) })
+            addState(intArrayOf(), round(if (behind) 0x38ffffff else Color.parseColor("#ff5a63"), 5f))
+        }
+        liveBadge.isFocusable = behind
+        if (!behind && liveBadge.hasFocus()) btnPlay.requestFocus()
+    }
+
+    /** Back to live: an HLS stream jumps to its live edge; anything else is tuned in again, which is live. */
+    private fun goLive() {
+        val p = player ?: return
+        if (p.isCurrentMediaItemLive) p.seekToDefaultPosition() else { p.stop(); p.prepare() }
+        p.play()
+        liveReset()
+        btnPlay.requestFocus()
     }
 
     /** What is on now and next on the channel (from the page's guide). */
@@ -299,15 +373,20 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
             addState(intArrayOf(android.R.attr.state_focused), oval(0x40ffffff))
             addState(intArrayOf(), oval(Color.TRANSPARENT))
         }
+        // play / pause: white at rest, the accent colour with the focus (#34), as the desktop player
         btnPlay.background = StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_focused), oval(accent).apply { setStroke(dp(3), Color.WHITE) })
-            addState(intArrayOf(), oval(accent))
+            addState(intArrayOf(), oval(Color.WHITE))
         }
-        btnPlay.imageTintList = ColorStateList.valueOf(INK)
-        seek.progressTintList = ColorStateList.valueOf(accent)
+        btnPlay.imageTintList = ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+            intArrayOf(INK, Color.parseColor("#0b0f19")),
+        )
+        // the bar: what has played in white; the dot white, and the accent colour and larger with the focus (#35)
+        seek.progressTintList = ColorStateList.valueOf(Color.WHITE)
         seek.thumb = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused), oval(Color.WHITE).apply { setSize(dp(20), dp(20)); setStroke(dp(3), accent) })
-            addState(intArrayOf(), oval(Color.WHITE).apply { setSize(dp(20), dp(20)); setStroke(dp(4), Color.TRANSPARENT) })
+            addState(intArrayOf(android.R.attr.state_focused), oval(accent).apply { setSize(dp(22), dp(22)); setStroke(dp(3), Color.WHITE) })
+            addState(intArrayOf(), oval(Color.WHITE).apply { setSize(dp(22), dp(22)); setStroke(dp(5), Color.TRANSPARENT) })
         }
         seek.background = null
     }
@@ -322,6 +401,7 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
 
     companion object {
         private const val HIDE_MS = 5000L
+        private const val LIVE_BEHIND_MS = 1500L   // from here on, and whenever paused, LIVE becomes GO LIVE
         private val DEFAULT_ACCENT = Color.parseColor("#ff7a59")
         private val INK = Color.parseColor("#06142b")   // --accent-ink: the play / pause sign on the accent
 
