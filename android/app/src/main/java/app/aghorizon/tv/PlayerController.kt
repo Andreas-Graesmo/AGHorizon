@@ -95,6 +95,11 @@ class PlayerController(
         playerView.isFocusable = true
         playerView.isFocusableInTouchMode = true
         playerView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        // CC › Appearance… (#29): the subtitles on screen change at once, and the page keeps the choice (Settings)
+        controls.onLook = { l ->
+            subLook(l)
+            req?.let { r -> emit(JSONObject().put("type", "subLook").put("token", r.token).put("look", l.optJSONObject("cur"))) }
+        }
     }
 
     /** The title shows with the controls (and for a moment when something starts, see showBanner). */
@@ -145,6 +150,7 @@ class PlayerController(
      * over a subtitle file's own styling, as on a computer. Nothing given (an older page): ExoPlayer's own look.
      */
     private fun subLook(l: JSONObject?) {
+        controls.look = l   // CC › Appearance… in the player changes it from there
         val view = playerView.subtitleView ?: return
         if (l == null) {
             view.setUserDefaultStyle()

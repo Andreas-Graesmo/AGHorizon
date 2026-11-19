@@ -26,6 +26,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.DefaultTrackNameProvider
 import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Date
 
 /**
@@ -68,6 +69,13 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
     var accent = DEFAULT_ACCENT
         private set
     private var pickingFrom: View? = null
+
+    /** How subtitles look (the page's subLookForTv(): the look, what is chosen, the choices); set for each title. */
+    var look: JSONObject? = null
+    /** CC › Appearance… changed the look: draw it, and let the page keep it. */
+    var onLook: (JSONObject) -> Unit = {}
+    private var level = 0          // the menu that is open: 0 the tracks, 1 Appearance, 2 one of its settings
+    private var lookKey = ""       // …which one
 
     val visible: Boolean get() = panel.visibility == View.VISIBLE
     val picking: Boolean get() = tracks.visibility == View.VISIBLE
@@ -220,7 +228,11 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
     /** Back with the menu of tracks open: close it. False when it wasn't open. */
     fun back(): Boolean {
         if (!picking) return false
-        closePicker()
+        when (level) {
+            2 -> appearance(lookKey)                                  // a setting: back to Appearance
+            1 -> pick(C.TRACK_TYPE_TEXT, pickingFrom ?: btnSubs)      // Appearance: back to the subtitles
+            else -> closePicker()
+        }
         return true
     }
 
@@ -305,6 +317,11 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
             val item = addItem(trackName(c.format), c.selected) { choose(type, c) }
             if (c.selected && focus == null) focus = item
         }
+        if (!audio && look?.optJSONObject("choices") != null) {   // how they look, as CC › Appearance… on a computer (#29)
+            addLine()
+            addItem("Appearance…", false) { appearance() }
+        }
+        level = 0
         pickingFrom = from
         tracks.visibility = View.VISIBLE
         handler.removeCallbacks(autoHide)
@@ -318,6 +335,72 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         else b.setTrackTypeDisabled(type, false).setOverrideForType(TrackSelectionOverride(c.group.mediaTrackGroup, c.index))
         p.trackSelectionParameters = b.build()
         closePicker()
+    }
+
+    /* ── CC › Appearance…: size, text colour, background and height, changed while it plays (#29) ── */
+
+    private fun appearance(focusKey: String? = null) {
+        val l = look ?: return
+        val cur = l.optJSONObject("cur") ?: return
+        val choices = l.optJSONObject("choices") ?: return
+        level = 1
+        tracksTitle.text = "Subtitle appearance"
+        tracksList.removeAllViews()
+        var focus: View? = null
+        for ((key, name) in LOOK_ROWS) {
+            val list = choices.optJSONArray(key) ?: continue
+            val now = list.entries().firstOrNull { same(key, it.opt(0), cur.opt(key), list) }?.optString(1) ?: ""
+            val item = addItem("$name:  $now  ›", false) { lookOption(key) }
+            if (key == focusKey || focus == null) focus = item
+        }
+        focus?.requestFocus()
+    }
+
+    private fun lookOption(key: String) {
+        val l = look ?: return
+        val cur = l.optJSONObject("cur") ?: return
+        val list = l.optJSONObject("choices")?.optJSONArray(key) ?: return
+        level = 2
+        lookKey = key
+        tracksTitle.text = LOOK_ROWS.first { it.first == key }.second
+        tracksList.removeAllViews()
+        var focus: View? = null
+        for (e in list.entries()) {
+            val on = same(key, e.opt(0), cur.opt(key), list)
+            val item = addItem(e.optString(1), on) { setLook(key, e); appearance(key) }
+            if (on) focus = item
+        }
+        (focus ?: tracksList.getChildAt(0))?.requestFocus()
+    }
+
+    /** One choice made: the look the player draws is worked out again from what is chosen. */
+    private fun setLook(key: String, choice: JSONArray) {
+        val l = look ?: return
+        val cur = l.optJSONObject("cur") ?: return
+        cur.put(key, choice.opt(0))
+        when (key) {
+            "size" -> l.put("scale", choice.optDouble(2, 1.0))
+            "color" -> l.put("color", choice.optString(0))
+            "opacity" -> l.put("opacity", choice.optDouble(0, 60.0) / 100.0)
+            "pos" -> l.put("raise", choice.optDouble(2, 0.08))
+        }
+        onLook(l)
+    }
+
+    /** Whether a choice is the one chosen; the background by the nearest step (Settings has a slider, this a list). */
+    private fun same(key: String, v: Any?, cur: Any?, list: JSONArray): Boolean {
+        if (key != "opacity") return v?.toString() == cur?.toString()
+        val c = (cur as? Number)?.toDouble() ?: cur?.toString()?.toDoubleOrNull() ?: return false
+        val nearest = list.entries().minByOrNull { kotlin.math.abs(it.optDouble(0) - c) } ?: return false
+        return nearest.optDouble(0) == (v as? Number)?.toDouble()
+    }
+
+    private fun JSONArray.entries(): List<JSONArray> = (0 until length()).mapNotNull { optJSONArray(it) }
+
+    /** A thin line between groups in the menu, as the desktop app's. */
+    private fun addLine() {
+        val line = View(tracksList.context).apply { setBackgroundColor(Color.parseColor("#2c3550")) }
+        tracksList.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply { setMargins(dp(6), dp(5), dp(6), dp(5)) })
     }
 
     private fun closePicker() {
@@ -401,7 +484,8 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
 
     companion object {
         private const val HIDE_MS = 5000L
-        private const val LIVE_BEHIND_MS = 1500L   // from here on, and whenever paused, LIVE becomes GO LIVE
+        private const val LIVE_BEHIND_MS = 1500L
+        private val LOOK_ROWS = listOf("size" to "Size", "color" to "Text colour", "opacity" to "Background", "pos" to "Height")   // from here on, and whenever paused, LIVE becomes GO LIVE
         private val DEFAULT_ACCENT = Color.parseColor("#ff7a59")
         private val INK = Color.parseColor("#06142b")   // --accent-ink: the play / pause sign on the accent
 

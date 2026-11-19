@@ -197,7 +197,26 @@ function subApplyLook() {
 function subLookForTv() {
   const l = subLook();
   const font = l.font === 'georgia' ? 'serif' : l.font === 'mono' ? 'monospace' : 'sans-serif';
-  return { scale: subPick(SUB_SIZES, l.size), color: l.color, bg: l.bg, opacity: Math.max(0, Math.min(100, Number(l.opacity))) / 100, raise: subPick(SUB_POS, l.pos), font };
+  return { scale: subPick(SUB_SIZES, l.size), color: l.color, bg: l.bg, opacity: Math.max(0, Math.min(100, Number(l.opacity))) / 100, raise: subPick(SUB_POS, l.pos), font,
+    // for the player's own CC › Appearance… menu: what is chosen, and the choices (as Settings has them)
+    cur: { size: l.size, color: l.color, opacity: Number(l.opacity), pos: l.pos },
+    choices: {
+      size: SUB_SIZES.map(([k, label, scale]) => [k, label, scale]),
+      color: SUB_COLORS.map(([hex, label]) => [hex, label]),
+      opacity: [[0, 'None'], [30, 'See-through'], [60, 'Half'], [90, 'Solid']],
+      pos: SUB_POS.map(([k, label, raise]) => [k, label, raise]),
+    } };
+}
+// The TV's player changed the look while playing (CC › Appearance…): keep it as Settings does
+function subLookFromTv(cur) {
+  if (!cur || typeof cur !== 'object') return;
+  const l = subLook();
+  if (SUB_SIZES.some((x) => x[0] === cur.size)) l.size = cur.size;
+  if (SUB_COLORS.some((x) => x[0] === cur.color)) l.color = cur.color;
+  if (Number.isFinite(Number(cur.opacity))) l.opacity = Math.max(0, Math.min(100, Math.round(Number(cur.opacity))));
+  if (SUB_POS.some((x) => x[0] === cur.pos)) l.pos = cur.pos;
+  LS.set(SUB_LOOK_KEY, l);
+  subApplyLook();
 }
 function subSizeToPlayer() {
   const l = subLook();
@@ -406,7 +425,7 @@ function subLookControls() {
 }
 function subLookRows() {
   const c = subLookControls();
-  return `<div class="set-row sub-preview-row"><div><b>Appearance</b><p class="muted">How subtitles look in the player.${TV ? '' : ' You can also change it while watching: CC › Appearance.'}</p></div>
+  return `<div class="set-row sub-preview-row"><div><b>Appearance</b><p class="muted">How subtitles look in the player. You can also change it while watching: CC › Appearance.</p></div>
       <div class="sub-preview" aria-hidden="true"><span>This is how subtitles<br>will look.</span></div></div>
     <div class="set-row"><div><b>Size</b></div>${c.size}</div>
     <div class="set-row"><div><b>Font</b></div>${c.font}</div>

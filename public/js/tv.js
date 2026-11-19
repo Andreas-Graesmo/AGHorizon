@@ -261,6 +261,7 @@ if (TV) {
       case 'zap': zap(ev.delta > 0 ? 1 : -1); break;
       case 'skip': tvEpisode(c, ev.delta > 0 ? 1 : -1); break;
       case 'digit': tvDigit(ev.n); break;
+      case 'subLook': subLookFromTv(ev.look); break;   // CC › Appearance… in the player (#29)
       default: break;   // 'error': the player shows it until Back, which arrives as 'closed'
     }
   };

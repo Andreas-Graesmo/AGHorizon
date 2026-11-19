@@ -213,6 +213,10 @@ async function main() {
   check('AC-3 is decoded by the app’s ffmpeg', st && /ffmpeg/i.test(st.audioDecoder), st ? st.audioDecoder : '');
   check('the page knows which channel is on', await ev(`state.current && state.current.name`) === 'Channel Two', await ev(`state.current && state.current.name`));
   screenshot('playing-ac3');
+  // CC › Appearance… in the player: what it reports is kept as Settings › Languages › Subtitles (#29)
+  const look = await ev(`(() => { const sent = subLookForTv(); tvNative({ token: playToken, type: 'subLook', look: { size: 'xl', color: '#ffe14d', opacity: 30, pos: 'high' } }); const l = subLook(); return JSON.stringify({ choices: Object.keys(sent.choices || {}), l: [l.size, l.color, l.opacity, l.pos] }); })()`);
+  check('the player’s Appearance choices are kept', /"choices":\["size","color","opacity","pos"\]/.test(look) && /"l":\["xl","#ffe14d",30,"high"\]/.test(look), look);
+  await ev(`(() => { LS.set('tuner.subLook', {}); return 0; })()`);
   await key('DPAD_CENTER', 1200);
   check('OK brings up the player’s controls', (await player()).controls);
   screenshot('player-controls');
