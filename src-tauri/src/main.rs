@@ -753,7 +753,8 @@ fn popup(app: &AppHandle, url: &Url, features: NewWindowFeatures) -> NewWindowRe
             }
             // the floating ones (picture-in-picture, the mirror without a monitor) keep the picture's shape, as in Electron
             if pip || floating {
-                keep_16_9(&window);
+                aspect::hold_16_9(&window);   // by the system, while it is dragged (#33)
+                keep_16_9(&window);           // and afterwards, where the system can't (Wayland)
             }
             NewWindowResponse::Create { window }
         }
@@ -783,6 +784,80 @@ fn fullscreen_on(window: &WebviewWindow, key: &str) {
         let _ = window.set_position(*m.position());
         let _ = window.set_size(*m.size());
         let _ = window.set_fullscreen(true);
+    }
+}
+
+// #33 The system keeps a popup at 16:9 while one of its edges is dragged, as Electron's setAspectRatio does. Tauri
+// has no such setting, so it is set per system. (Before, the window was corrected during the drag, which fought it:
+// dragging the top edge on Windows moved the window up and down, and the bottom edge lagged.)
+mod aspect {
+    use tauri::WebviewWindow;
+
+    #[cfg(windows)]
+    pub fn hold_16_9(window: &WebviewWindow) {
+        let Ok(hwnd) = window.hwnd() else { return };
+        let hwnd = hwnd.0 as isize;
+        let _ = window.run_on_main_thread(move || unsafe {
+            windows_sys::Win32::UI::Shell::SetWindowSubclass(hwnd as _, Some(sizing), 0x169, 0);
+        });
+    }
+
+    // WM_SIZING: Windows hands over the window's new rectangle while it is dragged; the edge being dragged stays
+    // where the pointer is and the other side follows, so the picture area (the client area) stays 16:9.
+    #[cfg(windows)]
+    unsafe extern "system" fn sizing(
+        hwnd: windows_sys::Win32::Foundation::HWND,
+        msg: u32,
+        wp: windows_sys::Win32::Foundation::WPARAM,
+        lp: windows_sys::Win32::Foundation::LPARAM,
+        _id: usize,
+        _data: usize,
+    ) -> windows_sys::Win32::Foundation::LRESULT {
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::UI::Shell::DefSubclassProc;
+        use windows_sys::Win32::UI::WindowsAndMessaging::*;
+        if msg == WM_SIZING && lp != 0 {
+            let r = &mut *(lp as *mut RECT);
+            let (mut wr, mut cr): (RECT, RECT) = (std::mem::zeroed(), std::mem::zeroed());
+            if GetWindowRect(hwnd, &mut wr) != 0 && GetClientRect(hwnd, &mut cr) != 0 {
+                let fw = (wr.right - wr.left) - (cr.right - cr.left);   // the frame, if any, around the picture
+                let fh = (wr.bottom - wr.top) - (cr.bottom - cr.top);
+                let w = (r.right - r.left - fw).max(1);
+                let h = (r.bottom - r.top - fh).max(1);
+                match wp as u32 {
+                    WMSZ_TOP | WMSZ_BOTTOM => r.right = r.left + h * 16 / 9 + fw,       // the height leads
+                    WMSZ_TOPLEFT | WMSZ_TOPRIGHT => r.top = r.bottom - w * 9 / 16 - fh,  // the width leads, upwards
+                    _ => r.bottom = r.top + w * 9 / 16 + fh,                             // the width leads, downwards
+                }
+                return 1;
+            }
+        }
+        DefSubclassProc(hwnd, msg, wp, lp)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn hold_16_9(window: &WebviewWindow) {
+        let Ok(ptr) = window.ns_window() else { return };
+        let ptr = ptr as usize;
+        let _ = window.run_on_main_thread(move || {
+            let ns: &objc2_app_kit::NSWindow = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
+            #[allow(unused_unsafe)]
+            unsafe {
+                ns.setContentAspectRatio(objc2_foundation::NSSize::new(16.0, 9.0));
+            }
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn hold_16_9(window: &WebviewWindow) {
+        let w = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            use gtk::prelude::GtkWindowExt;
+            let Ok(gw) = w.gtk_window() else { return };
+            let a = 16.0 / 9.0;
+            let hints = gtk::gdk::Geometry::new(0, 0, 0, 0, 0, 0, 0, 0, a, a, gtk::gdk::Gravity::NorthWest);
+            gw.set_geometry_hints(None::<&gtk::Widget>, Some(&hints), gtk::gdk::WindowHints::ASPECT);
+        });
     }
 }
 

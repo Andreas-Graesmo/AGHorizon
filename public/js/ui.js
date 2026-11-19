@@ -43,7 +43,8 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), 4300);
 }
 
-function showMenu(anchor, items) {
+// at: { x, y } opens it at the pointer (a right-click) instead of under the anchor
+function showMenu(anchor, items, at) {
   const m = $('#menu');
   // A modal <dialog> sits in the top layer and makes the rest of the page inert, so a menu opened
   // from inside one has to live in that dialog to be visible and clickable.
@@ -57,7 +58,7 @@ function showMenu(anchor, items) {
   m.innerHTML = items.map((it, i) => it.sep ? '<hr class="menu-sep">' : it.heading ? `<div class="menu-h">${esc(it.label)}</div>`
     : `<button class="menu-i${it.danger ? ' danger' : ''}" data-i="${i}">${it.icon ? `<svg class="ic"><use href="#${it.icon}"/></svg>` : ''}${esc(it.label)}</button>`).join('');
   m.hidden = false;
-  const r = anchor.getBoundingClientRect();
+  const r = at ? { left: at.x, top: at.y, bottom: at.y } : anchor.getBoundingClientRect();
   const w = m.offsetWidth, h = m.offsetHeight;
   m.style.left = Math.max(8, Math.min(view.innerWidth - w - 8, r.left)) + 'px';
   m.style.top = (r.bottom + 6 + h < view.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
@@ -320,6 +321,43 @@ document.addEventListener('click', (e) => {
   openItem(it);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('card')) e.target.click(); });
+
+// A card's menu (#27): a right-click on a computer, a long press on OK on the TV (tv.js tvContext). Only what fits
+// the card: Remove from history only where it is history (the dashboard's "Recently watched" rails and Recently viewed).
+function cardMenuItems(it, host) {
+  const kind = kindOf(it);
+  const items = [];
+  if (kind === 'live') {
+    items.push({ label: 'Watch', icon: 'i-play', run: () => openItem(it) });
+    if (!TV) items.push({ label: 'Add to Multi view', icon: 'i-multi', run: () => mvAdd(it) });
+  } else if (kind === 'movie' || kind === 'episode') {
+    const p = progressOf(it.uid);
+    items.push({ label: p && !p.w && p.t > 10 ? 'Resume' : 'Play', icon: 'i-play', run: () => playItem(it) });
+    items.push({ label: 'Details', icon: 'i-info', run: () => openItem(kind === 'episode' ? { ...it, kind: 'series', uid: it.seriesUid } : it) });
+    items.push({ label: p && p.w ? 'Mark as not watched' : 'Mark as watched', icon: 'i-check', run: () => {
+      if (p && p.w) delete state.progress[it.uid]; else state.progress[it.uid] = { t: 0, d: (p && p.d) || 0, w: 1, ts: Date.now() };
+      persistProgress(); renderRoute(ui.route);
+    } });
+  } else items.push({ label: 'Open', icon: 'i-info', run: () => openItem(it) });
+  const favIt = kind === 'episode' ? playerFavItem(it) : it;   // an episode's heart is its series'
+  const fav = state.favs.has(favIt.uid);
+  items.push({ label: fav ? 'Remove from favorites' : 'Add to favorites', icon: fav ? 'i-heart-fill' : 'i-heart', run: () => toggleFavItem(favIt) });
+  if (host && host.closest('#v-recent, [data-history]')) items.push({ sep: true }, { label: 'Remove from history', icon: 'i-x', danger: true, run: () => removeRecent(it.uid) });
+  return items;
+}
+// Play a film or an episode from a card: an episode plays when opened; a film opens its page, then plays
+async function playItem(it) {
+  if (it.kind === 'episode') return openItem(it);
+  await openItem(it);
+  if (ws.detail && ws.detail.uid === it.uid) { $('#wsDetail').scrollTop = 0; playChannel(withBestUrl(ws.detail)); }   // the picture in view, as the page's Play
+}
+document.addEventListener('contextmenu', (e) => {
+  const card = e.target.closest('.card[data-uid]');
+  const it = card && cardIndex.get(card.dataset.uid);
+  if (!it || it.dlCard) return;   // the Downloads page has its own buttons
+  e.preventDefault();
+  showMenu(card, cardMenuItems(it, card), { x: e.clientX, y: e.clientY });
+});
 document.addEventListener('error', logoFailed, true);
 
 /* ─────────────────────────────── page building blocks ─────────────────────────────── */
@@ -352,7 +390,7 @@ const RAIL_MAX = 20;
 function dashRail(title, list, toHtml, route, sec = '') {
   if (!list.length) return '';
   const more = route && list.length > RAIL_MAX;
-  return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}"${sec ? ` data-sec="${sec}"` : ''}>See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
+  return `<section class="rail"${sec.startsWith('recent-') ? ' data-history' : ''}><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}"${sec ? ` data-sec="${sec}"` : ''}>See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
 }
 // TMDB's trending titles: asked once per session and again when 6 hours old (the server keeps them that long).
 // null until they arrive, or when this build has no TMDB key: the dashboard then shows "Recently added".
@@ -932,8 +970,8 @@ function renderSettings() {
     </section>`)}
     ${pane('Languages', 'i-audio', 'Audio and subtitle languages, and how subtitles look.', `<h3 class="set-sec">Preferred languages</h3>
       <section class="set-card">${audSettingsRow()}${subAutoRow()}</section>
-      ${TV ? '' : `<h3 class="set-sec">Subtitles</h3>
-      ${subSettingsCard()}`}`)}
+      <h3 class="set-sec">Subtitles</h3>
+      ${TV ? `<section class="set-card">${subLookRows()}</section>` : subSettingsCard()}`)}
     ${TV ? '' : pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
     ${pane('Sync', 'i-cloud', 'The same history, progress and favorites on all your computers.', syncSettingsCard())}
     ${pane('About & updates', 'i-info', 'Your version, and what is new.', updatesCard() + tmdbCredit() + ffmpegCredit())}

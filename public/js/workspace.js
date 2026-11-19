@@ -759,9 +759,15 @@ function renderDetail() {
       // download button (a blue download icon once downloaded), or an empty slot so the rows line up; then ⋮
       const dlb = !off && dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '<span class="ep-dl"></span>';
       const watched = !!(p && p.w);
+      // #37: the episode's still, with its number and how much is watched on it. No still of its own (Xtream then
+      // repeats the series poster, as most M3U lists do): the series poster, blurred.
+      const pic = (u) => (u && /^https?:\/\//i.test(u) ? u : '');
+      const still = pic(e.logo) && e.logo !== (e.seriesLogo || it.logo) ? pic(e.logo) : '';
+      const bg = still || pic(e.seriesLogo) || pic(it.logo);
       return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${off ? ' off' : ''}" data-act="ep" data-uid="${esc(e.uid)}"${off ? ' title="Not downloaded"' : ''}>
-          <span class="ep-n">${e.num || ''}</span>
-          <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+          <div class="ep-thumb${still ? '' : ' poster'}">${bg ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(bg)}" alt="" onerror="this.remove()">` : ''}
+            <span class="ep-n">${e.num || ''}</span><span class="ep-play"><svg class="ic fill"><use href="#i-play"/></svg></span>${pct || watched ? `<div class="bar"><i style="width:${watched ? 100 : pct}%"></i></div>` : ''}</div>
+          <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}</div>
           <span class="ep-d">${watched ? '<svg class="ic ep-w" aria-label="Watched"><use href="#i-check"/></svg>' : esc(e.duration || '')}</span>${dlb}
           <button class="icon-btn ep-more" data-act="ep-more" data-uid="${esc(e.uid)}" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>`;
     };

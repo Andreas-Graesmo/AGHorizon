@@ -26,14 +26,18 @@ keepawake = "0.5"   # 9.6 the screen stays on during playback: WebKit denies the
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6", features = ["apple-native"] }   # the sync code, in the Keychain
+# picture-in-picture keeps 16:9 while it is resized (NSWindow contentAspectRatio); the versions Tauri uses
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # the sync code, through the Secret Service (GNOME Keyring, KWallet); zbus, so no libdbus to bundle
 keyring = { version = "3.6", features = ["async-secret-service", "tokio", "crypto-rust"] }
+gtk = "0.18"   # picture-in-picture keeps 16:9 while it is resized (an aspect hint; X11 only, Wayland ignores it); Tauri's version
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6", features = ["windows-native"] }   # the sync code, in Windows Credential Manager
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
 
 [profile.release]
 codegen-units = 1

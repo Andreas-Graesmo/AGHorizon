@@ -23,8 +23,11 @@ dependencies = [
 name = "ag-horizon"
 version = "0.0.0"
 dependencies = [
+ "gtk",
  "keepawake",
  "keyring",
+ "objc2-app-kit",
+ "objc2-foundation",
  "semver",
  "serde",
  "serde_json",

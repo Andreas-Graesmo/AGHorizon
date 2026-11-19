@@ -191,6 +191,14 @@ function subApplyLook() {
   root.setProperty('--sub-scale', subPick(SUB_SIZES, l.size));
   subSizeToPlayer();
 }
+// The look for the TV's own player (PlayerController.kt applies it to ExoPlayer's subtitles, #29): size as a factor
+// of the usual size, colours as #rrggbb, the background's opacity 0–1, the raise as a share of the picture's height,
+// and the font as a kind of font (the TV has its own fonts, not these).
+function subLookForTv() {
+  const l = subLook();
+  const font = l.font === 'georgia' ? 'serif' : l.font === 'mono' ? 'monospace' : 'sans-serif';
+  return { scale: subPick(SUB_SIZES, l.size), color: l.color, bg: l.bg, opacity: Math.max(0, Math.min(100, Number(l.opacity))) / 100, raise: subPick(SUB_POS, l.pos), font };
+}
 function subSizeToPlayer() {
   const l = subLook();
   const h = $('#player').clientHeight || 0;
@@ -398,7 +406,7 @@ function subLookControls() {
 }
 function subLookRows() {
   const c = subLookControls();
-  return `<div class="set-row sub-preview-row"><div><b>Appearance</b><p class="muted">How subtitles look in the player. You can also change it while watching: CC › Appearance.</p></div>
+  return `<div class="set-row sub-preview-row"><div><b>Appearance</b><p class="muted">How subtitles look in the player.${TV ? '' : ' You can also change it while watching: CC › Appearance.'}</p></div>
       <div class="sub-preview" aria-hidden="true"><span>This is how subtitles<br>will look.</span></div></div>
     <div class="set-row"><div><b>Size</b></div>${c.size}</div>
     <div class="set-row"><div><b>Font</b></div>${c.font}</div>

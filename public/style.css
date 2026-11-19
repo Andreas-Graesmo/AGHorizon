@@ -778,7 +778,20 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-ring circle { fill: none; stroke: color-mix(in srgb, currentColor 25%, transparent); stroke-width: 2.6; }
 .dl-ring circle.v { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }
 .dl-ring.paused circle.v { stroke: var(--muted); }
-.ep { grid-template-columns: 34px 1fr auto 33px 33px; }   /* number, title, duration or ✓, download, ⋮ */
+.ep { grid-template-columns: 128px 1fr auto 33px 33px; padding: 8px 10px; }   /* still, title, duration or ✓, download, ⋮ */
+/* the episode's still (#37): its number on it, a play sign under the pointer or the focus, and how much is watched */
+.ep-thumb { position: relative; aspect-ratio: 16 / 9; border-radius: 7px; overflow: hidden; background: var(--tile); }
+.ep-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ep-thumb.poster img { filter: blur(10px) brightness(.55) saturate(1.2); transform: scale(1.35); }   /* no still: the series poster */
+.ep-thumb .ep-n { position: absolute; left: 7px; bottom: 6px; color: #fff; font-size: 12px; font-weight: 800; text-align: left; text-shadow: 0 1px 4px rgba(0, 0, 0, .8); }
+.ep-thumb.poster .ep-n { left: 0; right: 0; bottom: auto; top: 50%; transform: translateY(-50%); text-align: center; font-size: 20px; }
+.ep-play { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity .12s; }
+.ep-play .ic { width: 30px; height: 30px; padding: 9px; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; box-sizing: border-box; }
+.ep:hover .ep-play, .ep:focus .ep-play, .ep:focus-within .ep-play, .ep.playing .ep-play { opacity: 1; }
+.ep:hover .ep-thumb.poster .ep-n, .ep:focus .ep-thumb.poster .ep-n, .ep.playing .ep-thumb.poster .ep-n { opacity: 0; }
+.ep-thumb .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; margin: 0; border-radius: 0; background: rgba(255, 255, 255, .25); }
+.ep-thumb .bar i { border-radius: 0; }
+@media (max-width: 640px) { .ep { grid-template-columns: 92px 1fr auto 33px 33px; gap: 10px; } }
 .ep.off { opacity: .4; cursor: default; }   /* offline and not downloaded */
 .ep.off:hover { background: none; border-color: transparent; }
 .ep-dl, .ep-more { color: var(--muted); width: 33px; height: 33px; padding: 8px; }

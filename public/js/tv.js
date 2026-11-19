@@ -178,7 +178,7 @@ function tvPlay(ch, token) {
   const start = vod && resume && !resume.w && resume.t > 10 && (!resume.d || resume.d - resume.t > 20) ? resume.t : 0;
   window.AGHorizonTV.play(JSON.stringify({
     token, url: ch.url, ua: (p && p.ua) || '', live: !vod, start,
-    audioLang: audRemembered(ch) || audPrefLang(), subLang: tvSubLang(ch),
+    audioLang: audRemembered(ch) || audPrefLang(), subLang: tvSubLang(ch), subLook: subLookForTv(),   // how subtitles look (#29)
     accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),   // the player's controls follow the theme
     ...tvTitles(ch),
   }));
@@ -575,14 +575,10 @@ function tvContext(el) {
     if (found) items = epMenuItems(found).filter((x) => !x.heading);
   } else if (host) {
     const it = cardIndex.get(host.dataset.uid) || ws.items.find((c) => c.uid === host.dataset.uid);
-    if (it && !it.dlCard) {
-      const fav = state.favs.has(it.uid);
-      items = [
-        { label: isVod(it) ? 'Open' : 'Watch', icon: isVod(it) ? 'i-info' : 'i-play', run: () => host.click() },
-        { label: fav ? 'Remove from favorites' : 'Add to favorites', icon: fav ? 'i-heart-fill' : 'i-heart', run: () => toggleFavItem(it) },
-      ];
-      if (host.matches('.removable')) items.push({ label: 'Remove from Recently viewed', run: () => removeRecent(it.uid) });
-    }
+    if (it && !it.dlCard) items = host.matches('.row.ch') ? [   // a channel row in Live TV: watch it, or its heart
+      { label: 'Watch', icon: 'i-play', run: () => host.click() },
+      { label: state.favs.has(it.uid) ? 'Remove from favorites' : 'Add to favorites', icon: state.favs.has(it.uid) ? 'i-heart-fill' : 'i-heart', run: () => toggleFavItem(it) },
+    ] : cardMenuItems(it, host);   // a card: the same menu as a right-click on a computer (#27)
   }
   if (!items || !items.length) return false;
   showMenu(el, items);
