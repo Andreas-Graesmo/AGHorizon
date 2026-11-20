@@ -1,6 +1,6 @@
 # AG Horizon
 
-A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator. It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
+A desktop IPTV player (Windows, macOS, Linux) built with Tauri (from 3.1; 2.x was built with Electron), laid out like IPTVnator. It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
 
 - **Dashboard** with a large slideshow, *Trending this week* (from TMDB, matched to your playlists), live channels on your favorites, and what you watched recently
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
@@ -20,14 +20,14 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 | System | File |
 |---|---|
 | Windows | `AG-Horizon-Setup-<version>.exe` |
-| macOS (Apple silicon) | `AG-Horizon-<version>-arm64.dmg` |
+| macOS (Apple silicon and Intel) | `AG-Horizon-<version>-universal.dmg` |
 | Linux | `AG-Horizon-<version>.AppImage` |
 | Android TV | `AG-Horizon-TV-<version>.apk` |
 
 After that the app updates itself: **Settings › About & updates**.
 
 - **Windows:** the installer isn't code-signed, so SmartScreen may say "Windows protected your PC" the first time. Click **More info › Run anyway**.
-- **macOS:** the app isn't signed either. The first time, macOS says it can't check it: open **System Settings › Privacy & Security** and click **Open Anyway** (on macOS 14 and earlier, right-click the app and choose **Open**). On a Mac the app tells you about new versions, and you download them from the releases page.
+- **macOS:** the app isn't signed either. The first time, macOS says it can't check it: open **System Settings › Privacy & Security** and click **Open Anyway** (on macOS 14 and earlier, right-click the app and choose **Open**). Move it to **Applications** first: from there it updates itself like on the other systems (not when it runs from the disk image).
 - **Linux:** make the file executable once (`chmod +x AG-Horizon-*.AppImage`), then run it. If it won't start on a newer Ubuntu, install `libfuse2` (`libfuse2t64` on 24.04 and later).
 - **Android TV:** the app isn't in the Play Store; you install the `.apk` yourself. See [Android TV](#android-tv).
 
@@ -97,13 +97,13 @@ The language button (next to the CC button, right of the volume) lists the sound
 
 ## Compatibility mode (codecs)
 
-The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
+The player is the system's own web view (WebView2 on Windows, WebKit on macOS and Linux), which can't decode every format: HEVC on some machines, DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
 
 - The app **bundles ffmpeg**, which is licensed under the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.html):
-  - **Windows (from 3.x, the Tauri app):** ffmpeg 8.1, the win64 GPL build by [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (autobuild 2026-10-31), checked by SHA-256 when the app is built (`scripts/tauri-prep.js`). Its complete source code, every library in it included, is published as [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source) (`scripts/ffmpeg-source.sh` makes it).
-  - **Linux (the Tauri app, in testing):** the same ffmpeg 8.1 from the same BtbN autobuild (linux64 GPL); its source is in the same release. The AppImage also bundles libraries from Ubuntu so video plays everywhere (GStreamer with `gst-libav`, WebKitGTK, GTK and others, under the GPL and LGPL): each release has `AG-Horizon-<version>-AppImage-sources.txt`, which lists them and links to their published source (`scripts/appimage-sources.sh`).
-  - **macOS (the Tauri app, in testing):** ffmpeg 8.1 from the same commit, built for this app by `scripts/ffmpeg-macos.sh` with x264, dav1d and OpenSSL at BtbN's versions; its complete source is published with it in [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3).
-  - **macOS and Linux (the Electron app, today's release):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
+  - **Windows:** ffmpeg 8.1, the win64 GPL build by [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (autobuild 2026-10-31), checked by SHA-256 when the app is built (`scripts/tauri-prep.js`). Its complete source code, every library in it included, is published as [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source) (`scripts/ffmpeg-source.sh` makes it).
+  - **Linux:** the same ffmpeg 8.1 from the same BtbN autobuild (linux64 GPL); its source is in the same release. The AppImage also bundles libraries from Ubuntu so video plays everywhere (GStreamer with `gst-libav`, WebKitGTK, GTK and others, under the GPL and LGPL): each release has `AG-Horizon-<version>-AppImage-sources.txt`, which lists them and links to their published source (`scripts/appimage-sources.sh`).
+  - **macOS:** ffmpeg 8.1 from the same commit, built for this app by `scripts/ffmpeg-macos.sh` with x264, dav1d and OpenSSL at BtbN's versions; its complete source is published with it in [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3).
+  - **The 2.x Electron app (and running it from source):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
 - The licence matters only if you redistribute installers to other people.
 
 ## How it works
