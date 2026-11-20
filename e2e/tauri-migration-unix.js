@@ -68,6 +68,20 @@ const inv = window.__TAURI__.core.invoke;
 })();
 </script>`;
 
+// macOS: the scratch home has no login keychain (every real account has one): give it its own, unlocked, as its
+// default, so the app's Keychain calls work as on a real Mac. Keychain settings follow $HOME.
+function scratchKeychain(env, home) {
+  const kc = path.join(home, 'Library', 'Keychains', 'e2e.keychain-db');
+  fs.mkdirSync(path.dirname(kc), { recursive: true });
+  const sec = (...a) => require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
+  sec('create-keychain', '-p', 'e2e', kc);
+  sec('list-keychains', '-d', 'user', '-s', kc);
+  sec('default-keychain', '-d', 'user', '-s', kc);
+  sec('unlock-keychain', '-p', 'e2e', kc);
+  sec('set-keychain-settings', kc);   // no locking after a while
+  return sec('default-keychain', '-d', 'user').stdout.trim();
+}
+
 async function runTauri(launch, logName) {
   const reports = {};
   const listener = http.createServer((q, r) => {
@@ -115,6 +129,7 @@ async function runTauri(launch, logName) {
   fs.writeFileSync(exportFile, JSON.stringify(data));
 
   /* 3. the Tauri app */
+  if (mac) console.log('keychain', scratchKeychain(env, home));
   let launch;
   if (mac) {
     // a copy of the .app, its page swapped (the real path: Tauri won't start from a path with a symlink in it)
