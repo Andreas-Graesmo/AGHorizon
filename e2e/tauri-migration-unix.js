@@ -101,6 +101,9 @@ async function runTauri(launch, logName) {
   return reports.state || null;
 }
 
+// a hang (an app that never answers) fails the test in minutes, not when CI gives up after hours
+setTimeout(() => { console.error('timed out after 8 minutes'); process.exit(1); }, 8 * 60e3).unref();
+
 (async () => {
   /* 1. the Electron app writes migration.json */
   const eapp = await electron.launch({ executablePath: require('electron'), args: [root, '--no-sandbox'], env: { ...env, TUNER_PORT: '47999' } });
@@ -119,7 +122,11 @@ async function runTauri(launch, logName) {
     try { data = JSON.parse(fs.readFileSync(written, 'utf8')); if (data.localStorage['tuner.playlists']) break; } catch { /* not yet */ }
     await sleep(500);
   }
-  await eapp.close();
+  // closed, but not waited for forever: on a Mac the Electron app stays running without a window (as Mac apps do),
+  // and Playwright's close() then never returns. The export is on disk by now.
+  const proc = eapp.process();
+  await Promise.race([eapp.close().catch(() => {}), sleep(10000)]);
+  if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL');
   check('the Electron app wrote migration.json in its data folder (no longer Windows only)', data && /From Electron/.test(data.localStorage['tuner.playlists'] || ''), written);
   check('Electron\'s data folder is the one the Tauri app looks in ("Tuner IPTV")', path.basename(userData) === 'Tuner IPTV', userData);
   fs.mkdirSync(oldDir, { recursive: true });

@@ -156,6 +156,8 @@ function clipServer(dir) {
   }).listen(CLIP_PORT, '127.0.0.1');
 }
 
+setTimeout(() => { console.error('timed out after 10 minutes'); process.exit(1); }, 10 * 60e3).unref();   // a hang fails in minutes
+
 (async () => {
   // the real path: on macOS Tauri refuses to start from a path with a symlink in it, and /var (os.tmpdir()) is one
   const work = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'agh-e2e-'));

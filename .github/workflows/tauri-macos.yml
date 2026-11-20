@@ -52,10 +52,12 @@ jobs:
           # every program in it for both processors
           for f in $b/macos/*.app/Contents/MacOS/*; do echo "$(basename "$f"): $(lipo -archs "$f")"; lipo -archs "$f" | grep -q x86_64 && lipo -archs "$f" | grep -q arm64; done
       - name: End to end
+        timeout-minutes: 12
         run: node e2e/tauri-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app src-tauri/binaries/ffmpeg-universal-apple-darwin
       # 9.10: from the Electron app to this one, as tauri-linux.yml does on Linux: the real Electron app writes its
       # export, this app imports it once; the sync code goes into the Keychain
       - name: Electron → Tauri (data and sync code)
+        timeout-minutes: 12
         run: |
           node node_modules/electron/install.js
           npm install --no-save --no-audit --no-fund playwright@1.63.0
