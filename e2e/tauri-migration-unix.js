@@ -42,10 +42,9 @@ const exportFile = path.join(oldDir, 'migration.json');
 const newData = mac ? path.join(support, 'app.aghorizon.desktop') : path.join(home, '.local', 'share', 'app.aghorizon.desktop');
 // macOS: the sync code in the Keychain (keyring: service "AG Horizon", account "sync-code")
 let keychainFile = '';
-const keychainCode = () => {
-  const r = require('child_process').spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', '-w', keychainFile], { env, encoding: 'utf8' });
-  return r.status === 0 ? r.stdout.trim() : null;
-};
+// Only whether it is there: reading the password itself (-w) asks for permission in a dialog (the app made the entry,
+// not the security tool), which nobody answers on CI. That the app reads it back is checked through the app.
+const inKeychain = () => require('child_process').spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', keychainFile], { env, timeout: 15000 }).status === 0;
 
 // what the test page reports, once the import has run
 const PAGE = `<!doctype html><meta charset="utf-8"><title>AG Horizon</title><script>
@@ -76,7 +75,7 @@ function scratchKeychain(env, home) {
   const kc = path.join(home, 'Library', 'Keychains', 'login.keychain-db');
   fs.mkdirSync(path.dirname(kc), { recursive: true });
   for (const a of [['create-keychain', '-p', 'e2e', kc], ['unlock-keychain', '-p', 'e2e', kc], ['set-keychain-settings', kc]]) {
-    const r = require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
+    const r = require('child_process').spawnSync('security', a, { env, encoding: 'utf8', timeout: 15000 });
     console.log(`security ${a[0]}: ${r.status}${r.stderr ? ' ' + r.stderr.trim() : ''}`);
   }
   return kc;
@@ -158,7 +157,7 @@ setTimeout(() => { console.error('timed out after 8 minutes'); process.exit(1); 
   const left = JSON.parse(fs.readFileSync(exportFile, 'utf8'));
   check('the sync code is out of migration.json', !('syncCode' in left));
   check('the import is marked done', fs.existsSync(path.join(newData, 'electron-import.json')));
-  if (mac) check('the sync code is in the macOS Keychain', first && first.keychain === true && keychainCode() === 'code-from-electron');
+  if (mac) check('the sync code is in the macOS Keychain', first && first.keychain === true && first.code === 'code-from-electron' && inKeychain());
   else if (first && first.keychain === false) check('without a keyring the code is in the app\'s own file', fs.readFileSync(path.join(newData, 'sync-code'), 'utf8') === 'code-from-electron');
 
   /* 4. a second start doesn't import again */

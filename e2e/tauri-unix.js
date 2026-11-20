@@ -122,7 +122,7 @@ function scratchKeychain(env, home) {
   const kc = path.join(home, 'Library', 'Keychains', 'login.keychain-db');
   fs.mkdirSync(path.dirname(kc), { recursive: true });
   for (const a of [['create-keychain', '-p', 'e2e', kc], ['unlock-keychain', '-p', 'e2e', kc], ['set-keychain-settings', kc]]) {
-    const r = require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
+    const r = require('child_process').spawnSync('security', a, { env, encoding: 'utf8', timeout: 15000 });
     console.log(`security ${a[0]}: ${r.status}${r.stderr ? ' ' + r.stderr.trim() : ''}`);
   }
   return kc;
@@ -209,7 +209,7 @@ setTimeout(() => { console.error('timed out after 10 minutes'); process.exit(1);
   const env = { ...process.env, HOME: home, XDG_DATA_HOME: path.join(home, '.local', 'share'), AGH_NO_DIALOG: '1' };
   const keychainFile = mac ? scratchKeychain(env, home) : '';
   // the sync code in the macOS Keychain, as the app put it there (keyring: service "AG Horizon", account "sync-code")
-  const inKeychain = () => spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', keychainFile], { env }).status === 0;
+  const inKeychain = () => spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', keychainFile], { env, timeout: 15000 }).status === 0;   // whether it's there: no dialog
   // this copy's processes: the app itself, its server, the ffmpeg the server runs
   const procs = () => {
     const lines = spawnSync('pgrep', ['-f', root]).stdout.toString().split('\n').filter(Boolean)
