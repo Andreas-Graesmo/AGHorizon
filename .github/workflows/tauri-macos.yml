@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', '!**/*.md', '.github/workflows/tauri-macos.yml']
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'test/fixtures/**', '!**/*.md', '.github/workflows/tauri-macos.yml']
 
 permissions:
   contents: read
@@ -53,6 +53,14 @@ jobs:
           for f in $b/macos/*.app/Contents/MacOS/*; do echo "$(basename "$f"): $(lipo -archs "$f")"; lipo -archs "$f" | grep -q x86_64 && lipo -archs "$f" | grep -q arm64; done
       - name: End to end
         run: node e2e/tauri-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app src-tauri/binaries/ffmpeg-universal-apple-darwin
+      # 9.10: from the Electron app to this one, as tauri-linux.yml does on Linux: the real Electron app writes its
+      # export, this app imports it once; the sync code goes into the Keychain
+      - name: Electron → Tauri (data and sync code)
+        run: |
+          node node_modules/electron/install.js
+          npm install --no-save --no-audit --no-fund playwright@1.63.0
+          node e2e/tauri-migration-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
       # the same app for the Apple silicon Mac below (tar keeps its signature and permissions)
       - name: The app, for the Apple silicon run
         run: tar -C src-tauri/target/universal-apple-darwin/release/bundle/macos -cf "$RUNNER_TEMP/app.tar" "AG Horizon.app"

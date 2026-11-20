@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'test/fixtures/**', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
 
 permissions:
   contents: read

@@ -15,7 +15,8 @@ function detectOs() {
   return '';
 }
 const OS_NAME = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
-const ASSET = { win: /setup.*\.exe$/i, mac: /arm64\.dmg$/i, linux: /\.appimage$/i };
+// macOS: the Tauri app is one universal dmg (Apple silicon and Intel); the Electron releases had an Apple silicon one
+const ASSET = { win: /setup.*\.exe$/i, mac: /(universal|arm64)\.dmg$/i, linux: /\.appimage$/i };
 const os = detectOs();
 
 if (os) {
@@ -35,6 +36,8 @@ fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accep
       if (!a) continue;
       const card = document.querySelector(`.platform[data-os="${key}"]`);
       if (card) { card.href = a.browser_download_url; card.querySelector('.file').textContent = a.name; }
+      const which = card && key === 'mac' && card.querySelector('.which');
+      if (which) which.textContent = /universal/i.test(a.name) ? 'Apple silicon and Intel Macs.' : 'Apple silicon (M1 and later).';
       if (key === os) document.getElementById('dlMain').href = a.browser_download_url;
     }
     if (version) {

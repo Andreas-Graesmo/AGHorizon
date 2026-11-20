@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * MIGRATION_PLAN.md 9.10 gate, on Linux: from the Electron app to the Tauri AppImage.
+ * MIGRATION_PLAN.md 9.10 gate, on Linux and macOS: from the Electron app to the Tauri AppImage or .app.
  *   1. The real Electron app (this checkout) runs with some data (playlists, favourites, a playlist file in IndexedDB)
- *      and writes ~/.config/Tuner IPTV/migration.json, as the bridge version now does on every system.
+ *      and writes migration.json in its data folder (~/.config/Tuner IPTV, ~/Library/Application Support/Tuner IPTV),
+ *      as the bridge version now does on every system.
  *   2. The sync code is added to that file, as the hand-over does (electron/handover.js, updater.js).
  *   3. The Tauri AppImage starts with the same home folder. Its page is swapped for a test page (WebKitGTK has no
  *      DevTools protocol), which the import script still runs in; like tauri-shell.js it reports the import done.
- *      Everything is there, the sync code is in the keyring (or, without one, the app's file) and out of
- *      migration.json, and the import is marked done.
+ *      Everything is there, the sync code is in the keyring (macOS: the Keychain; Linux without one: the app's
+ *      file) and out of migration.json, and the import is marked done.
  *   4. A second start doesn't import again.
- * Usage (Linux, with Electron's binary installed and a Secret Service on the session bus if wanted; under a
- * D-Bus session): node e2e/tauri-migration-unix.js <AppImage>
+ * Usage, with Electron's binary installed: node e2e/tauri-migration-unix.js <AppImage or .app>
+ * (Linux: under xvfb-run, with a Secret Service on the session bus if wanted.)
  */
 const { _electron: electron } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
@@ -20,8 +21,9 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 
-const appImage = path.resolve(process.argv[2] || '');
-if (!process.argv[2]) { console.error('usage: node e2e/tauri-migration-unix.js <AppImage>'); process.exit(2); }
+const bundle = path.resolve(process.argv[2] || '');
+if (!process.argv[2]) { console.error('usage: node e2e/tauri-migration-unix.js <AppImage or .app>'); process.exit(2); }
+const mac = bundle.endsWith('.app');
 const root = path.join(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -33,9 +35,16 @@ const home = path.join(work, 'home');
 const config = path.join(home, '.config');
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: config, XDG_DATA_HOME: path.join(home, '.local', 'share') };
 fs.mkdirSync(config, { recursive: true });
-const oldDir = path.join(config, 'Tuner IPTV');
+// where the Tauri app looks for Electron's folder (next to its own config folder) and keeps its data
+const support = mac ? path.join(home, 'Library', 'Application Support') : config;
+const oldDir = path.join(support, 'Tuner IPTV');
 const exportFile = path.join(oldDir, 'migration.json');
-const newData = path.join(home, '.local', 'share', 'app.aghorizon.desktop');
+const newData = mac ? path.join(support, 'app.aghorizon.desktop') : path.join(home, '.local', 'share', 'app.aghorizon.desktop');
+// macOS: the sync code in the Keychain (keyring: service "AG Horizon", account "sync-code")
+const keychainCode = () => {
+  const r = require('child_process').spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', '-w'], { env, encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : null;
+};
 
 // what the test page reports, once the import has run
 const PAGE = `<!doctype html><meta charset="utf-8"><title>AG Horizon</title><script>
@@ -59,7 +68,7 @@ const inv = window.__TAURI__.core.invoke;
 })();
 </script>`;
 
-async function runTauri(root2, logName) {
+async function runTauri(launch, logName) {
   const reports = {};
   const listener = http.createServer((q, r) => {
     const [k, v] = q.url.slice(1).split('?');
@@ -67,7 +76,7 @@ async function runTauri(root2, logName) {
     r.end();
   }).listen(REPORT_PORT, '127.0.0.1');
   const log = fs.openSync(path.join(work, logName), 'w');
-  const app = spawn('xvfb-run', ['-a', path.join(root2, 'AppRun')], { env: { ...env, AGH_NO_DIALOG: '1' }, stdio: ['ignore', log, log], detached: true });
+  const app = spawn(launch[0], launch[1], { env: { ...env, AGH_NO_DIALOG: '1' }, stdio: ['ignore', log, log], detached: true });
   for (let i = 0; i < 90 && !reports.state; i++) await sleep(500);
   // stopped as soon as the import is marked done: what is marked done must be on disk by then (the page waits for
   // WebKit to write localStorage before it reports, tauri-shell.js; this page does the same, below)
@@ -88,23 +97,38 @@ async function runTauri(root2, logName) {
     LS.set('tuner.favs', ['p1:live:7']);
     await idb.put('file:p1', '#EXTM3U\n#EXTINF:-1,One\nhttp://x/1.ts\n');
   });
+  // Electron's own data folder; on a Mac it may not follow $HOME: the export is then put where the Tauri app looks
+  const userData = await eapp.evaluate(({ app }) => app.getPath('userData'));
+  const written = path.join(userData, 'migration.json');
   let data = null;
   for (let i = 0; i < 40; i++) {
-    try { data = JSON.parse(fs.readFileSync(exportFile, 'utf8')); if (data.localStorage['tuner.playlists']) break; } catch { /* not yet */ }
+    try { data = JSON.parse(fs.readFileSync(written, 'utf8')); if (data.localStorage['tuner.playlists']) break; } catch { /* not yet */ }
     await sleep(500);
   }
   await eapp.close();
-  check('the Electron app wrote ~/.config/Tuner IPTV/migration.json (no longer Windows only)', data && /From Electron/.test(data.localStorage['tuner.playlists'] || ''));
+  check('the Electron app wrote migration.json in its data folder (no longer Windows only)', data && /From Electron/.test(data.localStorage['tuner.playlists'] || ''), written);
+  check('Electron\'s data folder is the one the Tauri app looks in ("Tuner IPTV")', path.basename(userData) === 'Tuner IPTV', userData);
+  fs.mkdirSync(oldDir, { recursive: true });
 
   /* 2. the sync code, as the hand-over adds it */
   data.syncCode = 'code-from-electron';
   fs.writeFileSync(exportFile, JSON.stringify(data));
 
   /* 3. the Tauri app */
-  execFileSync(appImage, ['--appimage-extract'], { cwd: work, stdio: 'ignore' });
-  const root2 = path.join(work, 'squashfs-root');
-  fs.writeFileSync(path.join(root2, 'usr', 'lib', 'AG Horizon', 'public', 'index.html'), PAGE);
-  const first = await runTauri(root2, 'tauri-1.log');
+  let launch;
+  if (mac) {
+    // a copy of the .app, its page swapped (the real path: Tauri won't start from a path with a symlink in it)
+    const copy = path.join(work, path.basename(bundle));
+    execFileSync('cp', ['-R', bundle, copy]);
+    fs.writeFileSync(path.join(copy, 'Contents', 'Resources', 'public', 'index.html'), PAGE);
+    launch = [path.join(copy, 'Contents', 'MacOS', 'ag-horizon'), []];
+  } else {
+    execFileSync(bundle, ['--appimage-extract'], { cwd: work, stdio: 'ignore' });
+    const root2 = path.join(work, 'squashfs-root');
+    fs.writeFileSync(path.join(root2, 'usr', 'lib', 'AG Horizon', 'public', 'index.html'), PAGE);
+    launch = ['xvfb-run', ['-a', path.join(root2, 'AppRun')]];
+  }
+  const first = await runTauri(launch, 'tauri-1.log');
   check('the Tauri app imported the export', first && first.imported, JSON.stringify(first && { imported: first.imported }));
   check('the playlists and favourites are there', first && /From Electron/.test(first.playlists || '') && /p1:live:7/.test(first.favs || ''));
   check('the playlist file is in IndexedDB', first && /#EXTM3U/.test(first.file || ''));
@@ -112,10 +136,12 @@ async function runTauri(root2, logName) {
   const left = JSON.parse(fs.readFileSync(exportFile, 'utf8'));
   check('the sync code is out of migration.json', !('syncCode' in left));
   check('the import is marked done', fs.existsSync(path.join(newData, 'electron-import.json')));
-  if (first && first.keychain === false) check('without a keyring the code is in the app\'s own file', fs.readFileSync(path.join(newData, 'sync-code'), 'utf8') === 'code-from-electron');
+  if (mac) check('the sync code is in the macOS Keychain', first && first.keychain === true && keychainCode() === 'code-from-electron');
+  else if (first && first.keychain === false) check('without a keyring the code is in the app\'s own file', fs.readFileSync(path.join(newData, 'sync-code'), 'utf8') === 'code-from-electron');
 
   /* 4. a second start doesn't import again */
-  const second = await runTauri(root2, 'tauri-2.log');
+  const second = await runTauri(launch, 'tauri-2.log');
+  if (mac) require('child_process').spawnSync('security', ['delete-generic-password', '-s', 'AG Horizon', '-a', 'sync-code'], { env });   // leave the Keychain as it was
   check('a second start doesn\'t import again', second && !second.imported && /From Electron/.test(second.playlists || ''), JSON.stringify(second));
 
   const failed = results.filter((ok) => !ok).length;
@@ -128,5 +154,5 @@ async function runTauri(root2, logName) {
     process.exit(1);
   }
   if (!process.env.KEEP) fs.rmSync(work, { recursive: true, force: true });
-  console.log('OK: Electron → Tauri on Linux, data and sync code carried over, once');
+  console.log(`OK: Electron → Tauri on ${mac ? 'macOS' : 'Linux'}, data and sync code carried over, once`);
 })().catch((e) => { console.error(e); process.exit(1); });
