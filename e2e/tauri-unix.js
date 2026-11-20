@@ -128,7 +128,8 @@ function clipServer(dir) {
     '-g', '25', '-c:a', 'aac', '-shortest'];
   execFileSync(ffmpeg, [...clip, '-movflags', '+faststart', path.join(clips, 'plain.mp4')]);
   execFileSync(ffmpeg, [...clip, '-movflags', 'frag_keyframe+empty_moov+default_base_moof', path.join(clips, 'frag.mp4')]);
-  fs.copyFileSync(path.join(__dirname, '..', 'test', 'fixtures', 'hevc-hdr.ts'), path.join(clips, 'hevc-hdr.ts'));   // HEVC Main 10, PQ, E-AC-3
+  // HEVC Main 10, PQ, E-AC-3 in MPEG-TS (.m2ts in the repo: node --test would take a .ts under test/ for TypeScript)
+  fs.copyFileSync(path.join(__dirname, '..', 'test', 'fixtures', 'hevc-hdr.m2ts'), path.join(clips, 'hevc-hdr.ts'));
   const clipSrv = clipServer(clips);
 
   const reports = {};
