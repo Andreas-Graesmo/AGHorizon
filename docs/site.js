@@ -16,7 +16,8 @@ function detectOs() {
 }
 const OS_NAME = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
 // tv: the Android TV app (no 'your system' for it: a TV's browser isn't where people come from)
-const ASSET = { win: /setup.*\.exe$/i, mac: /arm64\.dmg$/i, linux: /\.appimage$/i, tv: /^AG-Horizon-TV-.*\.apk$/i };
+// macOS: from 3.x one universal dmg (Apple silicon and Intel); the 2.x releases have an Apple silicon one
+const ASSET = { win: /setup.*\.exe$/i, mac: /(universal|arm64)\.dmg$/i, linux: /\.appimage$/i, tv: /^AG-Horizon-TV-.*\.apk$/i };
 const os = detectOs();
 
 if (os) {
@@ -36,6 +37,8 @@ fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accep
       if (!a) continue;
       const card = document.querySelector(`.platform[data-os="${key}"]`);
       if (card) { card.href = a.browser_download_url; card.querySelector('.file').textContent = a.name; }
+      const which = card && key === 'mac' && card.querySelector('.which');
+      if (which) which.textContent = /universal/i.test(a.name) ? 'Apple silicon and Intel Macs.' : 'Apple silicon (M1 and later).';
       if (key === os) document.getElementById('dlMain').href = a.browser_download_url;
     }
     if (version) {
