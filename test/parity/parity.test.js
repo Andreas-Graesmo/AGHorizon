@@ -726,9 +726,9 @@ test('probe: duration, codecs, sound and subtitle tracks', async () => {
   const r = await req(`/api/probe?url=${encodeURIComponent(`${P}/clip.mp4`)}`);
   assert.strictEqual(r.status, 200, r.text);
   const j = r.json();
-  assert.deepStrictEqual(Object.keys(j), ['duration', 'video', 'audio', 'audios', 'subs']);
+  assert.deepStrictEqual(Object.keys(j), ['duration', 'video', 'audio', 'audios', 'subs', 'hdr']);
   assert.ok(Math.abs(j.duration - 6) < 0.2, String(j.duration));
-  assert.deepStrictEqual([j.video, j.audio], ['h264', 'aac']);
+  assert.deepStrictEqual([j.video, j.audio, j.hdr], ['h264', 'aac', false]);
   assert.deepStrictEqual(j.audios.map((a) => [a.index, a.lang, a.codec, a.title, a.default]), [[0, 'eng', 'aac', '', true], [1, 'nor', 'aac', '', false]]);   // MP4 keeps no title for a sound track
   assert.deepStrictEqual(Object.keys(j.audios[0]), ['index', 'lang', 'codec', 'channels', 'title', 'default', 'comment', 'descr']);
   assert.deepStrictEqual(j.subs, [{ index: 0, lang: 'eng', forced: false, sdh: false }, { index: 1, lang: 'nor', forced: true, sdh: false }]);
@@ -737,7 +737,7 @@ test('probe: duration, codecs, sound and subtitle tracks', async () => {
   const bad = await req('/api/probe?url=nope');
   assert.deepStrictEqual([bad.status, bad.json()], [400, { error: 'Invalid URL' }]);
   const gone = (await req(`/api/probe?url=${encodeURIComponent(`${P}/missing.mp4`)}`)).json();
-  assert.deepStrictEqual(gone, { duration: 0, video: '', audio: '', audios: [], subs: [] });
+  assert.deepStrictEqual(gone, { duration: 0, video: '', audio: '', audios: [], subs: [], hdr: false });
 });
 
 test('keyframe: where copied video can start', async () => {

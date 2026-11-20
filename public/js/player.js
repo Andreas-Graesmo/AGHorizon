@@ -8,7 +8,7 @@ let tsPlayer = null;
 let playToken = 0;
 
 /* Compatibility mode: the server converts the stream with ffmpeg (H.264 + AAC, fragmented MP4). */
-const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '', audio: null, apid: null };   // audio / apid: which sound track (audio.js)
+const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', hdr: false, subs: [], sid: '', audio: null, apid: null };   // audio / apid: which sound track (audio.js)
 let checkTimer = 0;
 let tcSeeking = false;
 // A restart of the same video (another sound track, subtitles read from the stream): go on exactly here, not at the
@@ -20,7 +20,10 @@ function tcUrl(ch, p, start) {
   tcState.sid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const subs = tcState.subs && tcState.subs.length ? `&subs=${tcState.subs.join(',')}&sid=${tcState.sid}` : '';
   const audio = tcState.apid != null ? `&apid=${tcState.apid}` : tcState.audio != null ? `&audio=${tcState.audio}` : '';
-  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
+  // kept HEVC through WebKit's MSE comes as fragmented MP4 (it takes no Matroska); HDR converted to H.264 is tone mapped
+  const fmt = tcState.video === 'hevc' && tcViaMse ? '&fmt=mp4' : '';
+  const hdr = tcState.video === 'h264' && tcState.hdr ? '&hdr=1' : '';
+  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${fmt}${hdr}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
 }
 /* WebKit's own player on macOS (the Tauri app's WKWebView, and Safari) refuses the conversion as <video src>: it is a
    stream with no length and no byte ranges (MIGRATION_PLAN.md 9.2). There the same fragmented MP4 is fetched and fed
@@ -54,8 +57,9 @@ async function tcFeed(v, ms, url, signal) {
   try {
     const r = await fetch(url, { signal });
     if (!r.ok || !r.body) return end('network');
-    let type = 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
-    if (!MediaSource.isTypeSupported(type)) type = 'video/mp4';
+    const MS = window.ManagedMediaSource || window.MediaSource;
+    let type = /[?&]video=hevc\b/.test(url) ? 'video/mp4; codecs="hvc1.2.4.L153.B0, mp4a.40.2"' : 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+    if (!MS.isTypeSupported(type)) type = 'video/mp4';
     const sb = ms.addSourceBuffer(type);
     sb.mode = 'sequence';
     const done = () => new Promise((res) => sb.addEventListener('updateend', res, { once: true }));
@@ -83,10 +87,11 @@ async function tcFeed(v, ms, url, signal) {
 }
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
-// HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
-const hevcOk = (() => { try { return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
-// (Kept HEVC comes as Matroska, which WebKit's MSE can't take: there it is converted to H.264.)
-const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && !tcViaMse && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
+// HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs (a 2017
+// MacBook converted 4K HEVC HDR at half of real time, so those channels stalled). Asked of the MediaSource the player
+// is fed through: on a Mac that is WebKit's (ManagedMediaSource), which gets kept HEVC as fragmented MP4.
+const hevcOk = (() => { try { const MS = window.ManagedMediaSource || window.MediaSource; return MS.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
+const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
 
 // Copied video (and its sound) starts on the keyframe before t, up to a few seconds earlier.
 // Ask where that is, so the clock shows where the picture really is.
@@ -269,7 +274,7 @@ async function startPlayback(ch, kinds, token, lastError) {
     if (vod) await subAutoPlan(ch, info);   // Settings › Languages › turn on subtitles automatically (once per video)
     if (token !== playToken) return;
     const track = audTcTrack(ch, info);
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: track ? track.n : null, apid: track ? track.pid : null });
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), hdr: !!info.hdr, subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: track ? track.n : null, apid: track ? track.pid : null });
     const at = await tcStartAt(ch, p, start);
     if (token !== playToken) return;
     tcState.offset = at;

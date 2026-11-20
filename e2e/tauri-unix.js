@@ -48,6 +48,27 @@ setTimeout(() => rep('plain', { t: v.currentTime, w: v.videoWidth }), 6000);
     setTimeout(() => rep('mse', { t: v2.currentTime, w: v2.videoWidth }), 4000);
   } catch (e) { rep('mse', { exc: String(e) }); }
 })();
+// 4K HEVC HDR channels: the server keeps the picture as it is (fragmented MP4, hvc1) and WebKit's MSE decodes it,
+// as the player does on a Mac (player.js tcVideoMode / tcUrl). Where the system can't decode HEVC, the player
+// converts to H.264 instead: then only that is reported.
+(async () => {
+  const HEVC = 'video/mp4; codecs="hvc1.2.4.L153.B0, mp4a.40.2"';
+  const supported = !!MS && MS.isTypeSupported(HEVC);
+  if (!supported) { rep('hevc', { supported }); return; }
+  try {
+    const r = await fetch('/api/transcode?url=' + encodeURIComponent(CLIPS + 'hevc-hdr.ts') + '&video=hevc&fmt=mp4');
+    const type = r.headers.get('content-type');
+    const buf = await r.arrayBuffer();
+    const m = new MS(); const v3 = document.createElement('video'); v3.muted = true; document.body.append(v3);
+    if (window.ManagedMediaSource && MS === window.ManagedMediaSource) v3.disableRemotePlayback = true;
+    v3.src = URL.createObjectURL(m);
+    await new Promise((res) => m.addEventListener('sourceopen', res, { once: true }));
+    const sb = m.addSourceBuffer(HEVC);
+    sb.appendBuffer(buf); await new Promise((res, rej) => { sb.addEventListener('updateend', res, { once: true }); sb.addEventListener('error', rej, { once: true }); });
+    await v3.play();
+    setTimeout(() => rep('hevc', { supported, type, bytes: buf.byteLength, t: v3.currentTime, w: v3.videoWidth }), 3500);
+  } catch (e) { rep('hevc', { supported, exc: String(e) }); }
+})();
 </script>`;
 
 // a static server with byte ranges and CORS
@@ -107,6 +128,7 @@ function clipServer(dir) {
     '-g', '25', '-c:a', 'aac', '-shortest'];
   execFileSync(ffmpeg, [...clip, '-movflags', '+faststart', path.join(clips, 'plain.mp4')]);
   execFileSync(ffmpeg, [...clip, '-movflags', 'frag_keyframe+empty_moov+default_base_moof', path.join(clips, 'frag.mp4')]);
+  fs.copyFileSync(path.join(__dirname, '..', 'test', 'fixtures', 'hevc-hdr.ts'), path.join(clips, 'hevc-hdr.ts'));   // HEVC Main 10, PQ, E-AC-3
   const clipSrv = clipServer(clips);
 
   const reports = {};
@@ -133,13 +155,16 @@ function clipServer(dir) {
     if (!caps) fail.push('the server never answered on 127.0.0.1:47831');
     else if (caps.ffmpeg !== true) fail.push('the server has no ffmpeg');
 
-    for (let i = 0; i < 60 && !(reports.plain && reports.mse && reports.keepawake); i++) await sleep(500);
+    for (let i = 0; i < 60 && !(reports.plain && reports.mse && reports.keepawake && (!mac || reports.hevc)); i++) await sleep(500);
     if (!reports.support || !reports.support.mse || !reports.support.avc) fail.push(`no MSE or no H.264 in MSE: ${JSON.stringify(reports.support)}`);
     const ka = reports.keepawake;
     if (!ka) fail.push('keep_awake: no answer');
     else if (ka.err && /not allowed|permission|not found|unknown/i.test(ka.err)) fail.push(`keep_awake is not reachable from the page: ${ka.err}`);
     // a Mac always has its power management to ask; a Linux runner may have no screensaver or logind
     else if (mac && ka.held !== true) fail.push(`keep_awake did not hold on macOS: ${JSON.stringify(ka)}`);
+    // a Mac that can decode HEVC plays the kept picture; one that can't converts it instead (not this check)
+    const hv = reports.hevc;
+    if (mac && (!hv || (hv.supported && !(hv.t > 2 && hv.w === 640 && hv.type === 'video/mp4')))) fail.push(`kept HEVC through MSE: ${JSON.stringify(hv)}`);
     for (const k of ['plain', 'mse']) {
       const r = reports[k];
       if (!r || !(r.t > 2) || !(r.w > 0)) fail.push(`${k} playback: ${JSON.stringify(r)}`);

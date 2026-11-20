@@ -27,6 +27,24 @@ fn input(url: &str, ua: Option<&str>, extra: &[String]) -> Vec<String> {
     a
 }
 
+/// Whether this ffmpeg has zscale (zimg), which tone mapping needs; asked once. BtbN's builds have it.
+async fn has_zscale(bin: &str) -> bool {
+    static HAS: tokio::sync::OnceCell<bool> = tokio::sync::OnceCell::const_new();
+    *HAS.get_or_init(|| async {
+        match command(bin, &["-hide_banner".to_string(), "-filters".to_string()]).stdout(Stdio::piped()).stderr(Stdio::null()).output().await {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).split('\n').any(|l| l.split_whitespace().nth(1) == Some("zscale")),
+            Err(_) => false,
+        }
+    })
+    .await
+}
+
+/// The video stream is HDR (PQ or HLG): its line in ffmpeg's report names the transfer, "…(tv, bt2020nc/bt2020/smpte2084)"
+fn is_hdr(report: &str) -> bool {
+    static V: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)Stream #\d+:\d+[^\n]*?Video:[^\n]*").unwrap());
+    V.find(report).map(|m| { let l = m.as_str().to_lowercase(); l.contains("smpte2084") || l.contains("arib-std-b67") }).unwrap_or(false)
+}
+
 fn command(bin: &str, args: &[String]) -> tokio::process::Command {
     let mut c = tokio::process::Command::new(bin);
     c.args(args).stdin(Stdio::null()).kill_on_drop(true);
@@ -172,6 +190,7 @@ pub async fn probe(bin: Option<String>, q: &Query) -> ApiResult<Resp> {
             "audio": A.captures(&err).map(|c| c[1].to_lowercase()).unwrap_or_default(),
             "audios": parse_audio_streams(&err),
             "subs": subs,
+            "hdr": is_hdr(&err),
         }),
     ))
 }
@@ -207,7 +226,9 @@ impl Drop for Slot {
     }
 }
 
-/// GET /api/transcode?url=…[&ua][&start][&video=copy|hevc][&maxh][&apid|&audio][&subs=0,3&sid=…]
+/// GET /api/transcode?url=…[&ua][&start][&video=copy|hevc][&fmt=mp4][&hdr=1][&maxh][&apid|&audio][&subs=0,3&sid=…]
+/// fmt=mp4: kept HEVC as fragmented MP4 (hvc1), which WebKit's MSE takes, instead of Matroska. hdr=1: the source is
+/// HDR; converted to 8-bit H.264 it is tone mapped (when this ffmpeg can), else its colours come out pale.
 pub async fn transcode(bin: Option<String>, q: &Query) -> ApiResult<Resp> {
     let bin = bin.ok_or_else(|| ApiError::new(501, "ffmpeg is not installed"))?;
     if ACTIVE.load(Ordering::SeqCst) >= MAX_CONVERSIONS {
@@ -217,6 +238,8 @@ pub async fn transcode(bin: Option<String>, q: &Query) -> ApiResult<Resp> {
     let start = { let x = js_number(q.get("start")); if x.is_nan() { 0.0 } else { x.max(0.0) } };
     let keep_hevc = q.get("video") == Some("hevc"); // the player decodes HEVC itself
     let copy_video = q.get("video") == Some("copy") || keep_hevc;
+    let hevc_mp4 = keep_hevc && q.get("fmt") == Some("mp4");
+    let tonemap = !copy_video && q.get("hdr") == Some("1") && has_zscale(&bin).await;
     let maxh = { let x = js_number(q.get("maxh")); let x = if x == 0.0 || x.is_nan() { 1080.0 } else { x }; x.max(240.0).min(1080.0) };
     static APID: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d{1,4}$").unwrap());
     static AUDIO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d{1,2}$").unwrap());
@@ -237,13 +260,23 @@ pub async fn transcode(bin: Option<String>, q: &Query) -> ApiResult<Resp> {
         args.extend(["-c:v".into(), "copy".into()]);
     } else {
         args.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"].iter().map(|s| s.to_string()));
-        args.extend(["-vf".into(), format!("scale=-2:'min({},ih)'", js_num_str(maxh))]);
+        let scale = format!("scale=-2:'min({},ih)'", js_num_str(maxh));
+        if tonemap {
+            // smaller first (cheaper), then PQ / HLG to linear light, tone mapped to SDR, back to BT.709
+            args.extend(["-vf".into(), format!("{scale},zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p")]);
+            args.extend(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"].iter().map(|s| s.to_string()));
+        } else {
+            args.extend(["-vf".into(), scale]);
+        }
         args.extend(["-g", "50", "-keyint_min", "50", "-sc_threshold", "0"].iter().map(|s| s.to_string()));
     }
     args.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2"].iter().map(|s| s.to_string()));
-    if keep_hevc {
+    if keep_hevc && !hevc_mp4 {
         args.extend(["-f", "matroska", "-live", "1"].iter().map(|s| s.to_string()));
     } else {
+        if hevc_mp4 {
+            args.extend(["-tag:v".into(), "hvc1".into()]);   // the sample entry Apple's decoders take
+        }
         args.extend(["-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4"].iter().map(|s| s.to_string()));
     }
     args.push("pipe:1".into());
@@ -313,7 +346,7 @@ pub async fn transcode(bin: Option<String>, q: &Query) -> ApiResult<Resp> {
     let body = futures_util::stream::once(async move { Ok::<_, std::io::Error>(Frame::data(Bytes::from(first))) }).chain(rest);
     Ok(hyper::Response::builder()
         .status(200)
-        .header("content-type", if keep_hevc { "video/x-matroska" } else { "video/mp4" })
+        .header("content-type", if keep_hevc && !hevc_mp4 { "video/x-matroska" } else { "video/mp4" })
         .header("cache-control", "no-store")
         .header("accept-ranges", "none")
         .body(BodyExt::boxed(StreamBody::new(body)))
