@@ -15,8 +15,9 @@ function detectOs() {
   return '';
 }
 const OS_NAME = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
-// macOS: the Tauri app is one universal dmg (Apple silicon and Intel); the Electron releases had an Apple silicon one
-const ASSET = { win: /setup.*\.exe$/i, mac: /(universal|arm64)\.dmg$/i, linux: /\.appimage$/i };
+// tv: the Android TV app (no 'your system' for it: a TV's browser isn't where people come from)
+// macOS: from 3.x one universal dmg (Apple silicon and Intel); the 2.x releases have an Apple silicon one
+const ASSET = { win: /setup.*\.exe$/i, mac: /(universal|arm64)\.dmg$/i, linux: /\.appimage$/i, tv: /^AG-Horizon-TV-.*\.apk$/i };
 const os = detectOs();
 
 if (os) {
@@ -43,7 +44,7 @@ fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accep
     if (version) {
       const date = rel.published_at ? new Date(rel.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
       document.getElementById('dlVersion').textContent = `Version ${version}${date ? ' · ' + date : ''}`;
-      document.getElementById('dlMeta').textContent = `Version ${version} · Free download · Updates itself`;
+      document.getElementById('dlMeta').textContent = `Version ${version} · Free download · No account, no ads`;
     }
   })
   .catch(() => { /* offline or rate-limited: the links still go to the releases page */ });

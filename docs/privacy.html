@@ -21,20 +21,20 @@
   <main class="legal wrap narrow">
     <p class="eyebrow">Privacy</p>
     <h1>What AG Horizon stores, and where.</h1>
-    <p class="lede-s">Short version: almost everything stays on your own computer. If you turn on sync, an encrypted copy of your history, progress and favorites is stored where you choose, and nobody but your own computers can read it.</p>
-    <p class="fine">Last updated 12 November 2026</p>
+    <p class="lede-s">Short version: almost everything stays on your own computer or TV. If you turn on sync, an encrypted copy of your history, progress and favorites is stored where you choose, and nobody but your own devices can read it.</p>
+    <p class="fine">Last updated 18 November 2026</p>
 
     <h2>Who is responsible</h2>
     <p>AG Horizon is made by Andreas Græsmo (<a href="https://github.com/Andreas-Graesmo/AGHorizon">github.com/Andreas-Graesmo/AGHorizon</a>), who is the controller for the sync service described below. Questions or requests about your data: <a href="mailto:a.graesmo@gmail.com">a.graesmo@gmail.com</a>.</p>
 
-    <h2>On your computer</h2>
-    <p>The app keeps these only on the computer it runs on:</p>
+    <h2>On your computer or TV</h2>
+    <p>The app keeps these only on the computer or TV it runs on:</p>
     <ul>
       <li>your playlists, including Xtream Codes logins and playlist links,</li>
       <li>what you’ve watched recently, where you stopped, and your favorites,</li>
       <li>settings, downloads and, if you add one, your OpenSubtitles login.</li>
     </ul>
-    <p>None of this is sent to the maker of AG Horizon. Logins are stored as plain text in the app’s own storage, so anyone who can use your computer account can read them.</p>
+    <p>None of this is sent to the maker of AG Horizon. Logins are stored as plain text in the app’s own storage, so anyone who can use your computer account (or your TV) can read them.</p>
 
     <h2>Who the app talks to</h2>
     <ul>
@@ -46,25 +46,25 @@
     </ul>
     <p>AG Horizon has no analytics, no tracking and no ads.</p>
 
-    <h2>Sync between computers</h2>
-    <p>Sync is off until you turn it on in Settings › Sync. It then shares your recently viewed list, where you stopped and your favorites with your other computers. Playlists and logins are never synced.</p>
-    <p>Before anything leaves your computer it is encrypted (AES-256-GCM) with a key made from your sync code. The code stays on your computers, in the system keychain where there is one. Whoever stores the data sees only random ids and unreadable data, and can’t tell what you watched or which services you use. Neither can the maker of AG Horizon.</p>
+    <h2>Sync between your devices</h2>
+    <p>Sync is off until you turn it on in Settings › Sync. It then shares your recently viewed list, where you stopped and your favorites with your other computers and TVs. Playlists and logins are never synced.</p>
+    <p>Before anything leaves your device it is encrypted (AES-256-GCM) with a key made from your sync code. The code stays on your devices: in the system keychain where there is one (Windows, macOS, most Linux desktops), otherwise in the app’s own storage (on a TV, for example). Whoever stores the data sees only random ids and unreadable data, and can’t tell what you watched or which services you use. Neither can the maker of AG Horizon.</p>
     <p>You choose where it’s stored:</p>
     <ul>
-      <li><b>A synced folder</b> (Dropbox, iCloud Drive, OneDrive, Google Drive, Syncthing…). The encrypted files go to that service under your own account and its terms. No AG Horizon server is involved.</li>
-      <li><b>AG Horizon cloud.</b> The encrypted data is stored with <a href="https://supabase.com/privacy">Supabase</a>, in a data centre in the EU. Supabase runs the database for us as a data processor, under its <a href="https://supabase.com/legal/dpa">data processing addendum</a>. Besides the encrypted data, it keeps a random id for your group of computers, a random id per computer, when each was last used, and, in its server logs, your IP address. When a new sync code is first used, a hash of your IP address is also kept for one day, so that no one can create codes endlessly and fill up the service.</li>
+      <li><b>A synced folder</b> (Dropbox, iCloud Drive, OneDrive, Google Drive, Syncthing…; on computers). The encrypted files go to that service under your own account and its terms. No AG Horizon server is involved.</li>
+      <li><b>AG Horizon cloud.</b> The encrypted data is stored with <a href="https://supabase.com/privacy">Supabase</a>, in a data centre in the EU. Supabase runs the database for us as a data processor, under its <a href="https://supabase.com/legal/dpa">data processing addendum</a>. Besides the encrypted data, it keeps a random id for your group of devices, a random id per device, when each was last used, and, in its server logs, your IP address. When a new sync code is first used, a hash of your IP address is also kept for one day, so that no one can create codes endlessly and fill up the service.</li>
     </ul>
 
     <h2>Why, and for how long</h2>
-    <p>Sync data is stored because you asked for it by turning sync on (GDPR article 6(1)(b), providing the service you requested). It is kept until you delete it, or deleted automatically when no computer has used it for 12 months. The one-day hash of your IP address is kept to protect the service from misuse (GDPR article 6(1)(f), legitimate interest).</p>
+    <p>Sync data is stored because you asked for it by turning sync on (GDPR article 6(1)(b), providing the service you requested). It is kept until you delete it, or deleted automatically when no device has used it for 12 months. The one-day hash of your IP address is kept to protect the service from misuse (GDPR article 6(1)(f), legitimate interest).</p>
 
     <h2>Deleting it</h2>
     <ul>
-      <li><b>Settings › Sync › Turn off</b> removes this computer’s copy.</li>
-      <li><b>Settings › Sync › Delete synced data</b> removes everything stored for your sync code, for all your computers.</li>
+      <li><b>Settings › Sync › Turn off</b> removes this device’s copy.</li>
+      <li><b>Settings › Sync › Delete synced data</b> removes everything stored for your sync code, for all your devices.</li>
       <li><b>New code</b> makes a new one and deletes what was stored under the old code.</li>
     </ul>
-    <p>What’s on each computer stays there until you clear it in the app (Clear history on the Recently viewed page, Clear favorites on the Favorites page) or uninstall it.</p>
+    <p>What’s on each device stays there until you clear it in the app (Clear history on the Recently viewed page, Clear favorites on the Favorites page) or uninstall it.</p>
 
     <h2>Your rights</h2>
     <p>You can ask for access to, correction of or deletion of data about you, and object to its use. Because sync data is encrypted with a code only you have, the maker of AG Horizon can’t read it or link it to you: the delete buttons above are the quickest way. If you think your data is handled wrongly, you can complain to the Norwegian Data Protection Authority, <a href="https://www.datatilsynet.no/en/">Datatilsynet</a>, or the authority where you live.</p>

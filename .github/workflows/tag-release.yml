@@ -1,0 +1,45 @@
+# Tags a release and starts its build, for when no computer with git is at hand (Actions → Tag a release → Run
+# workflow). The same as `git tag v<version> && git push origin v<version>` after `npm run release:*` has set the
+# version: it tags the newest commit of the branch, refuses a version package.json doesn't have or a tag that exists,
+# and refuses a stable version from any branch but main (test versions also come from migration/tauri).
+# A tag pushed by a workflow starts no other workflow, so this starts release.yml on the tag itself.
+name: Tag a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version: { description: 'Version, as in package.json (e.g. 2.6.0 or 3.2.0-beta.1)', required: true }
+      branch: { description: 'Branch to tag (its newest commit)', required: true, default: main }
+
+permissions:
+  contents: write   # the tag
+  actions: write    # starting release.yml
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      BRANCH: ${{ inputs.branch }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: '${{ inputs.branch }}' }
+      - name: Checks
+        run: |
+          tag="v$VERSION"
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "::error::'$VERSION' is not a version"; exit 1; }
+          have="$(node -p "require('./package.json').version")"
+          [ "$have" = "$VERSION" ] || { echo "::error::package.json on $BRANCH has $have, not $VERSION: set the version first"; exit 1; }
+          case "$VERSION" in *-*) ;; *) [ "$BRANCH" = main ] || { echo "::error::a stable version ($VERSION) is tagged from main only"; exit 1; } ;; esac
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then echo "::error::$tag exists already"; exit 1; fi
+          echo "tagging $tag at $(git rev-parse --short HEAD) ($(git log -1 --format=%s)) on $BRANCH"
+      - name: Tag
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+      - name: Start the release build on the tag
+        run: |
+          gh workflow run release.yml --ref "v$VERSION"
+          echo "Started: https://github.com/$GH_REPO/actions/workflows/release.yml"

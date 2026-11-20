@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AG Horizon – a calm desktop player for your IPTV playlists</title>
-  <meta name="description" content="Live TV with a real programme guide, movies and series with posters and resume, multi view and picture mirroring. Free for Windows, macOS and Linux. Works with your own Xtream Codes or M3U playlists.">
+  <meta name="description" content="Live TV with a real programme guide, movies and series with posters and resume, multi view and picture mirroring. Free for Windows, macOS, Linux and Android TV. Works with your own Xtream Codes or M3U playlists.">
   <meta name="theme-color" content="#0b1220">
   <meta property="og:type" content="website">
   <meta property="og:title" content="AG Horizon – a calm desktop player for your IPTV playlists">
-  <meta property="og:description" content="Live TV with a real guide, movies and series, multi view and picture mirroring. Free for Windows, macOS and Linux.">
+  <meta property="og:description" content="Live TV with a real guide, movies and series, multi view and picture mirroring. Free for Windows, macOS, Linux and Android TV.">
   <meta property="og:image" content="https://andreas-graesmo.github.io/AGHorizon/img/og.png">
   <meta property="og:url" content="https://andreas-graesmo.github.io/AGHorizon/">
   <meta name="twitter:card" content="summary_large_image">
@@ -36,7 +36,7 @@
     <!-- ───────────── hero ───────────── -->
     <section class="hero">
       <div class="wrap hero-copy">
-        <p class="eyebrow">Free for Windows, macOS &amp; Linux</p>
+        <p class="eyebrow">Free for Windows, macOS, Linux &amp; Android TV</p>
         <h1>All your TV.<br><span>One calm place.</span></h1>
         <p class="lede">AG Horizon turns your Xtream Codes or M3U playlist into a proper TV experience: live channels with a real programme guide, movies and series with posters and “Resume”, four pictures at once, and picture mirroring.</p>
         <div class="cta">
@@ -45,7 +45,7 @@
           </a>
           <a class="btn btn-ghost" href="#download">All platforms</a>
         </div>
-        <p class="fine" id="dlMeta">Free download · Updates itself</p>
+        <p class="fine" id="dlMeta">Free download · No account, no ads</p>
       </div>
       <div class="hero-stage">
         <div class="sun" aria-hidden="true"></div>
@@ -225,7 +225,7 @@
         <div class="copy center">
           <p class="eyebrow" id="dlVersion">Latest version</p>
           <h2>Get AG Horizon.</h2>
-          <p>Free, for Windows, macOS and Linux. After installing, it keeps itself up to date.</p>
+          <p>Free, for Windows, macOS, Linux and Android TV. On Windows and Linux it keeps itself up to date; on a Mac and on a TV it tells you when there’s a new version.</p>
         </div>
         <div class="platforms">
           <a class="platform" data-os="win" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
@@ -236,12 +236,17 @@
           <a class="platform" data-os="mac" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
             <svg class="pi" aria-hidden="true"><use href="#i-apple"/></svg>
             <b>macOS</b><span class="file">AG-Horizon-arm64.dmg</span>
-            <small><span class="which">Apple silicon (M1 and later).</span> The first time, macOS blocks it: open <em>System Settings › Privacy &amp; Security</em> and click <em>Open Anyway</em>.</small>
+            <small><span class="which">Apple silicon (M1 and later).</span> The first time, macOS says it can’t check the app: open <em>System Settings › Privacy &amp; Security</em> and click <em>Open Anyway</em> (on macOS 14 and earlier, right-click the app and choose <em>Open</em>).</small>
           </a>
           <a class="platform" data-os="linux" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
             <svg class="pi" aria-hidden="true"><use href="#i-linux"/></svg>
             <b>Linux</b><span class="file">AG-Horizon.AppImage</span>
-            <small>Make it executable once (<code>chmod +x</code>), then run it.</small>
+            <small>Make it executable once (<code>chmod +x</code>), then run it. If it won’t start on a newer Ubuntu, install <code>libfuse2</code> (<code>libfuse2t64</code> on 24.04 and later).</small>
+          </a>
+          <a class="platform" data-os="tv" href="https://github.com/Andreas-Graesmo/AGHorizon/releases/latest">
+            <svg class="pi" aria-hidden="true"><use href="#i-tv"/></svg>
+            <b>Android TV</b><span class="file">AG-Horizon-TV.apk</span>
+            <small>Android TV and Google TV, Android 7 or later, steered with the remote. Not in the Play Store: install the file yourself, for example with the <em>Downloader</em> app, and allow it to install apps the first time.</small>
           </a>
         </div>
         <p class="fine center"><a href="https://github.com/Andreas-Graesmo/AGHorizon/releases">All releases and release notes</a></p>
@@ -257,8 +262,8 @@
           <p>No. It’s a player, like a TV without an antenna. You add a playlist from a service you subscribe to: an Xtream Codes login (server, username, password, or a pasted <code>get.php</code> link) or an M3U / M3U8 link or file.</p>
         </details>
         <details>
-          <summary>Can I use it on more than one computer?</summary>
-          <p>Yes. Install it on each and add the same playlist. Turn on sync in Settings › Sync to keep what you’ve watched, where you stopped and your favorites the same everywhere. It’s encrypted with a code only your computers have.</p>
+          <summary>Can I use it on more than one computer, or on my TV?</summary>
+          <p>Yes. Install it on each, and on your Android TV, and add the same playlist. Turn on sync in Settings › Sync to keep what you’ve watched, where you stopped and your favorites the same everywhere. It’s encrypted with a code only your own devices have.</p>
         </details>
         <details>
           <summary>Is it free?</summary>
@@ -266,11 +271,11 @@
         </details>
         <details>
           <summary>Where are my logins stored?</summary>
-          <p>Only on your own computer, inside the app’s local storage. AG Horizon talks to your provider directly, and logins are never synced. More in the <a href="privacy.html">privacy text</a>.</p>
+          <p>Only on your own computer or TV, inside the app’s local storage. AG Horizon talks to your provider directly, and logins are never synced. More in the <a href="privacy.html">privacy text</a>.</p>
         </details>
         <details>
           <summary>Why does Windows or macOS warn me the first time?</summary>
-          <p>The installers aren’t code-signed yet, which costs a yearly fee. On Windows choose <em>More info › Run anyway</em>; on a Mac, after the first try, open <em>System Settings › Privacy &amp; Security</em> and click <em>Open Anyway</em>. You only do this once.</p>
+          <p>The installers aren’t code-signed yet, which costs a yearly fee. On Windows choose <em>More info › Run anyway</em>. On a Mac, open <em>System Settings › Privacy &amp; Security</em> and click <em>Open Anyway</em> after the first try (on macOS 14 and earlier, right-click the app and choose <em>Open</em>). You only do this once.</p>
         </details>
         <details>
           <summary>A channel plays with no picture or no sound.</summary>
@@ -303,6 +308,7 @@
     <symbol id="i-key" viewBox="0 0 24 24"><path d="M15.5 7.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM12.5 10.5 4 19v2h3v-2h2v-2h2l1.5-1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-windows" viewBox="0 0 24 24"><path d="M3 5.5 10.5 4.4v7.1H3Zm8.5-1.2L21 3v8.5h-9.5ZM3 12.5h7.5v7.1L3 18.5Zm8.5 0H21V21l-9.5-1.3Z" fill="currentColor"/></symbol>
     <symbol id="i-apple" viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7a4.6 4.6 0 0 0-3.6-2c-1.5-.2-3 .9-3.7.9-.8 0-2-.9-3.2-.8a4.8 4.8 0 0 0-4.1 2.5c-1.8 3-.5 7.6 1.3 10.1.8 1.2 1.8 2.6 3.1 2.5 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4a10 10 0 0 0 1.4-2.8 4.3 4.3 0 0 1-2.7-4.3ZM14 5.4a4.3 4.3 0 0 0 1-3.2 4.5 4.5 0 0 0-2.9 1.5 4.2 4.2 0 0 0-1 3.1 3.7 3.7 0 0 0 2.9-1.4Z" fill="currentColor"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M3 4.5h18A1.5 1.5 0 0 1 22.5 6v11a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 17V6A1.5 1.5 0 0 1 3 4.5zm.5 2v10h17v-10h-17zM7.5 20h9v1.5h-9z"/></symbol>
     <symbol id="i-linux" viewBox="0 0 24 24"><path d="M12 2.5c-2.3 0-3.6 1.9-3.6 4.6 0 1.4.4 2.4.1 3.4-.5 1.5-2.6 3.2-3.2 5.7-.3 1.2.1 2 .7 2.4-.4.7-.4 1.6.6 2 1.2.5 2.7.2 3.6.8.8.5 2.5.5 3.4-.1.8-.6 2.3-.3 3.5-.7 1.1-.4 1.1-1.3.6-2 .7-.4 1-1.2.7-2.4-.6-2.5-2.7-4.2-3.2-5.7-.3-1 .1-2 .1-3.4 0-2.7-1.3-4.6-3.6-4.6Zm-1.4 4.2c.5 0 .8.5.8 1.1s-.3 1.1-.8 1.1-.8-.5-.8-1.1.3-1.1.8-1.1Zm2.8 0c.5 0 .8.5.8 1.1s-.3 1.1-.8 1.1-.8-.5-.8-1.1.3-1.1.8-1.1Zm-1.4 3c.9 0 1.9.5 1.9.9s-1 1.1-1.9 1.1-1.9-.7-1.9-1.1 1-.9 1.9-.9Z" fill="currentColor"/></symbol>
   </svg>
   <script src="site.js" defer></script>

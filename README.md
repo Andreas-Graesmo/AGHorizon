@@ -27,8 +27,8 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 After that the app updates itself: **Settings › About & updates**.
 
 - **Windows:** the installer isn't code-signed, so SmartScreen may say "Windows protected your PC" the first time. Click **More info › Run anyway**.
-- **macOS:** the app isn't signed either. The first time, macOS blocks it: open **System Settings › Privacy & Security** and click **Open Anyway**. On a Mac the app tells you about new versions, and you download them from the releases page.
-- **Linux:** make the file executable once (`chmod +x AG-Horizon-*.AppImage`), then run it.
+- **macOS:** the app isn't signed either. The first time, macOS says it can't check it: open **System Settings › Privacy & Security** and click **Open Anyway** (on macOS 14 and earlier, right-click the app and choose **Open**). On a Mac the app tells you about new versions, and you download them from the releases page.
+- **Linux:** make the file executable once (`chmod +x AG-Horizon-*.AppImage`), then run it. If it won't start on a newer Ubuntu, install `libfuse2` (`libfuse2t64` on 24.04 and later).
 - **Android TV:** the app isn't in the Play Store; you install the `.apk` yourself. See [Android TV](#android-tv).
 
 Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
