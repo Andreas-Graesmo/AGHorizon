@@ -557,7 +557,8 @@ Everything the spike found for these platforms is collected here.
     - Phase 4: keep-awake; PiP and the mirror (the popup spike, `media-spike.yml`).
     - Phase 5: self-update N → N+1 (`tauri-update.yml`).
     - Phase 6: the Electron app's export imported once, with the sync code (Linux and macOS).
-    - Local run on Linux against the published 3.1.0-beta.9 AppImage: all of it passed (2026-11-20).
+    - Local run on Linux against the published 3.1.0-beta.9 AppImage: all of it passed (2026-11-20). On CI all of it passed on Linux, an Intel Mac and an Apple silicon Mac (runs 44717246039 and 44717245955, 2026-11-20).
+    - Found on the way (test set-up, not the app): a scratch home on macOS needs its own `login.keychain-db`; the Electron app on macOS writes to the account's real `~/Library/Application Support/Tuner IPTV` whatever `$HOME` says (the folder name is checked); Playwright's `close()` never returns for an Electron app on macOS, which stays running without a window; reading a Keychain password with the `security` tool asks for permission in a dialog.
   - [x] **By hand, owner (2026-11-19/20):** the universal app on a 2017 Intel Mac (macOS 13) plays, including 4K HEVC HDR channels (3.1.0-beta.9); the AppImage under WSL; PiP holding 16:9 while resized on Windows.
   - [ ] **By hand, still to do (owner's Mac):**
     - the window: the traffic lights in the top bar, dragging it, fullscreen, closing it (the app stays in the Dock) and reopening it from the Dock, Cmd+Q;
