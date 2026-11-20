@@ -282,9 +282,11 @@ setTimeout(() => { console.error('timed out after 10 minutes'); process.exit(1);
     gate('server and ffmpeg running during a conversion', busy.app.length === 1 && busy.server.length === 1 && busy.ffmpeg.length >= 1, JSON.stringify(busy));
     const appPid = busy.app.length ? Number(busy.app[0].split(/\s+/)[0]) : 0;
     if (appPid) process.kill(appPid, 'SIGKILL');
+    // gone, or ended and not yet reaped (on a Mac the app is this script's own child: a zombie until Node reaps it)
+    const appAlive = () => { const st = spawnSync('ps', ['-o', 'stat=', '-p', String(appPid)]).stdout.toString().trim(); return st !== '' && !st.startsWith('Z'); };
     let after = procs();
-    for (let i = 0; i < 20 && (after.server.length || after.ffmpeg.length); i++) { await sleep(500); after = procs(); }
-    const appGone = appPid && spawnSync('ps', ['-o', 'pid=', '-p', String(appPid)]).stdout.toString().trim() === '';
+    for (let i = 0; i < 20 && (after.server.length || after.ffmpeg.length || appAlive()); i++) { await sleep(500); after = procs(); }
+    const appGone = appPid && !appAlive();
     gate('killed: its server and ffmpeg end with it', appGone && !after.server.length && !after.ffmpeg.length, JSON.stringify(after));
     try { process.kill(-app.pid, 'SIGTERM'); } catch {}   // Linux: xvfb-run and its X server
     await sleep(2000);
