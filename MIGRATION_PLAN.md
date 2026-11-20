@@ -567,7 +567,7 @@ Everything the spike found for these platforms is collected here.
     - the hand-over: Electron 2.6.0 on the Test channel updating itself to the Tauri app (replacing the .app where it is), with the playlists, favourites, history, downloads list and sync code carried over;
     - updating the Tauri app itself to the next beta;
     - Linux: Multi view with real channels (9.3).
-  - [ ] The website's Mac download (the universal dmg) on `main`: [Andreas-Graesmo/AGHorizon#38](https://github.com/Andreas-Graesmo/AGHorizon/pull/38). Needed before the first stable Tauri release (7.3).
+  - [x] The website's Mac download (the universal dmg) on `main`: [Andreas-Graesmo/AGHorizon#38](https://github.com/Andreas-Graesmo/AGHorizon/pull/38), merged 2026-11-20 (and `main` merged into this branch).
   - Phase 7 (two weeks of stable without data-loss reports) applies once all systems are promoted together (7.3).
 
 ### Phase 10: Remove Electron (after Phase 9)
