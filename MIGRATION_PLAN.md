@@ -550,7 +550,7 @@ Everything the spike found for these platforms is collected here.
   - [x] `e2e/tauri-migration-unix.js` (`tauri-linux.yml`): the real Electron app writes its export, the AppImage imports it (playlists, favourites, a playlist file, the sync code into GNOME Keyring or the file), once. It found that WebKit writes localStorage to disk seconds after the import: an app closed in between lost the imported playlists for good. The import is now marked done 10 s after it ran (`tauri-shell.js`); until then the next start imports again, which leaves what the app has alone.
   - [x] `e2e/tauri-migration-unix.js` runs on macOS too (`tauri-macos.yml`): the real Electron app's export in `~/Library/Application Support/Tuner IPTV`, imported once by the universal .app, the sync code into the Keychain.
   - Not checked end to end: the hand-over itself on a Mac (CI can't run an old Electron .app being replaced); its parts are unit-tested and the same moves Tauri's updater makes (9.9). Left for the owner's Mac (below).
-- [ ] **Gate:** the Phase 2–7 gates, repeated on macOS and Linux.
+- [x] **Gate: passed** (2026-11-20): the Phase 2–6 gates, repeated on macOS and Linux; Phase 7's comes with the stable release of all systems together (7.3).
   - [x] **Automated (CI), both systems** (`e2e/tauri-unix.js`, `e2e/tauri-migration-unix.js`, `e2e/tauri-update-unix.js`), as `e2e/tauri-windows.js` on Windows:
     - Phase 2: the page from its own server, its ffmpeg, plain and MSE playback (and kept HEVC where the system decodes it); **killed (`kill -9`, the app only) during a conversion, its server and ffmpeg end with it** (the server's stdin closes; ffmpeg's output pipe with it); it starts again; closing it leaves nothing running.
     - Phase 3: a film downloads with progress events into the Plex-style folder, plays back through `/api/local` byte for byte and is still listed after the kill and restart; the sync code in the Keychain (macOS) or the Secret Service, or the app's file without one (Linux); clearing it removes it; the sync folder carries files byte for byte.
@@ -560,12 +560,14 @@ Everything the spike found for these platforms is collected here.
     - Local run on Linux against the published 3.1.0-beta.9 AppImage: all of it passed (2026-11-20). On CI all of it passed on Linux, an Intel Mac and an Apple silicon Mac (runs 44717246039 and 44717245955, 2026-11-20).
     - Found on the way (test set-up, not the app): a scratch home on macOS needs its own `login.keychain-db`; the Electron app on macOS writes to the account's real `~/Library/Application Support/Tuner IPTV` whatever `$HOME` says (the folder name is checked); Playwright's `close()` never returns for an Electron app on macOS, which stays running without a window; reading a Keychain password with the `security` tool asks for permission in a dialog.
   - [x] **By hand, owner (2026-11-19/20):** the universal app on a 2017 Intel Mac (macOS 13) plays, including 4K HEVC HDR channels (3.1.0-beta.9); the AppImage under WSL; PiP holding 16:9 while resized on Windows.
-  - [ ] **By hand, still to do (owner's Mac):**
+  - [x] **By hand, owner's Mac and Linux (2026-11-20): everything passed:**
     - the window: the traffic lights in the top bar, dragging it, fullscreen, closing it (the app stays in the Dock) and reopening it from the Dock, Cmd+Q;
     - PiP and the mirror (on a second screen if there is one); the screen staying on during a long film;
     - a download into a chosen folder, and "Show in Finder"; "Copy stream link";
     - the hand-over: Electron 2.6.0 on the Test channel updating itself to the Tauri app (replacing the .app where it is), with the playlists, favourites, history, downloads list and sync code carried over;
-    - updating the Tauri app itself to the next beta.
+    - updating the Tauri app itself to the next beta;
+    - Linux: Multi view with real channels (9.3).
+  - [ ] The website's Mac download (the universal dmg) on `main`: [Andreas-Graesmo/AGHorizon#38](https://github.com/Andreas-Graesmo/AGHorizon/pull/38). Needed before the first stable Tauri release (7.3).
   - Phase 7 (two weeks of stable without data-loss reports) applies once all systems are promoted together (7.3).
 
 ### Phase 10: Remove Electron (after Phase 9)
