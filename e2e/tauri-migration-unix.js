@@ -41,8 +41,9 @@ const oldDir = path.join(support, 'Tuner IPTV');
 const exportFile = path.join(oldDir, 'migration.json');
 const newData = mac ? path.join(support, 'app.aghorizon.desktop') : path.join(home, '.local', 'share', 'app.aghorizon.desktop');
 // macOS: the sync code in the Keychain (keyring: service "AG Horizon", account "sync-code")
+let keychainFile = '';
 const keychainCode = () => {
-  const r = require('child_process').spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', '-w'], { env, encoding: 'utf8' });
+  const r = require('child_process').spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', '-w', keychainFile], { env, encoding: 'utf8' });
   return r.status === 0 ? r.stdout.trim() : null;
 };
 
@@ -68,18 +69,17 @@ const inv = window.__TAURI__.core.invoke;
 })();
 </script>`;
 
-// macOS: the scratch home has no login keychain (every real account has one): give it its own, unlocked, as its
-// default, so the app's Keychain calls work as on a real Mac. Keychain settings follow $HOME.
+// macOS: the scratch home has no login keychain (every real account has one). The app's Keychain calls look for
+// $HOME/Library/Keychains/login.keychain-db when the account names no other default: make one, unlocked. Returns its
+// path, for the test's own lookups (the security tool searches the account's list, not this home).
 function scratchKeychain(env, home) {
-  const kc = path.join(home, 'Library', 'Keychains', 'e2e.keychain-db');
+  const kc = path.join(home, 'Library', 'Keychains', 'login.keychain-db');
   fs.mkdirSync(path.dirname(kc), { recursive: true });
-  const sec = (...a) => require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
-  sec('create-keychain', '-p', 'e2e', kc);
-  sec('list-keychains', '-d', 'user', '-s', kc);
-  sec('default-keychain', '-d', 'user', '-s', kc);
-  sec('unlock-keychain', '-p', 'e2e', kc);
-  sec('set-keychain-settings', kc);   // no locking after a while
-  return sec('default-keychain', '-d', 'user').stdout.trim();
+  for (const a of [['create-keychain', '-p', 'e2e', kc], ['unlock-keychain', '-p', 'e2e', kc], ['set-keychain-settings', kc]]) {
+    const r = require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
+    console.log(`security ${a[0]}: ${r.status}${r.stderr ? ' ' + r.stderr.trim() : ''}`);
+  }
+  return kc;
 }
 
 async function runTauri(launch, logName) {
@@ -129,7 +129,7 @@ async function runTauri(launch, logName) {
   fs.writeFileSync(exportFile, JSON.stringify(data));
 
   /* 3. the Tauri app */
-  if (mac) console.log('keychain', scratchKeychain(env, home));
+  if (mac) keychainFile = scratchKeychain(env, home);
   let launch;
   if (mac) {
     // a copy of the .app, its page swapped (the real path: Tauri won't start from a path with a symlink in it)
@@ -156,7 +156,7 @@ async function runTauri(launch, logName) {
 
   /* 4. a second start doesn't import again */
   const second = await runTauri(launch, 'tauri-2.log');
-  if (mac) require('child_process').spawnSync('security', ['delete-generic-password', '-s', 'AG Horizon', '-a', 'sync-code'], { env });   // leave the Keychain as it was
+  // (the scratch home's keychain goes with the work folder)
   check('a second start doesn\'t import again', second && !second.imported && /From Electron/.test(second.playlists || ''), JSON.stringify(second));
 
   const failed = results.filter((ok) => !ok).length;

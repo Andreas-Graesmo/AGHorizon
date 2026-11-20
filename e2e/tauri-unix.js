@@ -115,18 +115,17 @@ setTimeout(() => rep('plain', { t: v.currentTime, w: v.videoWidth }), 6000);
 })();
 </script>`;
 
-// macOS: the scratch home has no login keychain (every real account has one): give it its own, unlocked, as its
-// default, so the app's Keychain calls work as on a real Mac. Keychain settings follow $HOME.
+// macOS: the scratch home has no login keychain (every real account has one). The app's Keychain calls look for
+// $HOME/Library/Keychains/login.keychain-db when the account names no other default: make one, unlocked. Returns its
+// path, for the test's own lookups (the security tool searches the account's list, not this home).
 function scratchKeychain(env, home) {
-  const kc = path.join(home, 'Library', 'Keychains', 'e2e.keychain-db');
+  const kc = path.join(home, 'Library', 'Keychains', 'login.keychain-db');
   fs.mkdirSync(path.dirname(kc), { recursive: true });
-  const sec = (...a) => require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
-  sec('create-keychain', '-p', 'e2e', kc);
-  sec('list-keychains', '-d', 'user', '-s', kc);
-  sec('default-keychain', '-d', 'user', '-s', kc);
-  sec('unlock-keychain', '-p', 'e2e', kc);
-  sec('set-keychain-settings', kc);   // no locking after a while
-  return sec('default-keychain', '-d', 'user').stdout.trim();
+  for (const a of [['create-keychain', '-p', 'e2e', kc], ['unlock-keychain', '-p', 'e2e', kc], ['set-keychain-settings', kc]]) {
+    const r = require('child_process').spawnSync('security', a, { env, encoding: 'utf8' });
+    console.log(`security ${a[0]}: ${r.status}${r.stderr ? ' ' + r.stderr.trim() : ''}`);
+  }
+  return kc;
 }
 
 // a static server with byte ranges and CORS
@@ -206,9 +205,9 @@ function clipServer(dir) {
   fs.writeFileSync(path.join(dataDir, 'downloads.json'), JSON.stringify({ folder: dlDir, pauseWhileWatching: false, items: [] }));
   fs.writeFileSync(path.join(dataDir, 'sync.json'), JSON.stringify({ folder: cloudDir }));
   const env = { ...process.env, HOME: home, XDG_DATA_HOME: path.join(home, '.local', 'share'), AGH_NO_DIALOG: '1' };
-  if (mac) console.log('keychain', scratchKeychain(env, home));
+  const keychainFile = mac ? scratchKeychain(env, home) : '';
   // the sync code in the macOS Keychain, as the app put it there (keyring: service "AG Horizon", account "sync-code")
-  const inKeychain = () => spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code'], { env }).status === 0;
+  const inKeychain = () => spawnSync('security', ['find-generic-password', '-s', 'AG Horizon', '-a', 'sync-code', keychainFile], { env }).status === 0;
   // this copy's processes: the app itself, its server, the ffmpeg the server runs
   const procs = () => {
     const lines = spawnSync('pgrep', ['-f', root]).stdout.toString().split('\n').filter(Boolean)
