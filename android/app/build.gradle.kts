@@ -1,7 +1,4 @@
 import groovy.json.JsonSlurper
-import java.net.URI
-import java.security.MessageDigest
-import java.util.Base64
 
 plugins {
     id("com.android.application")
@@ -23,12 +20,11 @@ android {
 
     defaultConfig {
         applicationId = "app.aghorizon.tv"
-        minSdk = 24            // Node.js for Android needs Android 7
+        minSdk = 24            // Android 7, as with Node.js before (MIGRATION_PLAN.md 8.7)
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersion
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
-        externalNativeBuild { cmake { arguments += "-DANDROID_STL=c++_shared" } }   // libnode.so needs libc++_shared.so
     }
 
     signingConfigs {
@@ -53,12 +49,8 @@ android {
         }
     }
 
-    externalNativeBuild { cmake { path = file("CMakeLists.txt") } }
-    sourceSets["main"].jniLibs.srcDir("libnode/bin")
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/nodeAssets"))
-
-    // libnode.so is about 60 MB per processor type: keep it compressed in the APK (a third of the download)
-    packaging { jniLibs { useLegacyPackaging = true } }
+    sourceSets["main"].jniLibs.srcDir(layout.buildDirectory.dir("generated/rustServer"))
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/serverAssets"))
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -80,60 +72,29 @@ dependencies {
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
 }
 
-/* ── the app's own server: the same server.js and public/ as the desktop app, packed as assets ── */
-val nodeProject by tasks.registering(Sync::class) {
+/* ── the app's own server: the Rust server (server-rs/jni, MIGRATION_PLAN.md 8.7) and the desktop app's pages ── */
+val serverAssets by tasks.registering(Sync::class) {
     from(rootProject.file("..")) {
-        include("server.js", "subtitles.js", "unicode-ln.js", "package.json", "secrets.json")
+        include("secrets.json")
         include("public/**")
         exclude("public/mirror.html", "public/mirror.js", "public/vendor/**")   // desktop only: mirror window, the web player's libraries
     }
-    from("nodejs")
-    into(layout.buildDirectory.dir("generated/nodeAssets/nodejs-project"))
+    into(layout.buildDirectory.dir("generated/serverAssets/server"))
 }
 
-/* ── Node.js for Android: libnode.so from the nodejs-mobile project, taken from its npm package (checked against npm's checksum) ── */
-val nodeMobileVersion = "18.20.4"
-val nodeMobileSha512 = "Lba5nYNwEbw+K9WQnxcyY/9Beagw+NIVbyrCU6burCJZ1p1iKxSXTp5rctgvRxzQb4ARY0r9Uy1k7Dseb1FhVw=="
-val libnodeDir = layout.projectDirectory.dir("libnode")
-val libnode by tasks.registering {
-    val marker = libnodeDir.file("version.txt").asFile
-    val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-    val tgz = layout.buildDirectory.file("downloads/nodejs-mobile-$nodeMobileVersion.tgz")
-    inputs.property("version", nodeMobileVersion)
-    outputs.dir(libnodeDir)
-    onlyIf { !(marker.exists() && marker.readText().trim() == nodeMobileVersion && abis.all { libnodeDir.file("bin/$it/libnode.so").asFile.exists() }) }
-    doLast {
-        val file = tgz.get().asFile
-        file.parentFile.mkdirs()
-        logger.lifecycle("Downloading Node.js for Android $nodeMobileVersion (about 100 MB, once)…")
-        var last: Exception? = null
-        for (attempt in 1..3) {
-            try {
-                URI("https://registry.npmjs.org/nodejs-mobile-react-native/-/nodejs-mobile-react-native-$nodeMobileVersion.tgz").toURL().openStream().use { input ->
-                    file.outputStream().use { input.copyTo(it) }
-                }
-                last = null
-                break
-            } catch (e: Exception) { last = e; logger.warn("Download failed (try $attempt of 3): ${e.message}"); Thread.sleep(15000) }
-        }
-        last?.let { throw it }
-        val digest = MessageDigest.getInstance("SHA-512")
-        file.inputStream().use { input -> val buf = ByteArray(1 shl 20); while (true) { val n = input.read(buf); if (n < 0) break; digest.update(buf, 0, n) } }
-        val sum = Base64.getEncoder().encodeToString(digest.digest())
-        check(sum == nodeMobileSha512) { "nodejs-mobile download does not match its checksum (got $sum)" }
-        delete(libnodeDir)
-        copy {
-            from(tarTree(resources.gzip(file))) {
-                include("package/android/libnode/bin/**/libnode.so", "package/LICENSE")
-                eachFile { path = if (name == "LICENSE") "LICENSE" else "bin/" + path.substringAfter("libnode/bin/") }
-                includeEmptyDirs = false
-            }
-            into(libnodeDir)
-        }
-        marker.writeText(nodeMobileVersion)
-        file.delete()
-    }
+// libagh_server.so for each processor type, built with cargo-ndk (needs the Rust targets, cargo-ndk and the NDK;
+// android.yml and release.yml install them). Debug builds also for the emulator (x86_64).
+val rustServer by tasks.registering(Exec::class) {
+    val out = layout.buildDirectory.dir("generated/rustServer")
+    val debug = gradle.startParameter.taskNames.any { it.contains("Debug", ignoreCase = true) }
+    val abis = listOf("arm64-v8a", "armeabi-v7a") + if (debug) listOf("x86_64") else emptyList()
+    inputs.dir(rootProject.file("../server-rs/src"))
+    inputs.dir(rootProject.file("../server-rs/jni/src"))
+    inputs.files(rootProject.file("../server-rs/Cargo.toml"), rootProject.file("../server-rs/jni/Cargo.toml"))
+    inputs.property("abis", abis)
+    outputs.dir(out)
+    workingDir = rootProject.file("../server-rs/jni")
+    commandLine(listOf("cargo", "ndk", "--platform", "24") + abis.flatMap { listOf("-t", it) } + listOf("-o", out.get().asFile.absolutePath, "build", "--release"))
 }
 
-tasks.named("preBuild") { dependsOn(nodeProject, libnode) }
-tasks.configureEach { if (name.startsWith("configureCMake") || name.startsWith("buildCMake") || name.contains("JniLibFolders")) dependsOn(libnode) }
+tasks.named("preBuild") { dependsOn(serverAssets, rustServer) }

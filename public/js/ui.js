@@ -43,7 +43,8 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), 4300);
 }
 
-function showMenu(anchor, items) {
+// at: { x, y } opens it at the pointer (a right-click) instead of under the anchor
+function showMenu(anchor, items, at) {
   const m = $('#menu');
   // A modal <dialog> sits in the top layer and makes the rest of the page inert, so a menu opened
   // from inside one has to live in that dialog to be visible and clickable.
@@ -57,7 +58,7 @@ function showMenu(anchor, items) {
   m.innerHTML = items.map((it, i) => it.sep ? '<hr class="menu-sep">' : it.heading ? `<div class="menu-h">${esc(it.label)}</div>`
     : `<button class="menu-i${it.danger ? ' danger' : ''}" data-i="${i}">${it.icon ? `<svg class="ic"><use href="#${it.icon}"/></svg>` : ''}${esc(it.label)}</button>`).join('');
   m.hidden = false;
-  const r = anchor.getBoundingClientRect();
+  const r = at ? { left: at.x, top: at.y, bottom: at.y } : anchor.getBoundingClientRect();
   const w = m.offsetWidth, h = m.offsetHeight;
   m.style.left = Math.max(8, Math.min(view.innerWidth - w - 8, r.left)) + 'px';
   m.style.top = (r.bottom + 6 + h < view.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
@@ -320,6 +321,43 @@ document.addEventListener('click', (e) => {
   openItem(it);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('card')) e.target.click(); });
+
+// A card's menu (#27): a right-click on a computer, a long press on OK on the TV (tv.js tvContext). Only what fits
+// the card: Remove from history only where it is history (the dashboard's "Recently watched" rails and Recently viewed).
+function cardMenuItems(it, host) {
+  const kind = kindOf(it);
+  const items = [];
+  if (kind === 'live') {
+    items.push({ label: 'Watch', icon: 'i-play', run: () => openItem(it) });
+    if (!TV) items.push({ label: 'Add to Multi view', icon: 'i-multi', run: () => mvAdd(it) });
+  } else if (kind === 'movie' || kind === 'episode') {
+    const p = progressOf(it.uid);
+    items.push({ label: p && !p.w && p.t > 10 ? 'Resume' : 'Play', icon: 'i-play', run: () => playItem(it) });
+    items.push({ label: 'Details', icon: 'i-info', run: () => openItem(kind === 'episode' ? { ...it, kind: 'series', uid: it.seriesUid } : it) });
+    items.push({ label: p && p.w ? 'Mark as not watched' : 'Mark as watched', icon: 'i-check', run: () => {
+      if (p && p.w) delete state.progress[it.uid]; else state.progress[it.uid] = { t: 0, d: (p && p.d) || 0, w: 1, ts: Date.now() };
+      persistProgress(); renderRoute(ui.route);
+    } });
+  } else items.push({ label: 'Open', icon: 'i-info', run: () => openItem(it) });
+  const favIt = kind === 'episode' ? playerFavItem(it) : it;   // an episode's heart is its series'
+  const fav = state.favs.has(favIt.uid);
+  items.push({ label: fav ? 'Remove from favorites' : 'Add to favorites', icon: fav ? 'i-heart-fill' : 'i-heart', run: () => toggleFavItem(favIt) });
+  if (host && host.closest('#v-recent, [data-history]')) items.push({ sep: true }, { label: 'Remove from history', icon: 'i-x', danger: true, run: () => removeRecent(it.uid) });
+  return items;
+}
+// Play a film or an episode from a card: an episode plays when opened; a film opens its page, then plays
+async function playItem(it) {
+  if (it.kind === 'episode') return openItem(it);
+  await openItem(it);
+  if (ws.detail && ws.detail.uid === it.uid) { $('#wsDetail').scrollTop = 0; playChannel(withBestUrl(ws.detail)); }   // the picture in view, as the page's Play
+}
+document.addEventListener('contextmenu', (e) => {
+  const card = e.target.closest('.card[data-uid]');
+  const it = card && cardIndex.get(card.dataset.uid);
+  if (!it || it.dlCard) return;   // the Downloads page has its own buttons
+  e.preventDefault();
+  showMenu(card, cardMenuItems(it, card), { x: e.clientX, y: e.clientY });
+});
 document.addEventListener('error', logoFailed, true);
 
 /* ─────────────────────────────── page building blocks ─────────────────────────────── */
@@ -352,7 +390,7 @@ const RAIL_MAX = 20;
 function dashRail(title, list, toHtml, route, sec = '') {
   if (!list.length) return '';
   const more = route && list.length > RAIL_MAX;
-  return `<section class="rail"><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}"${sec ? ` data-sec="${sec}"` : ''}>See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
+  return `<section class="rail"${sec.startsWith('recent-') ? ' data-history' : ''}><div class="rail-head"><h3>${esc(title)}</h3><span class="pill">${list.length}</span>${more ? `<button class="link" data-act="goto" data-route="${route}"${sec ? ` data-sec="${sec}"` : ''}>See all ›</button>` : ''}</div><div class="rail-row">${list.slice(0, RAIL_MAX).map(toHtml).join('')}</div></section>`;
 }
 // TMDB's trending titles: asked once per session and again when 6 hours old (the server keeps them that long).
 // null until they arrive, or when this build has no TMDB key: the dashboard then shows "Recently added".
@@ -773,6 +811,27 @@ const upd = { info: null, st: { state: 'idle' } };
 // TMDB's terms ask apps that use its API to say so
 const whatsNewBtn = '<button class="btn ghost" data-act="whats-new"><svg class="ic"><use href="#i-article"/></svg>What’s new?</button>';   // on the About page and in the update banner
 const tmdbCredit = () => (state.tmdb ? '<p class="muted center">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>' : '');
+// ffmpeg is GPL v3: say which one this app ships and where its source is (MIGRATION_PLAN.md 5.9). Links open in the
+// system browser (Electron and the Tauri app both send target=_blank there).
+const FFMPEG_SOURCE = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source';
+// macOS: our own build of the same ffmpeg (scripts/ffmpeg-macos.sh), its release carrying its source (MIGRATION_PLAN.md 9.8)
+const FFMPEG_SOURCE_MAC = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3';
+const ffmpegCredit = () => {
+  const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+  const gpl = link('https://www.gnu.org/licenses/gpl-3.0.html', 'GPL v3');
+  let what;
+  if (TV) what = `Sound the TV can't decode is decoded by ${link('https://ffmpeg.org', 'ffmpeg')} (${gpl}), as built by the ${link('https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder', 'Jellyfin project')}.`;
+  else if (window.__TAURI__ && /Mac/.test(navigator.userAgent)) what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} 8.1 (${gpl}), built for this app with x264, dav1d and OpenSSL. ${link(FFMPEG_SOURCE_MAC, 'Its complete source code')}.`;
+  else if (window.__TAURI__) what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} 8.1 (${gpl}), built by ${link('https://github.com/BtbN/FFmpeg-Builds', 'BtbN/FFmpeg-Builds')}. ${link(FFMPEG_SOURCE, 'Its complete source code')}.`;
+  else what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} (${gpl}), from the ${link('https://github.com/eugeneware/ffmpeg-static', 'ffmpeg-static')} package.`;
+  // the Linux AppImage also bundles libraries from Ubuntu (GStreamer, WebKitGTK…; MIGRATION_PLAN.md 9.8): each release
+  // has a file that lists them and says where their source is
+  const v = upd.info && upd.info.version;
+  if (!TV && window.__TAURI__ && /Linux/.test(navigator.userAgent) && v) {
+    what += ` This AppImage also contains open-source libraries from Ubuntu (GStreamer, WebKitGTK and others): ${link(`https://github.com/Andreas-Graesmo/AGHorizon/releases/download/v${v}/AG-Horizon-${v}-AppImage-sources.txt`, 'which, and their source code')}.`;
+  }
+  return `<p class="muted center">${what}</p>`;
+};
 function updatesCard() {
   const info = upd.info || {};
   const st = upd.st || { state: 'idle' };
@@ -907,15 +966,15 @@ function renderSettings() {
       <div class="set-row"><div><b>Keep HEVC video when converting</b><p class="muted">Only the sound is converted and your graphics card plays the HEVC picture. Much faster, so 4K plays without buffering. Switch off to convert the picture to H.264 as well, if HEVC video shows no picture or stutters.</p></div><label class="switch"><input type="checkbox" data-set="keepHevc"${keepHevc ? ' checked' : ''}><span></span></label></div>`}
       <div class="set-row"><div><b>Play next episode automatically</b></div><label class="switch"><input type="checkbox" data-set="autonext"${autonext ? ' checked' : ''}><span></span></label></div>
       ${TV ? '' : `<div class="set-row"><div><b>Share one connection in Multi view (experimental)</b><p class="muted">Pictures from the same Xtream playlist take turns on one provider connection instead of using one each, and play about 20 seconds behind. It needs a provider that sends a burst of video on every new connection. Switch it off if pictures freeze or skip.</p></div><label class="switch"><input type="checkbox" data-set="mvShare"${LS.get('tuner.mvShare', false) ? ' checked' : ''}><span></span></label></div>
-      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). Use “Mirror window” when the TV or projector has the speakers; this window is then muted.</p></div>${seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>`}
+      <div class="set-row"><div><b>Mirror picture: sound plays on</b><p class="muted">Only when you mirror the picture to another monitor or TV (the two-screens button on the player). ${mirrorViaCanvas ? 'On this system the mirror shows the picture only; the sound plays in this window.' : 'Use “Mirror window” when the TV or projector has the speakers; this window is then muted.'}</p></div>${mirrorViaCanvas ? '<span class="muted">This window</span>' : seg('mirrorSound', LS.get('tuner.mirrorSound', 'main'), [['main', 'This window'], ['mirror', 'Mirror window'], ['both', 'Both']])}</div>`}
     </section>`)}
     ${pane('Languages', 'i-audio', 'Audio and subtitle languages, and how subtitles look.', `<h3 class="set-sec">Preferred languages</h3>
       <section class="set-card">${audSettingsRow()}${subAutoRow()}</section>
-      ${TV ? '' : `<h3 class="set-sec">Subtitles</h3>
-      ${subSettingsCard()}`}`)}
+      <h3 class="set-sec">Subtitles</h3>
+      ${TV ? `<section class="set-card">${subLookRows()}</section>` : subSettingsCard()}`)}
     ${TV ? '' : pane('Downloads', 'i-download', 'Where downloads are saved, and when they run.', dlSettingsCard())}
     ${pane('Sync', 'i-cloud', 'The same history, progress and favorites on all your computers.', syncSettingsCard())}
-    ${pane('About & updates', 'i-info', 'Your version, and what is new.', updatesCard() + tmdbCredit())}
+    ${pane('About & updates', 'i-info', 'Your version, and what is new.', updatesCard() + tmdbCredit() + ffmpegCredit())}
     <p class="muted center">AG Horizon · use only with services you’re entitled to watch.</p></div></div>`;
   showSettingsPane();
 }

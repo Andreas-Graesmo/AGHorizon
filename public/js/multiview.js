@@ -16,6 +16,8 @@ const MV_LAYOUTS = {
   '4': { n: 4, label: '2 × 2' },
 };
 const MV_MAX = 4;
+// The Tauri app on Linux (WebKitGTK, not Chromium): see MvTile.play
+const mvNoMse = !TV && !!window.__TAURI__ && /Linux/.test(navigator.userAgent) && /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium/.test(navigator.userAgent);
 
 const mv = {
   layout: '2c',
@@ -108,6 +110,7 @@ class MvTile {
     const v = this.video;
     v.onerror = null;
     v.pause();
+    tcDetach(v);
     v.removeAttribute('src');
     v.load();
   }
@@ -119,12 +122,15 @@ class MvTile {
     this.hideOv();
   }
 
-  play(ch) {
+  play(ch, { retry = false } = {}) {
     this.ch = ch;
+    if (!retry) this.retryLeft = 1;   // one automatic second try per start (MIGRATION_PLAN.md 4.8)
     const token = ++this.token;
     pushRecent(ch);
     loadShortEpg(ch);
-    const plan = playPlan(ch);
+    // Linux's WebKit can freeze its whole page with several MSE players at once (MIGRATION_PLAN.md 9.3): there every
+    // picture plays the server's conversion (copied H.264 is cheap), which it plays as a plain video
+    const plan = mvNoMse && state.ffmpeg ? ['tc'] : playPlan(ch);
     // sharing first; if the provider won't play along the picture falls back to a connection of its own
     this.start(ch, mvShareUrl(ch) && plan[0] !== 'tc' ? ['share', ...plan] : plan, token);
   }
@@ -146,6 +152,14 @@ class MvTile {
       if (token !== this.token) return;
       if (rest.length) { this.start(ch, rest, token, msg); return; }
       this.teardown();
+      // Several pictures starting at once can make one fail that would play a moment later (a busy provider, or a
+      // webview's media stack): try the whole way once more before saying so.
+      if (this.retryLeft > 0) {
+        this.retryLeft--;
+        this.ov('loading', 'Trying again…');
+        setTimeout(() => { if (token === this.token) this.play(ch, { retry: true }); }, 3000);
+        return;
+      }
       const hint = !state.ffmpeg ? ' ffmpeg was not found, so unsupported codecs can’t be converted.' : compatMode() === 'off' ? ' Compatibility mode is switched off in Settings › Playback.' : '';
       this.ov('error', "Couldn't play this channel", `${msg}.${hint} The stream may be offline, or your provider’s connection limit may be used up.`);
     };
@@ -197,7 +211,7 @@ class MvTile {
       this.converted = true;
       this.tcEl.hidden = false;
       v.onerror = () => fail('The converted stream could not be played');
-      v.src = `/api/transcode?url=${enc(from)}${uaParam(p)}&video=${info.video === 'h264' ? 'copy' : 'h264'}&maxh=${maxh}`;
+      tcAttach(v, `/api/transcode?url=${enc(from)}${uaParam(p)}&video=${info.video === 'h264' ? 'copy' : 'h264'}&maxh=${maxh}`);
       v.play().catch(() => {});
     } else {
       v.src = src;

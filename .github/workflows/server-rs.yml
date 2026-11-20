@@ -1,0 +1,55 @@
+# MIGRATION_PLAN.md Phase 8: the local server ported to Rust (server-rs/). Its unit tests, then the HTTP parity suite
+# (test/parity/: HTTP, and the downloads / folder sync messages over stdin/stdout) against server.js and against the
+# Rust server: both must give the same answers.
+name: Rust server (migration, phase 8)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['server-rs/**', 'server.js', 'subtitles.js', 'sidecar/entry.js', 'desktop/**', 'test/parity/**', 'scripts/tauri-prep.js', 'package.json', '.github/workflows/server-rs.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-rs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'server-rs -> target' }
+      - name: Unit tests
+        working-directory: server-rs
+        run: cargo test --release
+      - name: Build
+        working-directory: server-rs
+        run: cargo build --release
+      - name: ffmpeg (Linux, the distribution's)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: ffmpeg (Windows, the one the app ships)
+        if: runner.os == 'Windows'
+        run: |
+          node scripts/tauri-prep.js --skip-server
+          echo "AGH_PARITY_FFMPEG=$PWD/src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe" >> "$GITHUB_ENV"
+      - name: Parity, server.js
+        run: node --test test/parity/parity.test.js test/parity/rpc.test.js
+        env: { AGH_PARITY_SERVER: node }
+      - name: Parity, Rust
+        run: node --test test/parity/parity.test.js test/parity/rpc.test.js
+        env: { AGH_PARITY_SERVER: rust }

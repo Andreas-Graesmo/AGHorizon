@@ -292,7 +292,8 @@
         <button class="pc-big" id="pcPlay" title="Play / pause (Space)" aria-label="Play / pause"><svg class="ic fill"><use href="#i-pause"/></svg></button>
         <button class="p-btn pc-skip" id="pcFwd" title="Forward 15 seconds" aria-label="Forward 15 seconds"><svg class="ic"><use href="#i-fwd15"/></svg></button>
         <span class="grow"></span>
-        <span id="pcLive" class="live-badge"><i></i>LIVE</span>
+        <span id="pcBehind" class="pc-behind" hidden></span>
+        <button id="pcLive" class="live-badge" title="Live" disabled><i></i><span>LIVE</span></button>
         <button class="p-btn pc-speed" id="pcSpeed" title="Playback speed" aria-label="Playback speed">1×</button>
         <button class="p-btn" id="pMirror" title="Mirror picture" aria-label="Mirror picture"><svg class="ic"><use href="#i-screens"/></svg></button>
         <button class="p-btn" id="pMulti" title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>
@@ -426,6 +427,7 @@
 </dialog>
 
 <script src="js/tv.js"></script>
+<script src="js/tauri-shell.js"></script>
 <script src="js/core.js"></script>
 <script src="js/sync-core.js"></script>
 <script src="js/trending.js"></script>

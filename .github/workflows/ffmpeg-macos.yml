@@ -1,0 +1,93 @@
+# MIGRATION_PLAN.md 9.8: ffmpeg for the macOS app from pinned sources (scripts/ffmpeg-macos.sh), one universal
+# program for Apple silicon and Intel (owner's decision 2026-11-19: one app for both), published with its complete
+# source as a pre-release whose tag is not a version number (no update channel ever offers it).
+#   Intel half:          built here, natively, on an Intel Mac
+#   Apple silicon half:  build 2 (ffmpeg-…-macos-arm64-2), built natively on an Apple silicon Mac: the same FFmpeg
+#                        commit, library pins and script, checked against its pinned checksum. (GitHub's Apple
+#                        silicon runners were unavailable for hours on 2026-11-18; to build that half anew, put an
+#                        arm64 entry back in the matrix and use its artifact instead.)
+# Published once per tag and never replaced: scripts/tauri-prep.js pins the archive by its checksum, and every build
+# makes a different binary. To publish a new build, change TAG (…-3, …-4) as well as the script.
+name: ffmpeg for macOS (GPL)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['scripts/ffmpeg-macos.sh', '.github/workflows/ffmpeg-macos.yml']
+
+permissions:
+  contents: write
+
+env:
+  TAG: ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3   # = the darwin build in scripts/tauri-prep.js once pinned
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15-intel, arch: x86_64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build tools
+        run: brew install meson ninja nasm pkgconf || brew install meson ninja nasm pkg-config
+      - name: Build (the pins are checked against BtbN's)
+        run: |
+          [ "$(uname -m)" = "${{ matrix.arch }}" ] || { echo "::error::this runner is $(uname -m), not ${{ matrix.arch }}"; exit 1; }
+          scripts/ffmpeg-macos.sh "$RUNNER_TEMP/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-macos-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/out/*.tar.xz
+            ${{ runner.temp }}/out/source/
+          retention-days: 14
+
+  universal:
+    needs: build
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v6
+      - name: The Apple silicon half (build 2, checked)
+        run: |
+          mkdir -p arm64 && cd arm64
+          base=https://github.com/Andreas-Graesmo/AGHorizon/releases/download/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2
+          curl -fsSLO "$base/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64.tar.xz"
+          echo "5dbee38075d565c115fce13e4d8d872d86b01d09d13d343903e77c375751e329  ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64.tar.xz" | shasum -a 256 -c
+          mkdir -p source
+      - uses: actions/download-artifact@v4
+        with: { name: ffmpeg-macos-x86_64, path: x86_64 }
+      - name: One program for both
+        run: |
+          # the same pins on both: the same source. Compared unpacked: xz -T0 packs differently on machines with
+          # another number of cores.
+          base=https://github.com/Andreas-Graesmo/AGHorizon/releases/download/ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2
+          for f in $(cd x86_64/source && ls *.tar.xz); do
+            curl -fsSL "$base/$f" -o "arm64/source/$f"
+            [ "$(xz -dc "arm64/source/$f" | shasum -a 256)" = "$(xz -dc "x86_64/source/$f" | shasum -a 256)" ] || { echo "::error::$f differs from build 2's"; exit 1; }
+            echo "same source: $f"
+          done
+          scripts/ffmpeg-macos.sh --combine arm64/*-macos-arm64.tar.xz x86_64/*-macos-x86_64.tar.xz out
+          mkdir check && tar -C check -xJf out/*-universal.tar.xz && f="$(ls check/*/ffmpeg)"
+          lipo -archs "$f" | grep -q arm64 && lipo -archs "$f" | grep -q x86_64
+          "$f" -hide_banner -version | head -1
+          if otool -L "$f" | tail -n +2 | grep -vE '^\s+(/usr/lib/|/System/Library/Frameworks/)'; then echo "::error::it links a library macOS doesn't have"; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: ffmpeg-macos-universal, path: out/*.tar.xz, retention-days: 14 }
+      - name: Publish as a pre-release (never "latest"; only if this tag has none yet)
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::notice::$TAG is already published; not replaced (change TAG to publish a new build)"
+            exit 0
+          fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "ffmpeg for the macOS app (GPL), build 3: Apple silicon and Intel" \
+            --notes "ffmpeg n8.1.3-27-g8dca1586f4 for AG Horizon on macOS 12+, one universal program for Apple silicon and Intel (the two builds are attached too: the Apple silicon one is build 2's, ffmpeg-n8.1.3-27-g8dca1586f4-macos-arm64-2), built by scripts/ffmpeg-macos.sh with x264, dav1d and OpenSSL at BtbN/FFmpeg-Builds' pins. The complete corresponding source is attached (the source tarballs, the build script, SHA256SUMS). Licence: GPL v3. This is not an app release." \
+            out/*.tar.xz arm64/*.tar.xz x86_64/*.tar.xz x86_64/source/*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

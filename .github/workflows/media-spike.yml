@@ -1,0 +1,130 @@
+# MIGRATION_PLAN.md Phase 0.1 (media) and 0.2 (popups) in the Tauri webview, with the app's real server.js.
+# Windows only (WebView2, with and without the planned browser flags): the migration is Windows-first.
+# The macOS (WKWebView) and Linux (WebKitGTK) jobs are in this file at commit c34f854; restore them for Phase 9.
+# Results: the job log (between SPIKE-RESULTS markers), the job summary, and the "media-spike-*" artifacts.
+name: Media spike (Tauri migration, phase 0.1)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['spike/media/**', '!spike/media/**/*.md', 'scripts/tauri-prep.js', '.github/workflows/media-spike.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-spike-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixtures:
+    # Made once, so every webview plays the very same files.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      # the pinned BtbN ffmpeg (one checked download): apt's mirrors once kept this job waiting for over ten minutes
+      - name: ffmpeg
+        timeout-minutes: 10
+        run: node scripts/tauri-prep.js --skip-server
+      - run: node spike/media/gen-fixtures.js src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+      - uses: actions/upload-artifact@v4
+        with: { name: spike-fixtures, path: spike/media/fixtures, retention-days: 3 }
+
+  spike:
+    needs: fixtures
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, label: windows-webview2 }
+          - { os: windows-latest, label: windows-webview2-noflags, noflags: '1' }
+          # MIGRATION_PLAN.md Phase 9: macOS (WKWebView) and Linux (WebKitGTK) again
+          - { os: macos-latest, label: macos-wkwebview }
+          - { os: ubuntu-22.04, label: linux-webkitgtk }
+          # 9.3: the Linux Multiview mitigation on its own, so a freeze in another test can't hide its result
+          - { os: ubuntu-22.04, label: linux-webkitgtk-mvtranscode, url: 'http://127.0.0.1:47831/spike/?exit=1&only=mvtranscode' }
+          # plan task 0.2: PiP and Mirror popups (window.open in deny / allow / create mode)
+          - { os: windows-latest, label: windows-webview2-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
+          # 9.5 / 9.1: the same on WKWebView and WebKitGTK (the app's PiP and Mirror are such popups)
+          - { os: macos-latest, label: macos-wkwebview-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
+          - { os: ubuntu-22.04, label: linux-webkitgtk-popups, url: 'http://127.0.0.1:47831/spike/popup.html?exit=1' }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: spike-fixtures, path: spike/media/fixtures }
+
+      - name: Linux packages (WebKitGTK, GStreamer, ffmpeg, a virtual display and a null sound card)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xvfb pulseaudio ffmpeg \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-gl
+          echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+      - name: ffmpeg (macOS, Homebrew's)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg
+          echo "FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+      # The ffmpeg the Tauri app ships (scripts/tauri-prep.js: BtbN 8.1, MIGRATION_PLAN.md 5.9), for /api/probe and /api/transcode
+      - name: ffmpeg (Windows, as shipped)
+        if: runner.os == 'Windows'
+        run: |
+          node scripts/tauri-prep.js --skip-server
+          echo "FFMPEG_PATH=$PWD/src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe" >> "$GITHUB_ENV"
+          src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe -hide_banner -version | head -1
+      - name: Player libraries (hls.js, mpegts.js) into public/vendor
+        run: |
+          for i in 1 2 3; do npm run setup && break; sleep 10; done
+          test -s public/vendor/hls.min.js && test -s public/vendor/mpegts.js
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'spike/media/tauri -> target' }
+      - name: Build the Tauri spike app
+        working-directory: spike/media/tauri
+        run: cargo build --release
+
+      - name: Run the spike
+        env:
+          SPIKE_TIMEOUT: '900'
+          SPIKE_NO_FLAGS: ${{ matrix.noflags }}
+          SPIKE_URL: ${{ matrix.url || 'http://127.0.0.1:47831/spike/?exit=1' }}
+        run: |
+          [ -z "$SPIKE_NO_FLAGS" ] && unset SPIKE_NO_FLAGS
+          node spike/media/serve.js --label "${{ matrix.label }}" > serve.log 2>&1 &
+          sleep 2
+          APP=spike/media/tauri/target/release/aghorizon-media-spike
+          case "$RUNNER_OS" in
+            Linux)
+              pulseaudio --start --exit-idle-time=-1 || true
+              pactl load-module module-null-sink sink_name=null >/dev/null 2>&1 && pactl set-default-sink null || true
+              xvfb-run -a -s "-screen 0 1280x1024x24" "$APP" > app.log 2>&1 || echo "app exit $?" ;;
+            Windows) "$APP.exe" > app.log 2>&1 || echo "app exit $?" ;;
+            *) "$APP" > app.log 2>&1 || echo "app exit $?" ;;
+          esac
+          sleep 1
+          echo "::group::server log"; cat serve.log; echo "::endgroup::"
+          echo "::group::app log (tail)"; tail -50 app.log; echo "::endgroup::"
+          f="spike/media/results/${{ matrix.label }}.json"
+          test -s "$f" || { echo "::error::no results written (the page hung or crashed; see the progress lines above)"; exit 1; }
+          echo "SPIKE-RESULTS-BEGIN"; node -e "process.stdout.write(JSON.stringify(require(process.argv[1])))" "$PWD/$f"; echo; echo "SPIKE-RESULTS-END"
+          node spike/media/report.js "$f" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: media-spike-${{ matrix.label }}
+          path: |
+            spike/media/results/
+            serve.log
+            app.log
+          retention-days: 14

@@ -173,7 +173,7 @@ const vttClean = (text) => text.replace(/\{\\[^}]*\}/g, '').replace(/<\/?font[^>
 // The key isn't in the repository: the release build writes secrets.json from a GitHub secret. For running from
 // source, put { "opensubtitlesApiKey": "…" } in secrets.json next to this file, or set OPENSUBTITLES_API_KEY.
 const OS_KEY = process.env.OPENSUBTITLES_API_KEY || (() => { try { return require('./secrets.json').opensubtitlesApiKey || ''; } catch { return ''; } })();
-const OS_API = 'https://api.opensubtitles.com/api/v1';
+const OS_API = process.env.AGH_OPENSUBTITLES_BASE || 'https://api.opensubtitles.com/api/v1';   // AGH_OPENSUBTITLES_BASE: the test suite's fake (test/parity/)
 const OS_UA = `AGHorizon v${require('./package.json').version}`;   // the consumer's name on opensubtitles.com
 const osTokens = new Map(); // username -> token
 

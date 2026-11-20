@@ -8,7 +8,7 @@ let tsPlayer = null;
 let playToken = 0;
 
 /* Compatibility mode: the server converts the stream with ffmpeg (H.264 + AAC, fragmented MP4). */
-const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', subs: [], sid: '', audio: null, apid: null };   // audio / apid: which sound track (audio.js)
+const tcState = { on: false, vod: false, offset: 0, duration: 0, video: 'h264', hdr: false, subs: [], sid: '', audio: null, apid: null };   // audio / apid: which sound track (audio.js)
 let checkTimer = 0;
 let tcSeeking = false;
 // A restart of the same video (another sound track, subtitles read from the stream): go on exactly here, not at the
@@ -20,12 +20,77 @@ function tcUrl(ch, p, start) {
   tcState.sid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const subs = tcState.subs && tcState.subs.length ? `&subs=${tcState.subs.join(',')}&sid=${tcState.sid}` : '';
   const audio = tcState.apid != null ? `&apid=${tcState.apid}` : tcState.audio != null ? `&audio=${tcState.audio}` : '';
-  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
+  // kept HEVC through WebKit's MSE comes as fragmented MP4 (it takes no Matroska); HDR converted to H.264 is tone mapped
+  const fmt = tcState.video === 'hevc' && tcViaMse ? '&fmt=mp4' : '';
+  const hdr = tcState.video === 'h264' && tcState.hdr ? '&hdr=1' : '';
+  return `${location.origin}/api/transcode?url=${enc(ch.url)}${uaParam(p)}&video=${tcState.video}${fmt}${hdr}${start > 0 ? `&start=${start.toFixed(3)}` : ''}${audio}${subs}`;
+}
+/* WebKit's own player on macOS (the Tauri app's WKWebView, and Safari) refuses the conversion as <video src>: it is a
+   stream with no length and no byte ranges (MIGRATION_PLAN.md 9.2). There the same fragmented MP4 is fetched and fed
+   to MSE instead; everywhere else the element reads the address itself, as before. */
+const tcViaMse = (() => {
+  const ua = navigator.userAgent;
+  if (LS.get('tuner.tcMse', false) && window.MediaSource) return true;   // to try this path in any browser (tests)
+  return !TV && /Mac OS X|Macintosh/.test(ua) && /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua) && !!(window.ManagedMediaSource || window.MediaSource);
+})();
+const tcFeeds = new WeakMap();   // <video> -> { ac, url }: the conversion it is being fed
+function tcDetach(v) {
+  const f = tcFeeds.get(v);
+  if (!f) return;
+  tcFeeds.delete(v);
+  f.ac.abort();   // hangs up on the server, which stops its ffmpeg
+  URL.revokeObjectURL(f.url);
+}
+function tcAttach(v, url) {
+  tcDetach(v);
+  if (!tcViaMse) { v.src = url; return; }
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  const ms = new MS();
+  if (window.ManagedMediaSource && MS === window.ManagedMediaSource) v.disableRemotePlayback = true;   // ManagedMediaSource needs it
+  const f = { ac: new AbortController(), url: URL.createObjectURL(ms) };
+  tcFeeds.set(v, f);
+  v.src = f.url;
+  ms.addEventListener('sourceopen', () => tcFeed(v, ms, url, f.ac.signal), { once: true });
+}
+async function tcFeed(v, ms, url, signal) {
+  const end = (err) => { try { if (ms.readyState === 'open') ms.endOfStream(err); } catch { /* closed meanwhile */ } };   // 'network' / 'decode' reach v.onerror
+  try {
+    const r = await fetch(url, { signal });
+    if (!r.ok || !r.body) return end('network');
+    const MS = window.ManagedMediaSource || window.MediaSource;
+    let type = /[?&]video=hevc\b/.test(url) ? 'video/mp4; codecs="hvc1.2.4.L153.B0, mp4a.40.2"' : 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+    if (!MS.isTypeSupported(type)) type = 'video/mp4';
+    const sb = ms.addSourceBuffer(type);
+    sb.mode = 'sequence';
+    const done = () => new Promise((res) => sb.addEventListener('updateend', res, { once: true }));
+    const reader = r.body.getReader();
+    for (;;) {
+      const { value, done: last } = await reader.read();
+      if (last) break;
+      if (signal.aborted) return;
+      // keep about a minute behind the playhead, and no more than two minutes ahead (ffmpeg waits meanwhile)
+      const b = sb.buffered;
+      if (b.length && v.currentTime - b.start(0) > 60) { sb.remove(b.start(0), v.currentTime - 30); await done(); }
+      while (b.length && b.end(b.length - 1) - v.currentTime > 120 && !signal.aborted) await new Promise((res) => setTimeout(res, 500));
+      for (let tries = 0; ; tries++) {
+        try { sb.appendBuffer(value); await done(); break; } catch (e) {
+          if (e.name !== 'QuotaExceededError' || tries > 20 || signal.aborted) throw e;
+          const bb = sb.buffered;
+          if (bb.length && v.currentTime - bb.start(0) > 5) { sb.remove(bb.start(0), v.currentTime - 2); await done(); } else await new Promise((res) => setTimeout(res, 500));
+        }
+      }
+    }
+    end();
+  } catch (e) {
+    if (!signal.aborted) end(e && e.name === 'QuotaExceededError' ? 'decode' : 'network');
+  }
 }
 const curTime = () => (tcState.on && tcState.vod ? tcState.offset + video.currentTime : video.currentTime);
 const durTime = () => (tcState.on && tcState.vod ? tcState.duration : video.duration);
-// HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs.
-const hevcOk = (() => { try { return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
+// HEVC that the GPU can decode is kept as is: re-encoding 4K HEVC is slower than real time on most PCs (a 2017
+// MacBook converted 4K HEVC HDR at half of real time, so those channels stalled). Asked of the MediaSource the player
+// is fed through: on a Mac that is WebKit's (ManagedMediaSource), which gets kept HEVC as fragmented MP4.
+const hevcOk = (() => { try { const MS = window.ManagedMediaSource || window.MediaSource; return MS.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"'); } catch { return false; } })();
 const tcVideoMode = (codec) => (codec === 'h264' ? 'copy' : codec === 'hevc' && hevcOk && LS.get('tuner.keepHevc', true) ? 'hevc' : 'h264');
 
 // Copied video (and its sound) starts on the keyframe before t, up to a few seconds earlier.
@@ -100,9 +165,11 @@ function teardown() {
   if (tsPlayer) { try { tsPlayer.pause(); tsPlayer.unload(); tsPlayer.detachMediaElement(); tsPlayer.destroy(); } catch { /* ignore */ } tsPlayer = null; }
   clearTimeout(checkTimer);
   tcState.on = false;
+  liveClock.wall = 0;   // a new stream: live from its first picture (#18)
   $('#tcBadge').hidden = true;
   video.onerror = null;
   video.pause();
+  tcDetach(video);
   video.removeAttribute('src');
   video.load();
 }
@@ -207,7 +274,7 @@ async function startPlayback(ch, kinds, token, lastError) {
     if (vod) await subAutoPlan(ch, info);   // Settings › Languages › turn on subtitles automatically (once per video)
     if (token !== playToken) return;
     const track = audTcTrack(ch, info);
-    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: track ? track.n : null, apid: track ? track.pid : null });
+    Object.assign(tcState, { on: true, vod, offset: start, duration: dur, video: tcVideoMode(info.video), hdr: !!info.hdr, subs: vod ? (info.subs || []).map((s) => s.index) : [], audio: track ? track.n : null, apid: track ? track.pid : null });
     const at = await tcStartAt(ch, p, start);
     if (token !== playToken) return;
     tcState.offset = at;
@@ -215,12 +282,9 @@ async function startPlayback(ch, kinds, token, lastError) {
     video.onerror = () => {
       if (token !== playToken) return;
       if (tcState.video !== 'hevc') return fail('The converted stream could not be played');
-      tcState.video = 'h264';   // the HEVC decoder refused it after all: convert the picture too
-      tcState.offset = tcState.vod ? curTime() : 0;
-      video.src = tcUrl(ch, p, tcState.offset);
-      video.play().catch(() => {});
+      tcHevcToH264(ch, p);
     };
-    video.src = tcUrl(ch, p, start);
+    tcAttach(video, tcUrl(ch, p, start));
     video.play().catch(() => {});
     subAfterTc(ch);   // a subtitle track of the stream picked automatically: read it from this conversion
     syncCtl();
@@ -250,10 +314,19 @@ async function startPlayback(ch, kinds, token, lastError) {
   }
 }
 
+// The HEVC decoder refused the kept HEVC picture after all: convert the picture to H.264 too, from where it is now.
+function tcHevcToH264(ch, p) {
+  tcState.video = 'h264';
+  tcState.offset = tcState.vod ? curTime() : 0;
+  tcAttach(video, tcUrl(ch, p, tcState.offset));
+  video.play().catch(() => {});
+}
+
 // Some streams "play" but show no picture or have no sound (HEVC, DTS, AC-3). Detect that and convert.
 function armCodecCheck() {
   clearTimeout(checkTimer);
-  if (tcState.on || !state.ffmpeg || compatMode() === 'off' || !state.current) return;
+  if (tcState.on) return armKeptHevcCheck();
+  if (!state.ffmpeg || compatMode() === 'off' || !state.current) return;
   const token = playToken;
   const ch = state.current;
   checkTimer = setTimeout(() => {
@@ -261,6 +334,17 @@ function armCodecCheck() {
     const noPicture = video.videoWidth === 0;
     const noSound = typeof video.webkitAudioDecodedByteCount === 'number' && video.webkitAudioDecodedByteCount === 0 && video.currentTime > 2;
     if (noPicture || noSound) startPlayback(ch, ['tc'], token);
+  }, 4000);
+}
+// A conversion that keeps the HEVC picture can fail without an error: Chromium plays the sound of a Matroska stream
+// whose HEVC it can't decode and shows no picture. Then convert the picture as well, as video.onerror would.
+function armKeptHevcCheck() {
+  if (tcState.video !== 'hevc' || !state.current) return;
+  const token = playToken;
+  const ch = state.current;
+  checkTimer = setTimeout(() => {
+    if (token !== playToken || !tcState.on || tcState.video !== 'hevc' || video.paused) return;
+    if (video.videoWidth === 0) tcHevcToH264(ch, playlistById(ch.pid));
   }, 4000);
 }
 video.addEventListener('playing', () => { hideOverlay(); armCodecCheck(); });
@@ -342,13 +426,14 @@ async function seekTc(t) {
   const p = playlistById(ch.pid);
   tcState.offset = Math.max(0, Math.min(t, (tcState.duration || Infinity) - 2));
   showOverlay('loading', 'Seeking…');
+  tcDetach(video);
   video.removeAttribute('src');   // hang up first: many providers allow only one connection
   video.load();
   const target = tcState.offset;
   const at = await tcStartAt(ch, p, target);
   if (id !== tcSeekId || token !== playToken) return;
   tcState.offset = at;
-  video.src = tcUrl(ch, p, target);
+  tcAttach(video, tcUrl(ch, p, target));
   video.play().catch(() => {});
 }
 function seekTo(t) {
@@ -362,10 +447,12 @@ $('#pcMute').addEventListener('click', () => { video.muted = !video.muted; if (!
 $('#pcVol').addEventListener('input', (e) => { video.volume = Number(e.target.value); video.muted = false; syncCtl(); });
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 $('#pcSpeed').addEventListener('click', () => { const i = SPEEDS.indexOf(video.playbackRate || 1); video.playbackRate = SPEEDS[(i + 1) % SPEEDS.length]; syncCtl(); osd('Speed ' + video.playbackRate + '×'); });
-// one click toggles play, a double click goes full screen
+// one click toggles play, a double click goes full screen. Not in the PiP window (#32): there a click only shows the
+// controls, since moving the window starts with a click on the picture; the button, Space and K still pause.
 let clickTimer = 0;
 video.addEventListener('click', () => {
   clearTimeout(clickTimer);
+  if (pipDoc) { showCtl(); return; }
   clickTimer = setTimeout(() => { if (state.current) togglePlay(); }, 230);
 });
 video.addEventListener('dblclick', () => { clearTimeout(clickTimer); toggleFullscreen(); });
@@ -377,6 +464,60 @@ playerEl.addEventListener('mousemove', showCtl);
 playerEl.addEventListener('mouseenter', showCtl);
 playerEl.addEventListener('mouseleave', () => { clearTimeout(ctlTimer); playerEl.classList.remove('ctl-on'); });
 playerEl.addEventListener('focusin', showCtl);
+/* ─────────────────────────── live TV: how far behind live (#18) ─────────────────────────── */
+// The delay is the wall-clock time gone by minus the picture time played since the stream was last live. That holds
+// for every kind of stream, also those that stop downloading while paused (mpegts.js, compatibility mode), whose
+// buffer then can't show how far live has moved on. While the stream plays normally the reference follows it (so
+// the stream's clock drifting from the computer's never adds up); a pause or a stall holds it, and when the player
+// catches up by itself (hls.js / mpegts.js jumping ahead) the delay comes down again.
+const LIVE_BEHIND = 1.5;   // seconds: from here on, and whenever paused, the badge says GO LIVE
+const liveClock = { wall: 0, media: 0, held: false, lag: 0 };
+let liveShown = '';
+function liveAnchor() { Object.assign(liveClock, { wall: performance.now(), media: video.currentTime, held: false, lag: 0 }); }
+function liveTick() {
+  const c = state.current;
+  if (!c || isVod(c) || TV || !liveClock.wall) { liveClock.lag = 0; return; }
+  const lag = (performance.now() - liveClock.wall) / 1000 - (video.currentTime - liveClock.media);
+  if (!liveClock.held || (!video.paused && lag < 0.5)) liveAnchor();   // live, or caught up again: follow along
+  else liveClock.lag = lag;
+}
+const liveBehind = () => !!state.current && !isVod(state.current) && !!liveClock.wall && (video.paused || liveClock.lag >= LIVE_BEHIND);
+function liveRender() {
+  liveTick();
+  const behind = liveBehind();
+  const text = behind && liveClock.lag >= 1 ? '−' + fmtClock(Math.round(liveClock.lag)) : '';
+  const key = `${behind}|${text}`;
+  if (key === liveShown) return;
+  liveShown = key;
+  const b = $('#pcLive');
+  b.classList.toggle('behind', behind);
+  b.querySelector('span').textContent = behind ? 'GO LIVE' : 'LIVE';
+  b.title = behind ? 'Go back to live (behind because of a pause or buffering)' : 'Live';
+  b.disabled = !behind;
+  $('#pcBehind').textContent = text;
+  $('#pcBehind').hidden = !text;
+  mirrorCtl();
+}
+// Back to live: hls.js knows where live is, so jump there; other streams are tuned in again, which is live.
+function goLive() {
+  const c = state.current;
+  if (!c || isVod(c) || TV) return;
+  if (hlsPlayer && !tcState.on && hlsPlayer.liveSyncPosition != null) {
+    video.currentTime = hlsPlayer.liveSyncPosition;
+    video.play().catch(() => {});
+    liveAnchor();
+  } else {
+    const token = ++playToken;
+    if (tcState.on) startPlayback(c, ['tc'], token); else audStart(c, token);
+  }
+  liveRender();
+}
+video.addEventListener('playing', () => { if (!liveClock.wall) liveAnchor(); liveRender(); });   // first picture: live
+video.addEventListener('pause', () => { if (liveClock.wall) liveClock.held = true; liveRender(); });
+video.addEventListener('waiting', () => { if (liveClock.wall) liveClock.held = true; });   // a stall puts it behind too
+setInterval(() => { if (state.current && !isVod(state.current)) liveRender(); }, 500);   // the delay counts on while paused
+$('#pcLive').addEventListener('click', goLive);
+
 /* ─────────────────────────── play / stop / controls ─────────────────────────── */
 function playChannel(ch) {
   ch = dlLocal(ch);   // a downloaded copy plays from disk
@@ -497,7 +638,13 @@ async function openPipWindow() {
   w.addEventListener('resize', layoutPlayer);
   layoutPlayer();
 
-  w.addEventListener('pagehide', () => {   // closed: by its own ×, "go to this video", stop, or the app
+  // closed: by its own ×, "go to this video", stop, or the app. Chromium fires pagehide; WKWebView (the macOS app)
+  // doesn't (popup spike on CI), so also notice that the window is closed, whichever comes first
+  let done = false;
+  const closed = () => {
+    if (done) return;
+    done = true;
+    clearInterval(watch);
     rootObserver.disconnect();
     pipWin = null;
     pipDoc = null;
@@ -505,7 +652,9 @@ async function openPipWindow() {
     movePlayer(() => home.parent.insertBefore(el, home.next), { later: true });
     $('#menu').hidden = true;
     uiPlayback();
-  });
+  };
+  w.addEventListener('pagehide', closed);
+  const watch = setInterval(() => { if (w.closed) closed(); }, 250);
 }
 
 // Moving the <video> into another window makes Chromium reload its source, which a running conversion or a live
@@ -546,7 +695,10 @@ const closePip = () => { if (pipWin) pipWin.close(); };
 let mirrorWin = null;
 let mirrorMuteSaved = null;          // our own mute state, restored when "sound on mirror window only" ends
 const mirrorOpen = () => !!mirrorWin && !mirrorWin.closed;
-const mirrorSound = () => LS.get('tuner.mirrorSound', 'main'); // 'main' | 'mirror' | 'both'
+// WebKit (the Tauri app on macOS and Linux) has no video.captureStream(): the mirror then gets the picture drawn on a
+// canvas (canvas.captureStream), and the sound stays in this window (MIGRATION_PLAN.md 9.4)
+const mirrorViaCanvas = !HTMLMediaElement.prototype.captureStream && !!HTMLCanvasElement.prototype.captureStream;
+const mirrorSound = () => (mirrorViaCanvas ? 'main' : LS.get('tuner.mirrorSound', 'main')); // 'main' | 'mirror' | 'both'
 
 // Apply the sound choice. (The mirror gets its audio from the stream, which is not affected by muting this window.)
 function applyMirrorSound() {
@@ -574,14 +726,53 @@ function mirrorCtl() {
     mirrorWin.setCtl({
       on: !!state.current, paused: video.paused, vod, muted: video.muted || video.volume === 0, volume: video.volume,
       cur: curTime() || 0, dur: vod && isFinite(dur) && dur > 0 ? dur : 0,
+      behind: !vod && liveBehind(), behindText: $('#pcBehind') ? $('#pcBehind').textContent : '',
     });
   } catch { /* window closing */ }
 }
 ['play', 'pause', 'volumechange', 'loadedmetadata', 'durationchange', 'timeupdate', 'emptied'].forEach((ev) => video.addEventListener(ev, mirrorCtl));
 
+// The canvas picture: one canvas and one stream while the mirror is open, so a new channel or a seek needs nothing new.
+// Drawn on every animation frame (and, while this window is hidden, from a timer, which the system may slow down).
+let mirrorCanvas = null;   // { stream, win, stop }
+function mirrorCanvasStream() {
+  if (mirrorCanvas) return mirrorCanvas.stream;
+  const c = document.createElement('canvas');
+  c.width = 1280; c.height = 720;
+  const g = c.getContext('2d');
+  let on = true, raf = 0, lastT = -1;
+  const draw = () => {
+    if (!on) return;
+    const w = video.videoWidth, h = video.videoHeight;
+    if (w && h && (c.width !== w || c.height !== h)) { c.width = w; c.height = h; lastT = -1; }
+    // only a new picture is drawn (a paused video keeps its last one in the stream; a seek or a new size redraws)
+    if (video.readyState >= 2 && w && video.currentTime !== lastT) {
+      try { g.drawImage(video, 0, 0, c.width, c.height); lastT = video.currentTime; } catch { /* no picture yet */ }
+    }
+  };
+  const frame = () => { draw(); raf = requestAnimationFrame(frame); };
+  raf = requestAnimationFrame(frame);
+  const timer = setInterval(() => { if (document.hidden) draw(); }, 40);
+  const stream = c.captureStream(30);
+  mirrorCanvas = {
+    stream, win: null,
+    stop() { on = false; cancelAnimationFrame(raf); clearInterval(timer); stream.getTracks().forEach((t) => t.stop()); },
+  };
+  return stream;
+}
+function stopMirrorCanvas() { if (mirrorCanvas) { mirrorCanvas.stop(); mirrorCanvas = null; } }
+
 function attachMirror() {
   if (!mirrorOpen()) return;
   try {
+    if (mirrorViaCanvas) {
+      const stream = mirrorCanvasStream();
+      // the same stream for the whole time the mirror is open: give it to each mirror window once
+      if (mirrorCanvas.win !== mirrorWin && mirrorWin.setStream) { mirrorWin.setStream(stream, 'main'); mirrorCanvas.win = mirrorWin; }
+      applyMirrorSound();
+      mirrorCtl();
+      return;
+    }
     // A fresh capture every time: after the source changes (new channel, seek in converted video) the old stream stops updating.
     const stream = video.captureStream ? video.captureStream() : null;
     if (stream && mirrorWin.setStream) mirrorWin.setStream(stream, mirrorSound());
@@ -592,7 +783,7 @@ function attachMirror() {
 function mirrorTitle(text) { try { if (mirrorOpen() && mirrorWin.setTitleText) mirrorWin.setTitleText(text || ''); } catch { /* window closing */ } }
 window.tunerMirrorReady = (w) => { mirrorWin = w; attachMirror(); mirrorTitle(state.current ? state.current.name : ''); uiMirrorChanged(); };
 video.addEventListener('loadeddata', attachMirror);
-video.addEventListener('emptied', () => { try { if (mirrorOpen() && mirrorWin.clearStream) mirrorWin.clearStream(); } catch { /* ignore */ } });
+video.addEventListener('emptied', () => { if (mirrorViaCanvas) return; try { if (mirrorOpen() && mirrorWin.clearStream) mirrorWin.clearStream(); } catch { /* ignore */ } });
 
 function openMirror(displayId) {
   if (mirrorOpen()) { try { mirrorWin.focus(); } catch { /* ignore */ } return; }
@@ -601,7 +792,7 @@ function openMirror(displayId) {
   if (!w) { toast('The pop-up was blocked. Allow pop-ups for this page and try again.', 'err'); return; }
   mirrorWin = w;
 }
-function mirrorClosed() { mirrorWin = null; applyMirrorSound(); uiMirrorChanged(); }
+function mirrorClosed() { mirrorWin = null; stopMirrorCanvas(); applyMirrorSound(); uiMirrorChanged(); }
 function closeMirror() { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } mirrorClosed(); }
 window.addEventListener('beforeunload', () => { try { if (mirrorOpen()) mirrorWin.close(); } catch { /* ignore */ } });
 setInterval(() => { if (mirrorWin && mirrorWin.closed) mirrorClosed(); }, 1000);
@@ -623,4 +814,6 @@ async function mirrorButton(anchor) {
 }
 
 /* ─────────────────────────────── capabilities ─────────────────────────────── */
-fetch('/api/capabilities').then((r) => r.json()).then((j) => { state.ffmpeg = !!j.ffmpeg; state.opensubtitles = !!j.opensubtitles; state.tmdb = !!j.tmdb; uiCaps(); }).catch(() => uiCaps());
+// (ui.js, which has uiCaps, may not have loaded yet when a fast server answers)
+const capsChanged = () => { if (typeof uiCaps === 'function') uiCaps(); };
+fetch('/api/capabilities').then((r) => r.json()).then((j) => { state.ffmpeg = !!j.ffmpeg; state.opensubtitles = !!j.opensubtitles; state.tmdb = !!j.tmdb; capsChanged(); }).catch(capsChanged);

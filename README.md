@@ -1,6 +1,6 @@
 # AG Horizon
 
-A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like IPTVnator. It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
+A desktop IPTV player (Windows, macOS, Linux) built with Tauri (from 3.1; 2.x was built with Electron), laid out like IPTVnator. It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
 
 - **Dashboard** with a large slideshow, *Trending this week* (from TMDB, matched to your playlists), live channels on your favorites, and what you watched recently
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
@@ -20,14 +20,14 @@ A desktop IPTV player (Windows, macOS, Linux) built with Electron, laid out like
 | System | File |
 |---|---|
 | Windows | `AG-Horizon-Setup-<version>.exe` |
-| macOS (Apple silicon) | `AG-Horizon-<version>-arm64.dmg` |
+| macOS (Apple silicon and Intel) | `AG-Horizon-<version>-universal.dmg` |
 | Linux | `AG-Horizon-<version>.AppImage` |
 | Android TV | `AG-Horizon-TV-<version>.apk` |
 
 After that the app updates itself: **Settings › About & updates**.
 
 - **Windows:** the installer isn't code-signed, so SmartScreen may say "Windows protected your PC" the first time. Click **More info › Run anyway**.
-- **macOS:** the app isn't signed either. The first time, macOS says it can't check it: open **System Settings › Privacy & Security** and click **Open Anyway** (on macOS 14 and earlier, right-click the app and choose **Open**). On a Mac the app tells you about new versions, and you download them from the releases page.
+- **macOS:** the app isn't signed either. The first time, macOS says it can't check it: open **System Settings › Privacy & Security** and click **Open Anyway** (on macOS 14 and earlier, right-click the app and choose **Open**). Move it to **Applications** first: from there it updates itself like on the other systems (not when it runs from the disk image).
 - **Linux:** make the file executable once (`chmod +x AG-Horizon-*.AppImage`), then run it. If it won't start on a newer Ubuntu, install `libfuse2` (`libfuse2t64` on 24.04 and later).
 - **Android TV:** the app isn't in the Play Store; you install the `.apk` yourself. See [Android TV](#android-tv).
 
@@ -97,16 +97,20 @@ The language button (next to the CC button, right of the volume) lists the sound
 
 ## Compatibility mode (codecs)
 
-The player is Chromium, which can't decode HEVC on every machine or DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
+The player is the system's own web view (WebView2 on Windows, WebKit on macOS and Linux), which can't decode every format: HEVC on some machines, DTS / AC-3 audio. If a stream fails, or plays with no picture or no sound, AG Horizon converts it on the fly with ffmpeg to H.264 video + stereo AAC audio. Videos that already have H.264 only get their audio converted (cheap); HEVC is re-encoded (uses CPU, capped at 1080p). A "Compatibility mode" badge shows while this is active. Converted movies and episodes use AG Horizon's own seek bar, and each seek restarts the conversion at that point (a second or two). Switch it to *Always* or *Off* in Settings › Playback.
 
-- The app **bundles ffmpeg** (via the `ffmpeg-static` package, installed by `npm install`).
-- The bundled ffmpeg build is GPL-licensed; that matters only if you redistribute installers to other people.
+- The app **bundles ffmpeg**, which is licensed under the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.html):
+  - **Windows:** ffmpeg 8.1, the win64 GPL build by [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (autobuild 2026-10-31), checked by SHA-256 when the app is built (`scripts/tauri-prep.js`). Its complete source code, every library in it included, is published as [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source) (`scripts/ffmpeg-source.sh` makes it).
+  - **Linux:** the same ffmpeg 8.1 from the same BtbN autobuild (linux64 GPL); its source is in the same release. The AppImage also bundles libraries from Ubuntu so video plays everywhere (GStreamer with `gst-libav`, WebKitGTK, GTK and others, under the GPL and LGPL): each release has `AG-Horizon-<version>-AppImage-sources.txt`, which lists them and links to their published source (`scripts/appimage-sources.sh`).
+  - **macOS:** ffmpeg 8.1 from the same commit, built for this app by `scripts/ffmpeg-macos.sh` with x264, dav1d and OpenSSL at BtbN's versions; its complete source is published with it in [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3).
+  - **The 2.x Electron app (and running it from source):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
+- The licence matters only if you redistribute installers to other people.
 
 ## How it works
 
-The window shows the UI from a small server (`server.js`) that runs inside the app on `127.0.0.1`. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
+The window shows the UI from a small server that runs inside the app on `127.0.0.1`: the Rust server in `server-rs/` (the Tauri app and Android TV), ported from `server.js` (the Electron app), which the tests still hold it to. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
 
-On Android TV it is the same pages and the same `server.js`: the app (`android/`) shows the pages in a WebView and runs the server with Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile)) inside the app. The pages notice the TV (`public/js/tv.js`), switch to the remote, and hand what should play to ExoPlayer.
+On Android TV it is the same pages and the same server: the app (`android/`) shows the pages in a WebView and runs the Rust server (`server-rs/`, built for Android as `server-rs/jni`) inside the app. The pages notice the TV (`public/js/tv.js`), switch to the remote, and hand what should play to ExoPlayer.
 
 ## Notes
 
@@ -142,7 +146,7 @@ public/mirror.html/js   the mirror window
 scripts/get-vendor.js   optional: download player libraries locally
 public/js/tv.js         Android TV: the remote, what a TV leaves out, handing playback to the TV's player
 unicode-ln.js           letters and numbers, for the Node.js inside the Android TV app (made by scripts/gen-unicode-ln.js)
-android/                the Android TV app: WebView, Node.js for Android running server.js, ExoPlayer
+android/                the Android TV app: WebView, the Rust server (server-rs/jni), ExoPlayer
 android/ci/smoke.js     tries the Android TV app on an emulator
 ```
 
@@ -152,4 +156,6 @@ Navigation icons (Live TV, Series, Movies) are from [Font Awesome Free](https://
 
 Cast photos come from [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
 
-The Android TV app runs its server with [nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile) and plays with [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media); sound the TV can't decode is decoded by ffmpeg, as built by the [Jellyfin project](https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder) (GPL-licensed, like the desktop app's ffmpeg: that matters only if you redistribute the app).
+The Android TV app runs the same Rust server as the desktop app and plays with [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media); sound the TV can't decode is decoded by ffmpeg, as built by the [Jellyfin project](https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder) (GPL-licensed, like the desktop app's ffmpeg: that matters only if you redistribute the app).
+
+The desktop app's ffmpeg is [ffmpeg](https://ffmpeg.org) (GPL v3); see *Compatibility mode* above for which build each system gets and where its source is.

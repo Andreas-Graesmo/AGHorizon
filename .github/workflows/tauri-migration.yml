@@ -1,0 +1,54 @@
+# MIGRATION_PLAN.md Phase 6 gate on Windows: the Tauri app's first start after the real Electron app
+# (e2e/tauri-migration.js), and the Tauri installer over an installed Electron app (e2e/tauri-installer.js).
+name: Tauri first start after Electron (migration, phase 6)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['desktop/**', 'electron/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'sidecar/**', 'server-rs/**', 'server.js', 'public/**', 'e2e/tauri-migration.js', 'e2e/tauri-installer.js', 'package.json', '!**/*.md', '.github/workflows/tauri-migration.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: npm ci (with Electron, which writes the export)
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+      - name: Player libraries into public/vendor
+        run: for i in 1 2 3; do npm run setup && break; sleep 10; done
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      - name: Build the app
+        working-directory: src-tauri
+        run: cargo build --release
+      - name: Playwright (CDP and Electron client only; no browsers)
+        run: npm install --no-save --no-audit --no-fund playwright@1.63.0
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      - name: First start after the Electron app
+        run: node e2e/tauri-migration.js
+      - name: Electron installer (as released today, unsigned here)
+        run: npx electron-builder --win nsis --x64 --publish never
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+      - name: Tauri installer, without updater files (they need the signing key; this test does not use them)
+        run: npx --yes @tauri-apps/cli@2.12.4 build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Installer over the Electron app
+        run: node e2e/tauri-installer.js "$(ls dist/*Setup*.exe | head -1)" "$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)"

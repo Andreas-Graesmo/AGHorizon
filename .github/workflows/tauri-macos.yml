@@ -1,0 +1,92 @@
+# MIGRATION_PLAN.md 9.7 / 9.8: build the Tauri app for macOS, one universal app for Apple silicon and Intel (ad hoc
+# signed like the Electron app), and check it end to end (e2e/tauri-unix.js) on both kinds of Mac, with its pinned
+# ffmpeg (our build, scripts/ffmpeg-macos.sh).
+name: Tauri app on macOS (migration, phase 9)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'test/fixtures/**', '!**/*.md', '.github/workflows/tauri-macos.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # built and checked on an Intel Mac (GitHub's Apple silicon runners were unavailable for hours on 2026-11-18;
+  # an Intel Mac builds the universal app, the Apple silicon half by cross-compiling as Rust does anywhere)
+  macos:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: npm ci (without Electron's binary; not needed here)
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - name: Player libraries into public/vendor
+        run: for i in 1 2 3; do npm run setup && break; sleep 10; done
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: 'aarch64-apple-darwin,x86_64-apple-darwin' }
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      # no updater files yet (MIGRATION_PLAN.md 9.9): they need the release signing key
+      - name: Build the app and the dmg
+        run: |
+          echo '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/no-updater.json"
+          npx --yes @tauri-apps/cli@2.12.4 build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/no-updater.json"
+          b=src-tauri/target/universal-apple-darwin/release/bundle
+          ls -la $b/macos/ $b/dmg/
+          du -sh $b/macos/*.app
+          codesign -dv $b/macos/*.app 2>&1 | head -5
+          # every program in it for both processors
+          for f in $b/macos/*.app/Contents/MacOS/*; do echo "$(basename "$f"): $(lipo -archs "$f")"; lipo -archs "$f" | grep -q x86_64 && lipo -archs "$f" | grep -q arm64; done
+      - name: End to end
+        timeout-minutes: 12
+        run: node e2e/tauri-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app src-tauri/binaries/ffmpeg-universal-apple-darwin
+      # 9.10: from the Electron app to this one, as tauri-linux.yml does on Linux: the real Electron app writes its
+      # export, this app imports it once; the sync code goes into the Keychain
+      - name: Electron → Tauri (data and sync code)
+        timeout-minutes: 12
+        run: |
+          node node_modules/electron/install.js
+          npm install --no-save --no-audit --no-fund playwright@1.63.0
+          node e2e/tauri-migration-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      # the same app for the Apple silicon Mac below (tar keeps its signature and permissions)
+      - name: The app, for the Apple silicon run
+        run: tar -C src-tauri/target/universal-apple-darwin/release/bundle/macos -cf "$RUNNER_TEMP/app.tar" "AG Horizon.app"
+      - uses: actions/upload-artifact@v4
+        with: { name: tauri-macos-app, path: '${{ runner.temp }}/app.tar', retention-days: 3 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AG-Horizon-Tauri-macOS-dmg
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 7
+
+  # the universal app's Apple silicon half: the same .app, started on an Apple silicon Mac (when GitHub has one)
+  apple-silicon:
+    needs: macos
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: tauri-macos-app, path: app }
+      - name: End to end, on Apple silicon
+        run: |
+          [ "$(uname -m)" = arm64 ] || { echo "::error::not an Apple silicon Mac"; exit 1; }
+          tar -C app -xf app/app.tar
+          node e2e/tauri-unix.js "app/AG Horizon.app" "app/AG Horizon.app/Contents/MacOS/ffmpeg"

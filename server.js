@@ -18,7 +18,7 @@ const zlib = require('zlib');
 const { Readable } = require('stream');
 
 const HOST = '127.0.0.1';   // only the desktop app talks to this server
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, 'public');   // the Tauri app's server sidecar passes its resource folder
 const DEFAULT_UA = 'VLC/3.0.20 LibVLC/3.0.20';
 
 const MIME = {
@@ -437,7 +437,9 @@ async function handleStream(req, res, q) {
  * The rules were tried against a real provider with scripts/burst-probe.js first.
  */
 const shareTuning = {
-  revisit: 3,    // seconds before a picture is worth another visit: it can only gain what was broadcast meanwhile
+  // seconds before a picture is worth another visit: it can only gain what was broadcast meanwhile
+  // (AGH_SHARE_REVISIT: shorter, for the test suite only, which would otherwise take half a minute)
+  revisit: Number(process.env.AGH_SHARE_REVISIT) || 3,
   visitMax: 4,   // seconds a visit may last while another picture waits
 };
 const shareNow = () => performance.now() / 1000;
@@ -749,6 +751,7 @@ function handleProbe(req, res, q) {
       audios: parseAudioStreams(err),
       // text subtitles in the stream: the CC menu lists them, the conversion writes them (subs + sid below)
       subs: subs.parseSubStreams(err).filter((t) => t.text).map(({ index, lang, forced, sdh }) => ({ index, lang, forced, sdh })),
+      hdr: isHdr(err),   // PQ / HLG: tone mapped when it has to be converted to H.264
     });
   });
   res.on('close', () => proc.kill('SIGKILL'));
@@ -782,6 +785,20 @@ function handleKeyframe(req, res, q) {
   res.on('close', () => proc.kill('SIGKILL'));
 }
 
+// The video stream is HDR (PQ or HLG): its line in ffmpeg's report names the transfer, "…(tv, bt2020nc/bt2020/smpte2084)"
+function isHdr(report) {
+  const m = /Stream #\d+:\d+[^\n]*?Video:[^\n]*/i.exec(report);
+  return !!m && /smpte2084|arib-std-b67/i.test(m[0]);
+}
+// Whether this ffmpeg has zscale (zimg), which tone mapping needs; asked once. BtbN's builds have it.
+let zscaleKnown = null;
+function hasZscale(bin) {
+  if (zscaleKnown == null) {
+    try { zscaleKnown = String(spawnSync(bin, ['-hide_banner', '-filters'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10000 }).stdout || '').split('\n').some((l) => l.trim().split(/\s+/)[1] === 'zscale'); } catch { zscaleKnown = false; }
+  }
+  return zscaleKnown;
+}
+
 let activeConversions = 0;
 const MAX_CONVERSIONS = 4;   // Multi view's 2 × 2 grid
 
@@ -793,6 +810,9 @@ function handleTranscode(req, res, q) {
   const start = Math.max(0, Number(q.get('start')) || 0);
   const keepHevc = q.get('video') === 'hevc';   // the player decodes HEVC itself
   const copyVideo = q.get('video') === 'copy' || keepHevc;
+  // ?fmt=mp4: kept HEVC as fragmented MP4 (hvc1), which WebKit's MSE takes; ?hdr=1: tone mapped when converted
+  const hevcMp4 = keepHevc && q.get('fmt') === 'mp4';
+  const tonemap = !copyVideo && q.get('hdr') === '1' && hasZscale(bin);
   const maxH = Math.min(1080, Math.max(240, Number(q.get('maxh')) || 1080));   // Multi view asks for less: smaller pictures, less CPU
   // which sound track (the language menu): by its MPEG-TS id when the player knows it (exact), else by its place
   const apid = /^\d{1,4}$/.test(q.get('apid') || '') ? Number(q.get('apid')) : null;
@@ -806,10 +826,14 @@ function handleTranscode(req, res, q) {
     ...(copyVideo
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-         '-vf', `scale=-2:'min(${maxH},ih)'`, '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
+         // HDR: smaller first (cheaper), then PQ / HLG to linear light, tone mapped to SDR, back to BT.709
+         '-vf', `scale=-2:'min(${maxH},ih)'${tonemap ? ',zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p' : ''}`,
+         ...(tonemap ? ['-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709'] : []),
+         '-g', '50', '-keyint_min', '50', '-sc_threshold', '0']),
     '-c:a', 'aac', '-b:a', '192k', '-ac', '2', // stereo AAC plays everywhere (and downmixes DTS / AC-3 5.1)
     // Chromium shows copied HEVC about a GOP late in fragmented MP4 (sound runs ~2 s ahead), but in sync in Matroska
-    ...(keepHevc ? ['-f', 'matroska', '-live', '1'] : ['-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4']),
+    // (WebKit's MSE takes no Matroska: there fragmented MP4, tagged hvc1 as Apple's decoders want)
+    ...(keepHevc && !hevcMp4 ? ['-f', 'matroska', '-live', '1'] : [...(hevcMp4 ? ['-tag:v', 'hvc1'] : []), '-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4']),
     'pipe:1',
     // ?subs=0,3&sid=…: also write these text subtitle tracks, read through /api/tcsubs/<sid>/<track>
     ...subs.tcSubArgs(q.get('sid'), (q.get('subs') || '').split(',').filter((n) => /^\d{1,3}$/.test(n)).slice(0, 64), start),
@@ -831,7 +855,7 @@ function handleTranscode(req, res, q) {
   proc.stdout.on('data', (chunk) => {
     if (!started) {
       started = true;
-      res.writeHead(200, { 'Content-Type': keepHevc ? 'video/x-matroska' : 'video/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'none' });
+      res.writeHead(200, { 'Content-Type': keepHevc && !hevcMp4 ? 'video/x-matroska' : 'video/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'none' });
     }
     if (!res.write(chunk)) { proc.stdout.pause(); res.once('drain', () => proc.stdout.resume()); }
   });
@@ -931,6 +955,8 @@ async function handleSubsApi(req, res, pathname) {
 // runtime: minutes (a series: per episode), 0 when TMDB doesn't know. Providers' own runtimes are often wrong.
 // (TMDB, with the app's key like OpenSubtitles: env TMDB_API_KEY or "tmdbApiKey" in secrets.json, written by the release build)
 const TMDB_KEY = process.env.TMDB_API_KEY || (() => { try { return require('./secrets.json').tmdbApiKey || ''; } catch { return ''; } })();
+// AGH_TMDB_BASE: the test suite's fake TMDB (test/parity/); the real one otherwise
+const TMDB_API = process.env.AGH_TMDB_BASE || 'https://api.themoviedb.org/3';
 const tmdbCache = new Map();   // "movie:603" -> { runtime, cast }
 async function handleTmdb(req, res, q) {
   if (!TMDB_KEY) throw httpError(501, 'TMDB isn’t available in this build');
@@ -941,7 +967,7 @@ async function handleTmdb(req, res, q) {
   if (!tmdbCache.has(key)) {
     // series: aggregate_credits lists everyone across all seasons, with their character names under roles
     const credits = type === 'tv' ? 'aggregate_credits' : 'credits';
-    const r = await fetch(`https://api.themoviedb.org/3/${type}/${id}?append_to_response=${credits}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${TMDB_API}/${type}/${id}?append_to_response=${credits}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw httpError(r.status === 404 ? 404 : 502, `TMDB answered HTTP ${r.status}`);
     const j = await r.json();
     const runtime = Number(type === 'tv' ? (j.episode_run_time || [])[0] || (j.last_episode_to_air && j.last_episode_to_air.runtime) : j.runtime) || 0;
@@ -962,7 +988,7 @@ let trending = null;   // { t, job }
 const TRENDING_TTL = 6 * 3600e3;
 async function loadTrending() {
   const one = async (type, page) => {
-    const r = await fetch(`https://api.themoviedb.org/3/trending/${type}/week?page=${page}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${TMDB_API}/trending/${type}/week?page=${page}&api_key=${encodeURIComponent(TMDB_KEY)}`, { signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw httpError(502, `TMDB answered HTTP ${r.status}`);
     return ((await r.json()).results || []).map((x) => ({
       id: x.id,

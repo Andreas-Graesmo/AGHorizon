@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>mirror (spike)</title>
+<style>html,body{margin:0;background:#000;height:100%}video{width:100%;height:100%}</style></head>
+<body>
+<video id="v" playsinline muted></video>
+<script>
+'use strict';
+// Stand-in for public/mirror.js: the same calls on window.opener, in the same order.
+const v = document.getElementById('v');
+const report = (k, val) => { try { window.opener.spikeMirrorReport(k, val); } catch { /* opener gone */ } };
+try {   // mirror.js:15-18 copies the app's theme and icon sprite out of the opener's document
+  const app = window.opener.document;
+  Object.assign(document.documentElement.dataset, app.documentElement.dataset);
+  document.body.appendChild(app.querySelector('body > svg').cloneNode(true));
+  report('openerDocument', 'read theme + cloned sprite');
+} catch (e) { report('openerDocument', `failed: ${e.name}: ${e.message}`); }
+window.setStream = (stream) => { v.srcObject = stream; v.play().catch((e) => report('play', `${e.name}: ${e.message}`)); };
+setInterval(() => report('frame', { w: v.videoWidth, t: v.currentTime }), 250);
+// mirror.js:31 drags the floating window with window.moveTo
+window.spikeMoveTo = (x, y) => { const before = [window.screenX, window.screenY]; window.moveTo(x, y); return new Promise((r) => setTimeout(() => r({ before, after: [window.screenX, window.screenY] }), 400)); };
+try { window.opener.spikeMirrorReady(window); } catch (e) { document.title = `no opener: ${e.message}`; }
+</script>
+</body>
+</html>

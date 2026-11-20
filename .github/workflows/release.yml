@@ -1,75 +1,158 @@
+# MIGRATION_PLAN.md 5.6 / 9.10: every desktop system is the Tauri app; the Android TV app as before.
+# Before the first tag with this file: the bridge release that hands over on macOS and Linux (MIGRATION_PLAN.md 9.10)
+# must be out, as the Windows one (1.4) was before Windows moved.
 name: Release
 
 on:
   push:
     tags: ['v*']
-  # started by tag-release.yml on the tag it made (a tag a workflow pushes starts nothing by itself); on a tag only
+  # started by tag-release.yml (on main) on the tag it made (a tag a workflow pushes starts nothing by itself); on a
+  # tag only
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  # The Tauri app (MIGRATION_PLAN.md 5.6, 9.8, 9.9), signed for its updater with the release key (repository secrets
+  # TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, MIGRATION_PLAN.md 1.0). scripts/tauri-release.js
+  # names the files as the website and README link to them:
+  #   Windows  AG-Horizon-Setup-<version>.exe (+ .sig)
+  #   macOS    AG-Horizon-<version>-universal.dmg, AG-Horizon-<version>-universal.app.tar.gz (+ .sig, the update):
+  #            one app for Apple silicon and Intel (owner's decision 2026-11-19)
+  #   Linux    AG-Horizon-<version>.AppImage (+ .sig)
+  # and each system's latest.json entries, merged into one by the latest-json job. No Electron builds any more: old
+  # Electron apps must only ever reach the bridge release, which hands over to this app (MIGRATION_PLAN.md 1.3, 9.10);
+  # a stable release carries the bridge's update files for that (bridge-feed, below).
+  tauri:
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - { os: windows-latest, name: windows, bundles: nsis }
+          # an Intel Mac builds the universal app (GitHub's Apple silicon runners were short for hours on 2026-11-18)
+          - { os: macos-15-intel, name: macos, bundles: 'app,dmg', args: '--target universal-apple-darwin', targets: 'aarch64-apple-darwin,x86_64-apple-darwin' }
+          - { os: ubuntu-22.04, name: linux, bundles: appimage }   # the oldest runner: the AppImage's glibc baseline
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run: { shell: bash }
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
-      # Electron (~100 MB) and electron-builder's tools come from GitHub's file servers on every build; keep them
-      # between builds, so a build rarely depends on those downloads (a new Electron version downloads once).
-      - name: Cache Electron and electron-builder downloads
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
-          restore-keys: ${{ runner.os }}-electron-
-      # downloads can fail for a moment (e.g. "504 Gateway Time-out"): try again before giving up
+          node-version: 22
+      # see tauri-linux.yml: GStreamer is bundled, without its libsoup 2 plugins (they kill WebKitGTK 4.1's web process)
+      - name: Linux packages (WebKitGTK, GStreamer)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev file \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
+          for p in /usr/lib/x86_64-linux-gnu/gstreamer-1.0/*.so; do ldd "$p" | grep -q 'libsoup-2.4' && sudo rm "$p"; done; true
       - name: Install
-        shell: bash
         run: |
           for i in 1 2 3; do
             npm ci && exit 0
             echo "npm ci failed (try $i of 3), trying again in 30 seconds"; sleep 30
           done
           exit 1
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Test
         run: npm test
       - name: Download the video libraries so the app also works offline
-        shell: bash
         run: |
           for i in 1 2 3; do
             npm run setup && exit 0
             echo "Download failed (try $i of 3), trying again in 30 seconds"; sleep 30
           done
           exit 1
-      - name: Add the API keys (repository secrets OPENSUBTITLES_API_KEY and TMDB_API_KEY)
-        shell: bash
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: '${{ matrix.targets }}' }
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      - name: The signing key is there
         run: |
-          node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '', tmdbApiKey: process.env.TMDB_API_KEY || '' }))"
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error title=Signing key::The repository secret TAURI_SIGNING_PRIVATE_KEY is missing (MIGRATION_PLAN.md 1.0). Without it the app can't be updated."
+            exit 1
+          fi
         env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      - name: Build
+        run: npx --yes @tauri-apps/cli@2.12.4 build ${{ matrix.args }} --bundles ${{ matrix.bundles }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # built into the app (src-tauri/src/main.rs), as secrets.json is in the Electron app
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-      - name: Build and upload installers
-        run: npx electron-builder --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release files
+        run: |
+          node scripts/tauri-release.js release-out
+          mkdir -p latest && mv release-out/latest.json "latest/latest-${{ matrix.name }}.json"
+          ls -la release-out
+      # Linux: the source of every Ubuntu package the AppImage bundles (owner's decision 2026-11-18), fetched right
+      # after the build, while Ubuntu still has those versions. Published once per set of source packages, as a
+      # pre-release whose tag is not a version number; the app release gets a file that says where.
+      - name: The AppImage's third-party sources
+        if: runner.os == 'Linux'
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          grep -q '^deb-src' /etc/apt/sources.list 2>/dev/null || sudo sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee -a /etc/apt/sources.list > /dev/null
+          sudo apt-get update -qq
+          app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
+          scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/src" --list-only
+          tag="appimage-sources-ubuntu22.04-$(awk '/^== source packages/,/^$/' "$RUNNER_TEMP/src/MANIFEST.txt" | sha256sum | cut -c1-12)"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            rm -rf "$RUNNER_TEMP/src" && scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/src"
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Third-party sources for the Linux AppImage" \
+              --notes "The source of every Ubuntu package bundled in AG Horizon's Linux AppImage (GStreamer, gst-libav and the libraries it uses, WebKitGTK, GTK and others; GPL and LGPL among them). MANIFEST.txt lists each bundled file and its package. This is not an app release."
+            ( cd "$RUNNER_TEMP/src" && gh release upload "$tag" -- * )
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          { echo "The source of the third-party software in AG-Horizon-$version.AppImage: https://github.com/$GH_REPO/releases/tag/$tag"; echo; cat "$RUNNER_TEMP/src/MANIFEST.txt"; } > "release-out/AG-Horizon-$version-AppImage-sources.txt"
+      - name: Add them to the draft release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          pre=""; case "$GITHUB_REF_NAME" in *-*) pre="--prerelease";; esac
+          # whichever build is first makes the draft
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft $pre --title "$version" --notes "" || true
+          gh release upload "$GITHUB_REF_NAME" release-out/* --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: latest-${{ matrix.name }}
+          path: latest/
 
-  # The Android TV app: one APK, added to the same draft release. It doesn't wait for the desktop builds (a Mac
-  # build can sit in GitHub's queue for a long time): by the time the APK is built, the Linux or Windows build has
-  # normally made the draft, and the last step waits a little for it if not.
+  # One latest.json for the release, with every system's entries (what the Tauri updater and the hand-over read)
+  latest-json:
+    needs: tauri
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'latest-*', merge-multiple: true, path: latest }
+      - name: latest.json
+        run: |
+          ls latest
+          node scripts/tauri-release.js --merge latest.json latest/*.json
+          gh release upload "$GITHUB_REF_NAME" latest.json --clobber
+
   android-tv:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -80,12 +163,16 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - name: Cache Node.js for Android
-        uses: actions/cache@v4
-        with:
-          path: android/app/libnode
-          key: libnode-${{ hashFiles('android/app/build.gradle.kts') }}
-          restore-keys: libnode-
+      # the app's server: the Rust server for Android (server-rs/jni, MIGRATION_PLAN.md 8.7), built by the app's
+      # Gradle build with cargo-ndk and the runner's NDK
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: 'aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android' }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'server-rs/jni -> target', cache-bin: true }
+      - name: cargo-ndk and the NDK
+        run: |
+          command -v cargo-ndk > /dev/null || cargo install cargo-ndk --locked
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}" >> "$GITHUB_ENV"
       - name: Add the API keys (repository secrets OPENSUBTITLES_API_KEY and TMDB_API_KEY)
         run: |
           node -e "require('fs').writeFileSync('secrets.json', JSON.stringify({ opensubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY || '', tmdbApiKey: process.env.TMDB_API_KEY || '' }))"
@@ -129,12 +216,33 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
 
+  # Stable versions (no dash) also carry the bridge release's update files (latest.yml, latest-mac.yml, latest-linux.yml),
+  # pointing back at the bridge's downloads (scripts/bridge-feed.js): Electron apps older than the bridge read those in
+  # GitHub's latest release, update to the bridge, and the bridge hands over to this app (MIGRATION_PLAN.md 7.3). Until
+  # the bridge releases have drained (10.4).
+  bridge-feed:
+    needs: [tauri, latest-json]   # the draft exists by then
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    env:
+      BRIDGE: v2.6.0   # the bridge release (Windows, macOS and Linux all hand over from it)
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: The bridge's update files, pointing at the bridge
+        run: |
+          mkdir bridge
+          for f in latest.yml latest-mac.yml latest-linux.yml; do gh release download "$BRIDGE" -p "$f" -D bridge; done
+          node scripts/bridge-feed.js "$BRIDGE" bridge/*.yml
+          gh release upload "$GITHUB_REF_NAME" bridge/*.yml --clobber
+
   # Test versions (a tag with a dash, e.g. v2.5.0-beta.1). Their draft is always marked as a pre-release, even when a
   # build failed, so publishing it by hand can't make it GitHub's "latest release" (which every installed app takes).
   # Once the desktop and Android TV builds are done, it is published by itself:
   # only apps on the Test update channel pick it up. Stable versions stay drafts until you press Publish.
   publish-test:
-    needs: [build, android-tv]
+    needs: [tauri, latest-json, android-tv]
     if: ${{ !cancelled() && contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     env:
@@ -146,5 +254,5 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then gh release edit "$GITHUB_REF_NAME" --prerelease
           else echo "::warning::No release $GITHUB_REF_NAME was made (every build failed?)"; fi
       - name: Publish it
-        if: ${{ needs.build.result == 'success' && needs.android-tv.result == 'success' }}
+        if: ${{ needs.tauri.result == 'success' && needs.latest-json.result == 'success' && needs.android-tv.result == 'success' }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease

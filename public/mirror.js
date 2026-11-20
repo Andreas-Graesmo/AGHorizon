@@ -18,8 +18,14 @@ try {
   document.body.appendChild(app.querySelector('body > svg').cloneNode(true));
 } catch { /* not opened from the app: said further down */ }
 
+// the Tauri app moves this window itself (a native drag from tauri-shell.js, which also works on Wayland, where a page
+// can't move its window). Moving it here too broke the buttons there: the native drag took the mouse, the page never
+// saw the button come up, and its pointer capture then sent every later click to the page instead of the button.
+const nativeDrag = (() => { try { return !!(window.opener && window.opener.__TAURI__); } catch { return false; } })();
 if (!new URLSearchParams(location.search).has('d')) {   // no monitor picked: the small window that stays on top
   document.body.classList.add('float');
+}
+if (!new URLSearchParams(location.search).has('d') && !nativeDrag) {
   // Dragging the picture moves the window. Done here and not with -webkit-app-region: a drag region gets no
   // mouse events, so the controls could never appear on hover.
   let grab = null;
@@ -105,6 +111,13 @@ function syncCtl() {
     $('pcCur').textContent = clock(ctl.cur);
   }
   $('pcDur').textContent = ctl.dur ? clock(ctl.dur) : '--:--';
+  // behind live: GO LIVE, as in the main player (#18)
+  const live = $('pcLive');
+  live.classList.toggle('behind', !!ctl.behind);
+  live.querySelector('span').textContent = ctl.behind ? 'GO LIVE' : 'LIVE';
+  live.disabled = !ctl.behind;
+  $('pcBehind').textContent = ctl.behindText || '';
+  $('pcBehind').hidden = !ctl.behindText;
 }
 window.setCtl = (s) => { ctl = s; syncCtl(); };
 function muteTo(m) {
@@ -119,6 +132,7 @@ function volumeTo(x) {
 }
 function openVol(open) { volBox.classList.toggle('open', open); $('mVol').setAttribute('aria-expanded', open); }
 $('pcPlay').addEventListener('click', () => main('togglePlay'));
+$('pcLive').addEventListener('click', () => main('goLive'));
 $('pcBack').addEventListener('click', () => main('seekBy', -15));
 $('pcFwd').addEventListener('click', () => main('seekBy', 15));
 seek.addEventListener('input', () => { seeking = true; $('pcCur').textContent = clock(Number(seek.value)); setFill(seek, Number(seek.value) / (Number(seek.max) || 1)); });

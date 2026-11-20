@@ -1,0 +1,106 @@
+# MIGRATION_PLAN.md 9.8: build the Tauri app's Linux AppImage (with BtbN's ffmpeg and the GStreamer that WebKitGTK
+# plays video with) and check it end to end (e2e/tauri-unix.js). Built on the oldest Ubuntu runner, so the
+# AppImage also starts on older systems (it needs the build system's glibc or newer).
+name: Tauri app on Linux (migration, phase 9)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'test/fixtures/**', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      # GStreamer: base and good (containers, playback), bad (the H.264 parser), libav (the H.264/AAC/AC-3 decoders);
+      # whatever is installed here goes into the AppImage
+      - name: Linux packages (WebKitGTK, GStreamer, a virtual display)
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev file xvfb \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
+      # Ubuntu 22.04's GStreamer HTTP plugins link libsoup 2; WebKitGTK 4.1 uses libsoup 3, and both in one process
+      # kills the web process ("Using libsoup2 and libsoup3 in the same process is not supported"). WebKit fetches
+      # media itself, so drop those plugins before they are bundled (a throwaway runner).
+      - name: GStreamer without the libsoup 2 plugins
+        run: |
+          dir=/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+          for p in "$dir"/*.so; do
+            if ldd "$p" | grep -q 'libsoup-2.4'; then echo "removing $(basename "$p")"; sudo rm "$p"; fi
+          done
+      - name: npm ci (without Electron's binary; not needed here)
+        run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - name: Player libraries into public/vendor
+        run: for i in 1 2 3; do npm run setup && break; sleep 10; done
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            server-rs -> target
+      - name: Sidecars (the Rust server, the pinned ffmpeg)
+        run: node scripts/tauri-prep.js
+      # no updater files yet (MIGRATION_PLAN.md 9.9): they need the release signing key
+      - name: Build the AppImage
+        run: |
+          echo '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/no-updater.json"
+          npx --yes @tauri-apps/cli@2.12.4 build --bundles appimage --config "$RUNNER_TEMP/no-updater.json"
+          ls -la src-tauri/target/release/bundle/appimage/
+          # nothing in it may load libsoup 2 (see above)
+          cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE"/src-tauri/target/release/bundle/appimage/*.AppImage --appimage-extract > /dev/null
+          if find squashfs-root -name 'libsoup-2.4*' | grep -q .; then echo "libsoup 2 is in the AppImage"; exit 1; fi
+          rm -rf squashfs-root
+      - name: End to end
+        timeout-minutes: 12
+        run: node e2e/tauri-unix.js src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+      # 9.10: from the Electron app to this one: the real Electron app writes its export, this AppImage imports it;
+      # the sync code goes into GNOME Keyring (a Secret Service on a private session bus)
+      - name: Electron → Tauri (data and sync code)
+        timeout-minutes: 12
+        run: |
+          sudo apt-get install -y -qq gnome-keyring > /dev/null
+          node node_modules/electron/install.js
+          npm install --no-save --no-audit --no-fund playwright@1.63.0
+          app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
+          dbus-run-session -- bash -c 'eval "$(echo -n e2e | gnome-keyring-daemon --unlock --components=secrets)" > /dev/null; xvfb-run -a node e2e/tauri-migration-unix.js "$1"' sh "$app"
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      # the bundled Ubuntu packages and their source packages (scripts/appimage-sources.sh): listed on every build;
+      # run by hand, also fetched, to see that every source can be (the release job publishes them, MIGRATION_PLAN.md 9.8)
+      - name: Third-party sources (the list; fetched too when run by hand)
+        run: |
+          app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            grep -q '^deb-src' /etc/apt/sources.list 2>/dev/null || sudo sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee -a /etc/apt/sources.list > /dev/null
+            sudo apt-get update -qq
+            df -h "$RUNNER_TEMP"
+            scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/appimage-sources"
+            ls "$RUNNER_TEMP/appimage-sources" | wc -l
+          else
+            scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/appimage-sources" --list-only
+          fi
+          head -5 "$RUNNER_TEMP/appimage-sources/MANIFEST.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AppImage third-party MANIFEST
+          path: ${{ runner.temp }}/appimage-sources/MANIFEST.txt
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AG-Horizon-Tauri-AppImage
+          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          retention-days: 7

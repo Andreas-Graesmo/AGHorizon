@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AG Horizon",
+  "version": "../package.json",
+  "identifier": "app.aghorizon.desktop",
+  "build": {
+    "frontendDist": "loading"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/aghorizon-server",
+      "binaries/ffmpeg"
+    ],
+    "resources": {
+      "../public/": "public/",
+      "binaries/ffmpeg.LICENSE": "ffmpeg.LICENSE"
+    },
+    "category": "Entertainment",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwNzRDNjZGMUU4ODUxMUIKUldRYlVZZ2ViOFowOEtNNDRnbnlYMEFydHB1NWNneTJ4QU5jWlZlaWZqR3ZTTkpPeGFOTVF2aFgK",
+      "endpoints": [
+        "https://github.com/Andreas-Graesmo/AGHorizon/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

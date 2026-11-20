@@ -1,0 +1,41 @@
+# MIGRATION_PLAN.md 5.9, 9.8: publish the complete corresponding source of the ffmpeg the Windows and Linux apps ship, as one
+# pre-release whose tag is not a version number, so no update channel (Electron, Tauri, Android TV) ever offers it.
+# Run by hand (Actions → this workflow → Run workflow) whenever scripts/tauri-prep.js pins a new ffmpeg, after
+# updating the pins in scripts/ffmpeg-source.sh (which also starts it).
+name: ffmpeg source release (GPL)
+
+on:
+  workflow_dispatch:
+  # also when the script or this file change (re-running is safe: the files are replaced)
+  push:
+    branches: [migration/tauri]
+    paths: ['scripts/ffmpeg-source.sh', '.github/workflows/ffmpeg-source.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      TAG: ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source   # = FFMPEG.sourceTag in scripts/tauri-prep.js
+    steps:
+      - uses: actions/checkout@v6
+      - name: The tag matches scripts/tauri-prep.js
+        run: |
+          grep -q "sourceTag: '$TAG'" scripts/tauri-prep.js
+      - name: Free disk space (the sources are a few GB unpacked)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - name: Fetch every source
+        run: bash scripts/ffmpeg-source.sh "$RUNNER_TEMP/ffmpeg-source"
+      - name: Publish as a pre-release (never "latest")
+        run: |
+          title="ffmpeg source (GPL) for the Windows and Linux apps"
+          notes="The complete corresponding source of the ffmpeg program in AG Horizon for Windows and Linux (3.x): ffmpeg n8.1.3-27-g8dca1586f4, win64 and linux64 GPL, built by BtbN/FFmpeg-Builds (autobuild-2026-10-31-12-59). See README.txt. This is not an app release."
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false --title "$title" --notes "$notes"
+          gh release edit "$TAG" --title "$title" --notes "$notes"
+          gh release upload "$TAG" "$RUNNER_TEMP"/ffmpeg-source/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

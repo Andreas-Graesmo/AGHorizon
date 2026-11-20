@@ -30,7 +30,10 @@ const LS = {
 
 /* IndexedDB – used for playlists loaded from a local file (too big for localStorage) */
 const idb = {
-  open() {
+  async open() {
+    // The Tauri app's first start brings over the Electron app's data (desktop/migration-import.js): its
+    // IndexedDB part finishes a moment after the page starts, so wait for it. Nothing to wait for anywhere else.
+    if (window.__aghMigrating) await window.__aghMigrating.catch(() => {});
     return new Promise((res, rej) => {
       const r = indexedDB.open('tuner', 1);
       r.onupgradeneeded = () => r.result.createObjectStore('files');
@@ -240,7 +243,7 @@ function buildSeasons(item, p, j) {
       uid: `${p.id}:e${e.id}`, pid: p.id, id: String(e.id), kind: 'episode', season, num,
       name: e.title || `Episode ${num}`, title: e.title || `Episode ${num}`, logo: inf.movie_image || item.logo,
       plot: inf.plot || '', duration: inf.duration || '', durationSecs: Number(inf.duration_secs) || 0, ext,
-      group: item.name, seriesUid: item.uid, seriesName: item.name,
+      group: item.name, seriesUid: item.uid, seriesName: item.name, seriesLogo: item.logo || '',
       url: `${base}/series/${enc(p.username)}/${enc(p.password)}/${e.id}.${ext}`, xtream: true,
     });
   }
@@ -339,7 +342,7 @@ function groupEpisodes(episodes, p) {
     const season = m ? Number(m[2] || m[4]) : 1;
     const list = (s.seasons[season] ||= []);
     const num = m ? Number(m[3] || m[5]) : list.length + 1;
-    list.push({ ...e, kind: 'episode', season, num, title: e.name, name: m ? `S${pad(season)}E${pad(num)} · ${e.name}` : e.name, seriesUid: s.uid, seriesName: sname });
+    list.push({ ...e, kind: 'episode', season, num, title: e.name, name: m ? `S${pad(season)}E${pad(num)} · ${e.name}` : e.name, seriesUid: s.uid, seriesName: sname, seriesLogo: s.logo || '' });
   }
   for (const s of map.values()) for (const k in s.seasons) s.seasons[k].sort((a, b) => a.num - b.num);
   return [...map.values()];
@@ -484,7 +487,7 @@ const backdropOf = (info) => (Array.isArray(info.backdrop_path) ? info.backdrop_
 const snap = (it) => ({
   uid: it.uid, pid: it.pid, id: it.id, kind: kindOf(it), name: it.name, logo: it.logo || '', group: it.group || '',
   year: it.year || '', rating: it.rating || '', seriesUid: it.seriesUid || '', seriesName: it.seriesName || '',
-  season: it.season || 0, num: it.num || 0,
+  season: it.season || 0, num: it.num || 0, ...(it.seriesLogo ? { seriesLogo: it.seriesLogo } : {}),
 });
 function persistFavs() { LS.set('tuner.favs', [...state.favs]); LS.set('tuner.favdata', state.favdata); }
 function toggleFavItem(it) {

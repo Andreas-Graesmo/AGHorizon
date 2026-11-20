@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-spike-ping"
+description = "Enables the spike_ping command without any pre-configured scope."
+commands.allow = ["spike_ping"]
+
+[[permission]]
+identifier = "deny-spike-ping"
+description = "Denies the spike_ping command without any pre-configured scope."
+commands.deny = ["spike_ping"]

@@ -8,3 +8,21 @@ secrets.json
 
 # website screenshot tooling: rendered demo artwork and clips
 scripts/screenshots/.cache/
+
+# Tauri migration spikes (MIGRATION_PLAN.md phase 0): generated clips and build output
+spike/media/fixtures/
+spike/media/tauri/target/
+spike/media/tauri/gen/
+spike/media/results/
+sidecar/dist/
+
+# Tauri app (MIGRATION_PLAN.md Phase 2)
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/*
+!src-tauri/binaries/README.md
+
+# Tauri migration e2e (tauri-update.yml)
+src-tauri/tauri.e2e.json
+e2e-out/
+server-rs/target/

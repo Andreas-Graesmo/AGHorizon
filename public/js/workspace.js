@@ -222,7 +222,7 @@ function renderLiveStatus() {
   else if (!ws.errors.length) {
     const st = state.epgState[p.id];
     if (st === 'loading') t = 'Loading the programme guide…';
-    else if (st && st.startsWith('error')) t = `<span class="err" title="${esc(st)}">Guide unavailable</span>`;
+    else if (st && st.startsWith('error')) t = `<span class="err" title="${esc(st)}">Guide unavailable: ${esc(st.slice(7))}</span>`;   // in words: a TV has no hover
     else if (st === 'none') t = 'No guide source for this playlist';
   }
   $('#liveStatus').innerHTML = t;
@@ -293,7 +293,9 @@ function appendLiveCards() {
   if (!next.length) return;
   $('#liveGrid').insertAdjacentHTML('beforeend', next.map((it) => cardHtml(it)).join(''));
   ws.liveShown += next.length;
-  requestAnimationFrame(() => { const r = $('#liveGridMore').getBoundingClientRect(); const vr = $('#liveGridScroll').getBoundingClientRect(); if (ws.liveShown < ws.chans.length && r.top < vr.bottom + 400) appendLiveCards(); });
+  // (not while the grid is hidden, e.g. the guide is showing: then everything measures 0 and this drew every channel,
+  // tens of thousands of tiles with a big playlist, which made the whole page slower, most of all on a TV)
+  requestAnimationFrame(() => { const r = $('#liveGridMore').getBoundingClientRect(); const vr = $('#liveGridScroll').getBoundingClientRect(); if (vr.height && ws.liveShown < ws.chans.length && r.top < vr.bottom + 400) appendLiveCards(); });
 }
 new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting) && ws.liveShown < ws.chans.length) appendLiveCards(); }, { root: $('#liveGridScroll'), rootMargin: '600px' }).observe($('#liveGridMore'));
 
@@ -430,6 +432,7 @@ function drawGuide() {
     const st = state.epgState[ws.pid];
     $('#guideEmpty').textContent = !ws.items.length ? 'Load a playlist first.'
       : st === 'loading' ? 'Loading the programme guide…'
+      : st && st.startsWith('error') ? `The programme guide could not be loaded: ${st.slice(7)}`
       : 'No channels with guide data here. Untick the filter above to list every channel.';
   }
 
@@ -527,6 +530,15 @@ function imgHtml(it, vod) {
     : vod ? '<svg class="ic ph-film"><use href="#i-film"/></svg>' : `<span class="ph">${esc(initials(it.name))}</span>`;
 }
 
+// An episode's series poster: kept with it since 3.1 (seriesLogo); for older history, the series if it is loaded
+// (opened, a favourite, or in a loaded playlist). Else the episode's own picture.
+function seriesPoster(ep) {
+  if (ep.seriesLogo) return ep.seriesLogo;
+  const s = cardIndex.get(ep.seriesUid) || state.favdata[ep.seriesUid]
+    || (state.cache[`${ep.pid}:series`] && state.cache[`${ep.pid}:series`].channels.find((x) => x.uid === ep.seriesUid));
+  return (s && s.logo) || ep.logo;
+}
+
 // Works for full items and for snapshots (Favorites, Recently viewed).
 function cardHtml(it, o = {}) {
   cardIndex.set(it.uid, it); // the global click handler (ui.js) looks the item up here
@@ -537,12 +549,16 @@ function cardHtml(it, o = {}) {
   const pct = pr && pr.d && !pr.w && pr.t > 10 ? Math.round((pr.t / pr.d) * 100) : 0;
   let title = it.name;
   let sub = o.sub || '';
-  if (kind === 'episode') { title = it.seriesName || it.name; sub = sub || `S${String(it.season || 1).padStart(2, '0')}E${String(it.num || 0).padStart(2, '0')}`; }
+  let pic = it;
+  if (kind === 'episode') {
+    title = it.seriesName || it.name; sub = sub || `S${String(it.season || 1).padStart(2, '0')}E${String(it.num || 0).padStart(2, '0')}`;
+    pic = { ...it, logo: seriesPoster(it) };   // the show's poster, not the episode's still (#26)
+  }
   const rating = vod && it.rating ? `<span class="badge"><svg class="ic"><use href="#i-star"/></svg>${esc(it.rating)}</span>` : '';
   const tag = o.tag ? `<span class="badge kind">${esc(o.tag)}</span>` : '';
   const remove = o.remove ? `<button class="c-remove" data-remove title="${esc(o.remove)}" aria-label="${esc(o.remove)}"><svg class="ic"><use href="#i-x"/></svg></button>` : '';
   return `<div class="card ${vod ? 'poster-card' : 'live-card'}${remove ? ' removable' : ''}" data-uid="${esc(it.uid)}" tabindex="0" role="button" title="${esc(title)}">
-    <div class="c-img">${imgHtml(it, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}${o.fav === false ? '' : `<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>`}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+    <div class="c-img">${imgHtml(pic, vod)}${rating}${tag}${remove}${vod ? '' : '<button class="multi-btn" data-multi title="Add to Multi view" aria-label="Add to Multi view"><svg class="ic"><use href="#i-multi"/></svg></button>'}${o.fav === false ? '' : `<button class="fav${fav ? ' on' : ''}" data-fav aria-label="Favorite"><svg class="ic"><use href="#${fav ? 'i-heart-fill' : 'i-heart'}"/></svg></button>`}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
     <div class="c-title">${esc(title)}</div>${sub ? `<div class="c-sub">${esc(sub)}</div>` : ''}</div>`;
 }
 
@@ -605,7 +621,8 @@ function appendCards() {
   $('#vodGrid').insertAdjacentHTML('beforeend', next.map((it) => cardHtml(it)).join(''));
   ws.shown += next.length;
   // keep loading while the sentinel is still on screen
-  requestAnimationFrame(() => { const m = $('#vodMore'); const r = m.getBoundingClientRect(); const vr = $('#vodScroll').getBoundingClientRect(); if (ws.shown < ws.vodView.length && r.top < vr.bottom + 400) appendCards(); });
+  // (not while the grid is hidden: see appendLiveCards)
+  requestAnimationFrame(() => { const m = $('#vodMore'); const r = m.getBoundingClientRect(); const vr = $('#vodScroll').getBoundingClientRect(); if (vr.height && ws.shown < ws.vodView.length && r.top < vr.bottom + 400) appendCards(); });
 }
 new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting) && ws.shown < ws.vodView.length) appendCards(); }, { root: $('#vodScroll'), rootMargin: '600px' }).observe($('#vodMore'));
 
@@ -742,9 +759,15 @@ function renderDetail() {
       // download button (a blue download icon once downloaded), or an empty slot so the rows line up; then ⋮
       const dlb = !off && dlCanDownload(e) ? dlBtnHtml(e, 'icon-btn ep-dl') : '<span class="ep-dl"></span>';
       const watched = !!(p && p.w);
+      // #37: the episode's still, with its number and how much is watched on it. No still of its own (Xtream then
+      // repeats the series poster, as most M3U lists do): the series poster, blurred.
+      const pic = (u) => (u && /^https?:\/\//i.test(u) ? u : '');
+      const still = pic(e.logo) && e.logo !== (e.seriesLogo || it.logo) ? pic(e.logo) : '';
+      const bg = still || pic(e.seriesLogo) || pic(it.logo);
       return `<div class="ep${e.uid === playingUid ? ' playing' : ''}${off ? ' off' : ''}" data-act="ep" data-uid="${esc(e.uid)}"${off ? ' title="Not downloaded"' : ''}>
-          <span class="ep-n">${e.num || ''}</span>
-          <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}${pct ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>
+          <div class="ep-thumb${still ? '' : ' poster'}">${bg ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(bg)}" alt="" onerror="this.remove()">` : ''}
+            <span class="ep-n">${e.num || ''}</span><span class="ep-play"><svg class="ic fill"><use href="#i-play"/></svg></span>${pct || watched ? `<div class="bar"><i style="width:${watched ? 100 : pct}%"></i></div>` : ''}</div>
+          <div class="ep-main"><div class="ep-t">${esc(e.title)}</div>${e.plot ? `<div class="ep-p">${esc(e.plot)}</div>` : ''}</div>
           <span class="ep-d">${watched ? '<svg class="ic ep-w" aria-label="Watched"><use href="#i-check"/></svg>' : esc(e.duration || '')}</span>${dlb}
           <button class="icon-btn ep-more" data-act="ep-more" data-uid="${esc(e.uid)}" title="More" aria-label="More"><svg class="ic"><use href="#i-more-v"/></svg></button></div>`;
     };
@@ -772,8 +795,9 @@ function renderDetail() {
 
   box.innerHTML = `<div class="detail-in">
     ${docked ? '<div class="dt-slot-wrap"><div id="detailSlot" class="player-slot detail-slot"></div></div>' : ''}
+    <div class="dt-main">
+    <div class="dt-bg${back ? '' : ' blur'}" style="${(back || art) ? `background-image:url('${esc(back || art)}')` : ''}"></div>
     <div class="dt-hero">
-      <div class="dt-bg${back ? '' : ' blur'}" style="${(back || art) ? `background-image:url('${esc(back || art)}')` : ''}"></div>
       <div class="dt-in"><div class="dt-top">
         <div class="dt-poster">${art ? `<img referrerpolicy="no-referrer" src="${esc(art)}" alt="">` : `<span>${esc(initials(it.name))}</span>`}</div>
         <div class="dt-info">
@@ -793,10 +817,9 @@ function renderDetail() {
         </div>
       </div></div>
     </div>
-    <div class="dt-sec">
-      ${crew.length ? `<h3>Cast &amp; crew<small>${crew.length}</small></h3><div class="cast-row">${crew.map(([n, r, ph]) => `<div class="cast"><div class="av">${esc(initials(n))}${ph ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(ph)}" alt="">` : ''}</div><b>${esc(n)}</b><small>${esc(r)}</small></div>`).join('')}</div>` : ''}
-      ${seriesBlock}
-    </div></div>`;
+    ${crew.length ? `<div class="dt-sec dt-cast"><h3>Cast &amp; crew<small>${crew.length}</small></h3><div class="cast-row">${crew.map(([n, r, ph]) => `<div class="cast"><div class="av">${esc(initials(n))}${ph ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(ph)}" alt="">` : ''}</div><b>${esc(n)}</b><small>${esc(r)}</small></div>`).join('')}</div></div>` : ''}
+    </div>
+    ${seriesBlock ? `<div class="dt-sec">${seriesBlock}</div>` : '<div class="dt-end"></div>'}</div>`;
   box.scrollTop = keep;
   layoutPlayer();
 }

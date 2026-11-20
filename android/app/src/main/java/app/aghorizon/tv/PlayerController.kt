@@ -1,6 +1,8 @@
 package app.aghorizon.tv
 
 import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +30,9 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import org.json.JSONObject
 import java.util.Date
 
@@ -91,6 +95,11 @@ class PlayerController(
         playerView.isFocusable = true
         playerView.isFocusableInTouchMode = true
         playerView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        // CC › Appearance… (#29): the subtitles on screen change at once, and the page keeps the choice (Settings)
+        controls.onLook = { l ->
+            subLook(l)
+            req?.let { r -> emit(JSONObject().put("type", "subLook").put("token", r.token).put("look", l.optJSONObject("cur"))) }
+        }
     }
 
     /** The title shows with the controls (and for a moment when something starts, see showBanner). */
@@ -127,12 +136,44 @@ class PlayerController(
         playerView.requestFocus()
         controls.reset(r.live, json.optString("accent"))
         controls.programme(json.optJSONArray("now"), json.optJSONArray("next"))
+        subLook(json.optJSONObject("subLook"))
         setBanner(r.title, r.sub, json.optString("num"))
         showBanner()
         // the sound and subtitles picked for the last title are not for this one
         player?.let { p -> p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverrides().build() }
         start(r, r.startMs)
     }
+
+    /**
+     * How subtitles look, as chosen in the app's Settings › Languages › Subtitles (#29; subLookForTv() in
+     * subtitles.js): size, colour, background and its opacity, height, and the kind of font. The person's choice wins
+     * over a subtitle file's own styling, as on a computer. Nothing given (an older page): ExoPlayer's own look.
+     */
+    private fun subLook(l: JSONObject?) {
+        controls.look = l   // CC › Appearance… in the player changes it from there
+        val view = playerView.subtitleView ?: return
+        if (l == null) {
+            view.setUserDefaultStyle()
+            view.setUserDefaultTextSize()
+            view.setBottomPaddingFraction(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION)
+            view.setApplyEmbeddedStyles(true)
+            view.setApplyEmbeddedFontSizes(true)
+            return
+        }
+        val color = parse(l.optString("color"), Color.WHITE)
+        val alpha = (l.optDouble("opacity", 0.6).coerceIn(0.0, 1.0) * 255).toInt()
+        val bg = (parse(l.optString("bg"), Color.BLACK) and 0x00ffffff) or (alpha shl 24)
+        // with little or no background, an outline keeps the text readable on bright pictures (as --sub-shadow)
+        val edge = if (alpha < 90) CaptionStyleCompat.EDGE_TYPE_OUTLINE else CaptionStyleCompat.EDGE_TYPE_NONE
+        val face = when (l.optString("font")) { "serif" -> Typeface.SERIF; "monospace" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }
+        view.setStyle(CaptionStyleCompat(color, bg, Color.TRANSPARENT, edge, Color.BLACK, face))
+        view.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * l.optDouble("scale", 1.0).toFloat().coerceIn(0.5f, 2f))
+        view.setBottomPaddingFraction(l.optDouble("raise", 0.08).toFloat().coerceIn(0f, 0.3f))
+        view.setApplyEmbeddedStyles(false)
+        view.setApplyEmbeddedFontSizes(false)
+    }
+
+    private fun parse(css: String, fallback: Int) = try { Color.parseColor(css) } catch (_: Exception) { fallback }
 
     /** New text for the title lines (the programme changed, the guide arrived, a channel number is typed). */
     fun banner(json: JSONObject) {

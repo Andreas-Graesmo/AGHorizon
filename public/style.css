@@ -102,6 +102,17 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 #topbar button, #topbar .top-search { -webkit-app-region: no-drag; }
 /* a drag region takes the mouse even under a dialog's backdrop: switch it off while one is open */
 body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
+/* The Tauri app on Windows (public/js/tauri-shell.js, MIGRATION_PLAN.md 4.2): no system title bar at all, so the
+   window's own minimise / maximise / close buttons sit at the top bar's right end, in the theme's colours. */
+html.tauri-shell #topbar { padding-right: 0; }
+/* The Tauri app on macOS: the system's traffic lights over the top bar's left end (src-tauri/src/main.rs); room for them */
+html.tauri-mac #topbar { padding-left: 80px; padding-right: 10px; }
+html.tauri-mac.win-full #topbar { padding-left: 8px; }
+.win-ctl { display: flex; align-self: stretch; margin-left: 6px; flex: none; }
+.win-ctl button { appearance: none; border: 0; background: none; color: var(--text); width: 46px; height: 100%; display: grid; place-items: center; cursor: default; opacity: .9; }
+.win-ctl button:hover, .win-ctl button:focus-visible { background: var(--panel-2); opacity: 1; outline: none; }
+.win-ctl button.close:hover, .win-ctl button.close:focus-visible { background: #c42b1c; color: #fff; }
+.win-ctl svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }
 .tb-btn { appearance: none; border: 0; background: none; color: var(--text); cursor: pointer; width: 32px; height: 30px; border-radius: 8px; display: inline-grid; place-items: center; flex: none; opacity: .92; }
 .tb-btn:hover { background: var(--panel-2); }
 .tb-btn.on { color: var(--accent); background: var(--sel); }
@@ -376,11 +387,17 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .detail { overflow-y: auto; }
 .dt-slot-wrap { background: #000; }
 .detail-slot { max-height: 64vh; aspect-ratio: 16 / 9; margin: 0 auto; }
-.dt-hero { position: relative; min-height: 470px; overflow: hidden; }
-.dt-bg { position: absolute; inset: 0; background-size: cover; background-position: right 20%; }
+.dt-main { position: relative; overflow: hidden; }   /* the details and the cast, on one picture */
+/* the backdrop behind both (#25): as tall as the window's width allows, at most as tall as what it is behind, so its
+   fade always ends where the cast does */
+.dt-bg, .dt-main::before { position: absolute; top: 0; left: 0; right: 0; height: clamp(460px, 40vw, 760px); max-height: 100%; }
+.dt-bg { background-size: cover; background-position: right 20%; }
 .dt-bg.blur { filter: blur(26px) brightness(.55) saturate(1.1); transform: scale(1.25); background-position: center; }
-.dt-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--bg) 6%, color-mix(in srgb, var(--bg) 72%, transparent) 42%, color-mix(in srgb, var(--bg) 30%, transparent) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 46%); }
-.dt-in { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 56px 24px 30px; }
+.dt-main::before { content: ""; z-index: 1; background: linear-gradient(90deg, var(--bg) 6%, color-mix(in srgb, var(--bg) 72%, transparent) 42%, color-mix(in srgb, var(--bg) 30%, transparent) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 46%); }
+.dt-hero, .dt-main > .dt-sec { position: relative; z-index: 2; }
+.dt-main > .dt-sec { padding-bottom: 28px; }
+.dt-end { height: 80px; }
+.dt-in { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 56px 24px 14px; }
 .dt-top { display: grid; grid-template-columns: 150px 1fr; gap: 26px; align-items: start; }
 .dt-poster { aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: var(--tile); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); display: grid; place-items: center; font-size: 28px; font-weight: 700; color: var(--muted); }
 .dt-poster img { width: 100%; height: 100%; object-fit: cover; }
@@ -402,7 +419,8 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .dt-facts { display: grid; grid-template-columns: 70px 1fr; gap: 5px 8px; font-size: 12px; }
 .dt-facts dt { color: var(--muted); }
 .dt-facts dd { margin: 0; }
-.dt-sec { max-width: 940px; margin: 0 auto; padding: 8px 24px 80px; }
+.dt-sec { max-width: 940px; margin: 0 auto; padding: 0 24px 80px; }
+.dt-sec > h3:first-child { margin-top: 6px; }
 .dt-sec h3 { font-size: 14.5px; font-weight: 650; margin: 18px 0 14px; }
 .dt-sec h3 small { color: var(--muted); font-weight: 500; margin-left: 6px; }
 .cast-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 12px; }
@@ -463,12 +481,21 @@ body:has(dialog[open]) #topbar { -webkit-app-region: no-drag; }
 .player.is-live .pc-skip { display: none; }   /* live TV can't seek */
 .player.mini .pc-skip { margin: 0 2px; }
 .player.mini .pc-skip .ic { width: 20px; height: 20px; }
-.pc-big { appearance: none; border: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); }
-.pc-big:hover { filter: brightness(1.1); }
+/* white at rest; the accent colour under the pointer or the keyboard's focus (#34) */
+.pc-big { appearance: none; border: 0; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #0b0f19; display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); transition: background-color .12s, color .12s; }
+.pc-big:hover, .pc-big:focus-visible { background: var(--accent); color: var(--accent-ink); }
 .pc-big .ic { width: 20px; height: 20px; }
 .pc-speed { font-size: 12px; font-weight: 700; min-width: 34px; }
-.p-ctl .live-badge { background: var(--red); color: #fff; padding: 2px 8px; border-radius: 5px; margin-right: 6px; }
+.p-ctl .live-badge { appearance: none; border: 1px solid transparent; font-family: inherit; background: var(--red); color: #fff; padding: 2px 8px; border-radius: 5px; margin-right: 6px; }
 .p-ctl .live-badge i { background: #fff; }
+.p-ctl .live-badge:disabled { cursor: default; }
+/* behind live (paused, or buffering): a grey button that goes back to live, with how far behind (#18) */
+.p-ctl .live-badge.behind { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .28); cursor: pointer; }
+.p-ctl .live-badge.behind i { background: #9aa3b8; }
+.p-ctl .live-badge.behind:hover, .p-ctl .live-badge.behind:focus-visible { background: var(--red); border-color: transparent; }
+.p-ctl .live-badge.behind:hover i, .p-ctl .live-badge.behind:focus-visible i { background: #fff; }
+.pc-behind { color: #c9cfdc; font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.player:not(.is-live) .pc-behind { display: none; }
 .player.is-live #pcSeekRow, .player.is-live .pc-speed { display: none; }
 .player:not(.is-live) .live-badge, .player:not(.is-live) .pc-livetime { display: none; }
 .player.mini .pc-vol, .player.mini #pcMute, .player.mini .pc-speed, .player.mini #pPip, .player.mini #pMirror, .player.mini #pSubs, .player.mini #pAudio, .player.mini .pc-livetime, .player.mini #pcSeekRow { display: none; }
@@ -757,7 +784,20 @@ dialog.switch-dlg::backdrop { background: rgba(4, 6, 12, .5); backdrop-filter: b
 .dl-ring circle { fill: none; stroke: color-mix(in srgb, currentColor 25%, transparent); stroke-width: 2.6; }
 .dl-ring circle.v { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }
 .dl-ring.paused circle.v { stroke: var(--muted); }
-.ep { grid-template-columns: 34px 1fr auto 33px 33px; }   /* number, title, duration or ✓, download, ⋮ */
+.ep { grid-template-columns: 128px 1fr auto 33px 33px; padding: 8px 10px; }   /* still, title, duration or ✓, download, ⋮ */
+/* the episode's still (#37): its number on it, a play sign under the pointer or the focus, and how much is watched */
+.ep-thumb { position: relative; aspect-ratio: 16 / 9; border-radius: 7px; overflow: hidden; background: var(--tile); }
+.ep-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ep-thumb.poster img { filter: blur(10px) brightness(.55) saturate(1.2); transform: scale(1.35); }   /* no still: the series poster */
+.ep-thumb .ep-n { position: absolute; left: 7px; bottom: 6px; color: #fff; font-size: 12px; font-weight: 800; text-align: left; text-shadow: 0 1px 4px rgba(0, 0, 0, .8); }
+.ep-thumb.poster .ep-n { left: 0; right: 0; bottom: auto; top: 50%; transform: translateY(-50%); text-align: center; font-size: 20px; }
+.ep-play { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity .12s; }
+.ep-play .ic { width: 30px; height: 30px; padding: 9px; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; box-sizing: border-box; }
+.ep:hover .ep-play, .ep:focus .ep-play, .ep:focus-within .ep-play, .ep.playing .ep-play { opacity: 1; }
+.ep:hover .ep-thumb.poster .ep-n, .ep:focus .ep-thumb.poster .ep-n, .ep.playing .ep-thumb.poster .ep-n { opacity: 0; }
+.ep-thumb .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; margin: 0; border-radius: 0; background: rgba(255, 255, 255, .25); }
+.ep-thumb .bar i { border-radius: 0; }
+@media (max-width: 640px) { .ep { grid-template-columns: 92px 1fr auto 33px 33px; gap: 10px; } }
 .ep.off { opacity: .4; cursor: default; }   /* offline and not downloaded */
 .ep.off:hover { background: none; border-color: transparent; }
 .ep-dl, .ep-more { color: var(--muted); width: 33px; height: 33px; padding: 8px; }

@@ -54,6 +54,8 @@ Install this first version by hand from the release page (`.exe` for Windows, `.
    (This runs `npm version`, which edits `package.json`, commits, tags `vX.Y.Z`, and then pushes both. Your working folder must have no uncommitted changes.)
 3. Wait for the Action to finish, open **Releases**, edit the new draft's notes and **Publish release**.
 
+**Without a computer (or where tags can't be pushed):** once `package.json` has the new version on the branch (for example committed from the GitHub website, or by Claude), open **Actions → Tag a release → Run workflow**, enter the version (`2.6.0`, or `3.2.0-beta.1`) and the branch (`main`; test versions may also come from `migration/tauri`). It tags the branch's newest commit and starts the release build. It refuses a version `package.json` doesn't have, a tag that exists, and a stable version from any branch but `main`.
+
 ## 4. Test versions (the Test update channel)
 
 There are two update channels, chosen in the app under **Settings → About & updates → Update channel**:
@@ -87,8 +89,7 @@ When the test version is good, release it to everyone with `npm run release:mino
 
 - **Windows** – works out of the box. Because the installer isn't code-signed, Windows SmartScreen shows "Windows protected your PC" on the *first* install: **More info → Run anyway**. Updates installed from inside the app don't show this again.
 - **Linux** – the `.AppImage` updates itself. Make it executable once (`chmod +x`).
-- **macOS** – the build is for Apple-silicon Macs (M1 and newer). macOS only allows in-app updating for apps that are **signed and notarized** (an Apple Developer account, $99/year). So on a Mac the app only checks for a newer version and offers **Download from GitHub**, where people download the new `.dmg` by hand. First launch of an unsigned app: right-click the app → **Open**. Signing can be added to the workflow later.
-- **Intel Macs** – not built. `ffmpeg-static` ships a different binary per processor type, so each needs its own build machine. Ask if you want it added.
+- **macOS** – one universal app for Apple silicon and Intel Macs (3.1 and later). It isn't signed by Apple (ad hoc only), so the first time macOS blocks it: **System Settings → Privacy & Security → Open Anyway** (on macOS 14 and earlier, right-click the app → **Open**). It updates itself (Tauri's updater, checked against the release key) once it is in a folder it can write, such as Applications; from the disk image, or where macOS runs it from a hidden copy, it says why it can't and links to the release page. (The 2.x Electron app was for Apple silicon only and could only point to the release page.)
 - **Version numbers** must always go up; the app only offers updates with a higher version than the installed one.
 - **OpenSubtitles** – the app's API key is a repository secret, not part of the code: **Settings → Secrets and variables → Actions → New repository secret**, name `OPENSUBTITLES_API_KEY`. The release build writes it into the app. Without it, the app works but can't search OpenSubtitles. To use it when running from source, create `secrets.json` in the app folder containing `{ "opensubtitlesApiKey": "your key" }` (it is in `.gitignore`).
 - **TMDB (cast photos)** – the same way: a repository secret named `TMDB_API_KEY`, holding the "API Key" from themoviedb.org → Settings → API (free account). Without it, the cast shows initials. From source: add `"tmdbApiKey": "your key"` to `secrets.json`.
@@ -139,7 +140,7 @@ You need [Android Studio](https://developer.android.com/studio) (or the Android 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The build copies `server.js`, `subtitles.js` and `public/` into the app, and downloads Node.js for Android once (about 100 MB). A debug build's pages can be inspected from Chrome on your computer: `chrome://inspect`. To see the pages in TV mode without a TV, that is the way; in a normal browser they are the desktop app.
+The build copies `public/` into the app and builds the app's server, the Rust server (`server-rs/jni`), for each processor type with [cargo-ndk](https://github.com/bbqsrc/cargo-ndk): it needs Rust with the Android targets (`rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android`), `cargo install cargo-ndk`, and the Android NDK (`ANDROID_NDK_HOME`). A debug build's pages can be inspected from Chrome on your computer: `chrome://inspect`. To see the pages in TV mode without a TV, that is the way; in a normal browser they are the desktop app.
 
 ### Things to know
 
@@ -148,3 +149,15 @@ The build copies `server.js`, `subtitles.js` and `public/` into the app, and dow
 - **Test versions** get the same Android version code as the release they lead up to (2.5.0-beta.1 and 2.5.0 are both 20500). Android installs an equal code over the other, so beta → beta → release works; what stops an older version from being offered is the app's own version check.
 - **Not in the Play Store.** Google requires TV apps there to be built for 16 KB memory pages, and Node.js for Android isn't yet; it would also need an app bundle and Google's TV review. Sideloading has none of that.
 - **Old TVs.** The pages need *Android System WebView* 111 or newer (March 2023). TVs update it through their app store; the app says so when it is older.
+
+## 8. Windows: the Tauri app's update key
+
+On the `migration/tauri` branch, Windows is built as the Tauri app (`MIGRATION_PLAN.md`). Its updates are accepted only if they are signed with **your** update key. The release workflow signs them; installed apps check the signature against the public key built into them.
+
+- **The public key** is in the repository: `electron/tauri-updater.key.pub` and `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` (key ID `F074C66F1E88511B`). The Electron app's hand-over to the Tauri app checks against it too.
+- **The private key** (`aghorizon.key`, made with `npx @tauri-apps/cli signer generate`) and its password are kept by you, with a copy somewhere other than your PC. They are the repository secrets `TAURI_SIGNING_PRIVATE_KEY` (the file's content) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The Windows release build stops with an error if the key is missing.
+- **If the private key or its password is lost**, installed copies can never be updated again: everyone would have to download and install the next version by hand, and the new key's public half would have to be built in. Keep the backup.
+- **Never** commit the private key, paste it anywhere, or use it in a test: the CI tests (`tauri-update.yml`) make their own throwaway key.
+- What a Windows release carries: `AG-Horizon-Setup-<version>.exe`, `AG-Horizon-Setup-<version>.exe.sig` and `latest.json`. No `latest.yml` / `beta.yml` for Windows any more: old Windows Electron apps find the Tauri app only through the bridge version's hand-over (`MIGRATION_PLAN.md` 1.3), so **the bridge version must have been released before the first tag on this branch**.
+- Channels work as before: Stable takes GitHub's latest release; Test takes the newest published release, beta or not, that has a `latest.json`. Never a downgrade.
+- **A stable release** (no dash in the version) also gets the bridge release's `latest.yml`, `latest-mac.yml` and `latest-linux.yml`, pointing back at the bridge's downloads (`bridge-feed` job, `scripts/bridge-feed.js`; the bridge is `v2.6.0`). Electron apps older than the bridge read those in GitHub's latest release: they update to the bridge, which hands over to the Tauri app. Keep this until no old Electron apps are left (`MIGRATION_PLAN.md` 10.4).

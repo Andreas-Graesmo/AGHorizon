@@ -178,7 +178,7 @@ function tvPlay(ch, token) {
   const start = vod && resume && !resume.w && resume.t > 10 && (!resume.d || resume.d - resume.t > 20) ? resume.t : 0;
   window.AGHorizonTV.play(JSON.stringify({
     token, url: ch.url, ua: (p && p.ua) || '', live: !vod, start,
-    audioLang: audRemembered(ch) || audPrefLang(), subLang: tvSubLang(ch),
+    audioLang: audRemembered(ch) || audPrefLang(), subLang: tvSubLang(ch), subLook: subLookForTv(),   // how subtitles look (#29)
     accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),   // the player's controls follow the theme
     ...tvTitles(ch),
   }));
@@ -261,6 +261,7 @@ if (TV) {
       case 'zap': zap(ev.delta > 0 ? 1 : -1); break;
       case 'skip': tvEpisode(c, ev.delta > 0 ? 1 : -1); break;
       case 'digit': tvDigit(ev.n); break;
+      case 'subLook': subLookFromTv(ev.look); break;   // CC › Appearance… in the player (#29)
       default: break;   // 'error': the player shows it until Back, which arrives as 'closed'
     }
   };
@@ -315,7 +316,12 @@ function tvScopeKey(scope) {
 
 function tvItems(scope) {
   const out = [];
-  for (const el of scope.querySelectorAll(TV_ITEMS)) {
+  // the page: only the view that is showing, and what is around the views (top bar, menu rail); the hidden views can
+  // hold thousands of buttons, and this runs on every press of the remote
+  const all = scope === document.body
+    ? [...document.querySelectorAll(`:is(${TV_ITEMS}):not(#views *)`), ...document.querySelectorAll(`#views > .view:not([hidden]) :is(${TV_ITEMS})`)]
+    : scope.querySelectorAll(TV_ITEMS);
+  for (const el of all) {
     if (scope === document.body && el.closest('dialog, #menu, #player')) continue;
     if (el.id === 'liveList') continue;   // the channel list as a whole (it scrolls with the keyboard on a computer): its rows are the items
     const host = el.parentElement && el.parentElement.closest(TV_INSIDE);
@@ -570,14 +576,10 @@ function tvContext(el) {
     if (found) items = epMenuItems(found).filter((x) => !x.heading);
   } else if (host) {
     const it = cardIndex.get(host.dataset.uid) || ws.items.find((c) => c.uid === host.dataset.uid);
-    if (it && !it.dlCard) {
-      const fav = state.favs.has(it.uid);
-      items = [
-        { label: isVod(it) ? 'Open' : 'Watch', icon: isVod(it) ? 'i-info' : 'i-play', run: () => host.click() },
-        { label: fav ? 'Remove from favorites' : 'Add to favorites', icon: fav ? 'i-heart-fill' : 'i-heart', run: () => toggleFavItem(it) },
-      ];
-      if (host.matches('.removable')) items.push({ label: 'Remove from Recently viewed', run: () => removeRecent(it.uid) });
-    }
+    if (it && !it.dlCard) items = host.matches('.row.ch') ? [   // a channel row in Live TV: watch it, or its heart
+      { label: 'Watch', icon: 'i-play', run: () => host.click() },
+      { label: state.favs.has(it.uid) ? 'Remove from favorites' : 'Add to favorites', icon: state.favs.has(it.uid) ? 'i-heart-fill' : 'i-heart', run: () => toggleFavItem(it) },
+    ] : cardMenuItems(it, host);   // a card: the same menu as a right-click on a computer (#27)
   }
   if (!items || !items.length) return false;
   showMenu(el, items);
@@ -632,7 +634,7 @@ function tvLiveCard() {
     <div class="tv-ch-head"><div class="logo">${logoHtml(ch)}</div><div><b>${esc(ch.name)}</b><small>${esc(ch.group || '')}</small></div></div>
     ${now ? `<div class="tv-ch-now"><span class="live-badge"><i></i>NOW</span><span class="muted">${fmtTime(now[0])} – ${fmtTime(now[1])}</span></div>
       <h3>${esc(now[2] || 'On air')}</h3><div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>${now[3] ? `<p>${esc(now[3])}</p>` : ''}`
-    : `<p class="muted">${st === 'loading' ? 'Loading the programme guide…' : 'No programme information for this channel.'}</p>`}
+    : `<p class="muted">${st === 'loading' ? 'Loading the programme guide…' : st.startsWith('error') ? esc(`The programme guide could not be loaded: ${st.slice(7)}`) : 'No programme information for this channel.'}</p>`}
     ${next ? `<div class="tv-ch-next"><span class="muted">Next · ${fmtTime(next[0])}</span> ${esc(next[2] || '')}</div>` : ''}
     <div class="tv-ch-hint muted">OK watches the channel · hold OK for favorites</div>
   </div>`;

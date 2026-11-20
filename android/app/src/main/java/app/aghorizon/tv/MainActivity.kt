@@ -25,7 +25,7 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /**
- * AG Horizon for Android TV: the desktop app's pages in a WebView, served by the app's own server (NodeServer),
+ * AG Horizon for Android TV: the desktop app's pages in a WebView, served by the app's own server (AppServer, the Rust server),
  * with the TV's own player on top (PlayerController). The pages see this shell as window.AGHorizonTV (Bridge below)
  * and switch to their TV mode (public/js/tv.js).
  */
@@ -56,7 +56,7 @@ class MainActivity : Activity() {
             if (!playing) web.requestFocus()
         }
         setUpWeb()
-        NodeServer.ensureStarted(this)
+        AppServer.ensureStarted(this)
         loadWhenServerIsUp()
     }
 
@@ -97,7 +97,7 @@ class MainActivity : Activity() {
         web.webViewClient = object : WebViewClient() {
             // the WebView stays on the app's own pages; there is no browser on a TV to send other links to
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                !request.url.toString().startsWith(NodeServer.ORIGIN + "/")
+                !request.url.toString().startsWith(AppServer.ORIGIN + "/")
 
             override fun onPageFinished(view: WebView, url: String) {
                 pageLoaded = true
@@ -128,11 +128,11 @@ class MainActivity : Activity() {
 
     private fun loadWhenServerIsUp() {
         Thread({
-            val up = NodeServer.waitUntilUp()
+            val up = AppServer.waitUntilUp()
             ui.post {
                 if (destroyed) return@post
-                if (up) web.loadUrl(NodeServer.ORIGIN + "/")
-                else showSplash(NodeServer.failure ?: "The app's server did not start. Close the app and open it again.")
+                if (up) web.loadUrl(AppServer.ORIGIN + "/")
+                else showSplash(AppServer.failure ?: "The app's server did not start. Close the app and open it again.")
             }
         }, "wait-for-server").start()
     }

@@ -191,6 +191,33 @@ function subApplyLook() {
   root.setProperty('--sub-scale', subPick(SUB_SIZES, l.size));
   subSizeToPlayer();
 }
+// The look for the TV's own player (PlayerController.kt applies it to ExoPlayer's subtitles, #29): size as a factor
+// of the usual size, colours as #rrggbb, the background's opacity 0–1, the raise as a share of the picture's height,
+// and the font as a kind of font (the TV has its own fonts, not these).
+function subLookForTv() {
+  const l = subLook();
+  const font = l.font === 'georgia' ? 'serif' : l.font === 'mono' ? 'monospace' : 'sans-serif';
+  return { scale: subPick(SUB_SIZES, l.size), color: l.color, bg: l.bg, opacity: Math.max(0, Math.min(100, Number(l.opacity))) / 100, raise: subPick(SUB_POS, l.pos), font,
+    // for the player's own CC › Appearance… menu: what is chosen, and the choices (as Settings has them)
+    cur: { size: l.size, color: l.color, opacity: Number(l.opacity), pos: l.pos },
+    choices: {
+      size: SUB_SIZES.map(([k, label, scale]) => [k, label, scale]),
+      color: SUB_COLORS.map(([hex, label]) => [hex, label]),
+      opacity: [[0, 'None'], [30, 'See-through'], [60, 'Half'], [90, 'Solid']],
+      pos: SUB_POS.map(([k, label, raise]) => [k, label, raise]),
+    } };
+}
+// The TV's player changed the look while playing (CC › Appearance…): keep it as Settings does
+function subLookFromTv(cur) {
+  if (!cur || typeof cur !== 'object') return;
+  const l = subLook();
+  if (SUB_SIZES.some((x) => x[0] === cur.size)) l.size = cur.size;
+  if (SUB_COLORS.some((x) => x[0] === cur.color)) l.color = cur.color;
+  if (Number.isFinite(Number(cur.opacity))) l.opacity = Math.max(0, Math.min(100, Math.round(Number(cur.opacity))));
+  if (SUB_POS.some((x) => x[0] === cur.pos)) l.pos = cur.pos;
+  LS.set(SUB_LOOK_KEY, l);
+  subApplyLook();
+}
 function subSizeToPlayer() {
   const l = subLook();
   const h = $('#player').clientHeight || 0;
@@ -322,8 +349,9 @@ async function subMenu(anchor) {
     for (const s of fromOs) items.push(subRemembering(c, s.lang, subSavedItem(d, s, mark, numbered)));
   }
   if (sub.key.startsWith('os:')) items.push({ label: mark(true) + `${sub.label} (OpenSubtitles)`, run: () => {} });
-  items.push({ label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
-  items.push({ label: 'Appearance…', run: subShowPanel });
+  // three groups: the tracks, finding more, and how they look
+  items.push({ sep: true }, { label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
+  items.push({ sep: true }, { label: 'Appearance…', run: subShowPanel });
   showMenu(anchor, items);
 }
 const subRemembering = (c, lang, item) => ({ ...item, run: () => { subRemember(c, lang); return item.run(); } });

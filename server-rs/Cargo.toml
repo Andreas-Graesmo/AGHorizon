@@ -1,0 +1,42 @@
+[package]
+name = "aghorizon-server"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "AG Horizon's local server in Rust (MIGRATION_PLAN.md Phase 8): the same HTTP API as server.js, no Tauri dependency, so Windows (sidecar) and later Android TV (JNI) can both use it"
+
+[lib]
+name = "aghorizon_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aghorizon-server-rs"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "io-std", "time", "sync", "fs", "process"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "gzip", "brotli", "deflate"] }
+flate2 = "1"
+regex = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+url = "2"
+percent-encoding = "2"
+gethostname = "0.5"
+base64 = "0.22"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+[target."cfg(unix)".dependencies]
+libc = "0.2"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
