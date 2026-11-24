@@ -85,10 +85,30 @@ echo "$(wc -l < "$WORK/map.tsv") files from $(wc -l < "$WORK/pkgs.txt") packages
 
 if [ "$LIST_ONLY" = "--list-only" ]; then exit 0; fi
 
-echo "== their sources (apt-get source; needs deb-src entries)"
+# Ubuntu's archive index only lists a package's newest version. When the build machine has an older one installed (a
+# runner image made before the latest update), apt-get can't find it: then take that exact version from Launchpad,
+# which keeps every version Ubuntu published, and check each file against the .dsc's SHA-256.
+launchpad_source() {
+  local src="$1" ver="$2" bare="${2#*:}" base dsc
+  for v in "$ver" "$bare"; do
+    base="https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/$src/$v"
+    dsc="${src}_${bare}.dsc"
+    curl -fsSL --retry 3 -o "$dsc" "$base/$dsc" || continue
+    awk '/^Checksums-Sha256:/ { on = 1; next } /^[^ ]/ { on = 0 } on && NF == 3 { print $1 "  " $3 }' "$dsc" > "$WORK/dsc.sha256"
+    [ -s "$WORK/dsc.sha256" ] || { echo "no checksums in $dsc"; return 1; }
+    while read -r _ f; do curl -fsSL --retry 3 -o "$f" "$base/$f" || return 1; done < "$WORK/dsc.sha256"
+    sha256sum -c --quiet "$WORK/dsc.sha256" || return 1
+    return 0
+  done
+  return 1
+}
+
+echo "== their sources (apt-get source, needs deb-src entries; else Launchpad)"
 cd "$OUT"
 while IFS=$'\t' read -r src ver; do
-  apt-get source --download-only -qq "$src=$ver" || { echo "could not fetch the source of $src $ver"; exit 1; }
+  apt-get source --download-only -qq "$src=$ver" 2> /dev/null && continue
+  echo "$src $ver: not in the archive's index, from Launchpad"
+  launchpad_source "$src" "$ver" || { echo "could not fetch the source of $src $ver"; exit 1; }
 done < "$WORK/srcpkgs.tsv"
 sha256sum -- * | grep -v ' SHA256SUMS$' > SHA256SUMS
 du -sh "$OUT"
