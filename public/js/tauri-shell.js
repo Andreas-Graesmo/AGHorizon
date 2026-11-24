@@ -170,8 +170,12 @@
     }, 250);
   }
 
-  // 4.5 element fullscreen (player, Multiview tiles) fills only the webview in WebView2: make the window fullscreen too
-  document.addEventListener('fullscreenchange', () => { win().setFullscreen(!!document.fullscreenElement).catch(() => {}); });
+  // 4.5 element fullscreen (player, Multiview tiles) fills only the webview in WebView2: make the window fullscreen too.
+  // Not on macOS: WebKit there moves the element into a native fullscreen window of its own, and making the app window
+  // fullscreen at the same time makes that transition fail, so the player left fullscreen at once (seen on a Mac).
+  if (platform !== 'darwin') {
+    document.addEventListener('fullscreenchange', () => { win().setFullscreen(!!document.fullscreenElement).catch(() => {}); });
+  }
   // Escape leaves fullscreen, as in Electron's Chromium (WebView2 in Tauri doesn't do it by itself: found by e2e)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen().catch(() => {});
