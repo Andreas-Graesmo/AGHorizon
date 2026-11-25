@@ -7,7 +7,6 @@ const path = require('path');
 const vm = require('vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'tauri-shell.js'), 'utf8');
-const PRELOAD = fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.js'), 'utf8');
 
 function load({ tauri = true, existing = null, tv = false } = {}) {
   const calls = [];
@@ -37,26 +36,17 @@ function load({ tauri = true, existing = null, tv = false } = {}) {
   return { td: window.tunerDesktop, calls, listeners };
 }
 
-// member names in electron/preload.js: "name:" or "name(" inside exposeInMainWorld('tunerDesktop', {...})
+// window.tunerDesktop: the members the pages use, as the Electron app's preload had them (the pages were written for
+// it, and the Android TV shell answers the same names)
 const plain = (x) => JSON.parse(JSON.stringify(x));   // values made in the vm's realm have its prototypes
 const shape = (obj) => Object.keys(obj).sort().map((k) => (obj[k] && typeof obj[k] === 'object' ? `${k}{${shape(obj[k])}}` : k)).join(',');
-function preloadShape() {
-  const body = PRELOAD.slice(PRELOAD.indexOf("exposeInMainWorld('tunerDesktop'"));
-  const out = {};
-  let group = null;
-  for (const line of body.split('\n')) {
-    const g = /^\s{2}(\w+): \{/.exec(line);
-    if (g) { group = out[g[1]] = {}; continue; }
-    if (/^\s{2}\},?$/.test(line)) { group = null; continue; }
-    const m = /^\s+(\w+)(?::|\()/.exec(line);
-    if (m && !/^(const|return|if)$/.test(m[1])) (group || out)[m[1]] = 1;
-  }
-  return out;
-}
+const MEMBERS = 'appInfo,displays,downloads{add,adopt,chooseFolder,list,onChange,openFolder,orphans,pause,remove,reorder,resume,reveal,setOption,setWatching},'
+  + 'focusWindow,ready,sync{chooseFolder,folderList,folderPut,folderRemove,getCode,info,setCode},titleBar,'
+  + 'updater{check,download,install,notes,onStatus,openReleases,setChannel,status}';
 
-test('the same members as electron/preload.js', () => {
+test('the members the pages use', () => {
   const { td } = load();
-  assert.strictEqual(shape(td), shape(preloadShape()));
+  assert.strictEqual(shape(td), MEMBERS);
 });
 
 test('inert outside Tauri, in Electron (preload already there) and on Android TV', () => {

@@ -4,7 +4,7 @@
  * person picked (Dropbox, iCloud Drive, OneDrive, Google Drive, Syncthing…). Only that folder: the page never gets to
  * name a path itself. The choice is kept in <data dir>/sync.json.
  *
- * No Electron here (MIGRATION_PLAN.md 3.4): used by electron/sync.js and by the Tauri app's server sidecar
+ * No Electron here (MIGRATION_PLAN.md 3.4): used by the Tauri app's server sidecar
  * (sidecar/entry.js). The folder dialog and the sync code's keychain stay with each shell.
  */
 const fs = require('fs');

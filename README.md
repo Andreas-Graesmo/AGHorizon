@@ -103,12 +103,11 @@ The player is the system's own web view (WebView2 on Windows, WebKit on macOS an
   - **Windows:** ffmpeg 8.1, the win64 GPL build by [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (autobuild 2026-10-31), checked by SHA-256 when the app is built (`scripts/tauri-prep.js`). Its complete source code, every library in it included, is published as [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source) (`scripts/ffmpeg-source.sh` makes it).
   - **Linux:** the same ffmpeg 8.1 from the same BtbN autobuild (linux64 GPL); its source is in the same release. The AppImage also bundles libraries from Ubuntu so video plays everywhere (GStreamer with `gst-libav`, WebKitGTK, GTK and others, under the GPL and LGPL): each release has `AG-Horizon-<version>-AppImage-sources.txt`, which lists them and links to their published source (`scripts/appimage-sources.sh`).
   - **macOS:** ffmpeg 8.1 from the same commit, built for this app by `scripts/ffmpeg-macos.sh` with x264, dav1d and OpenSSL at BtbN's versions; its complete source is published with it in [this release](https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3).
-  - **The 2.x Electron app (and running it from source):** ffmpeg from the [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) package, installed by `npm install`.
 - The licence matters only if you redistribute installers to other people.
 
 ## How it works
 
-The window shows the UI from a small server that runs inside the app on `127.0.0.1`: the Rust server in `server-rs/` (the Tauri app and Android TV), ported from `server.js` (the Electron app), which the tests still hold it to. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
+The window shows the UI from a small server that runs inside the app on `127.0.0.1`: the Rust server in `server-rs/` (the Tauri app and Android TV), ported from `server.js` (the 2.x Electron app's server), which the tests still hold it to. The server fetches playlists, parses the (often huge, gzipped) XMLTV guide, relays streams and runs ffmpeg, because providers don't allow direct calls from a web page (CORS, custom User-Agents). It only accepts requests from the app itself.
 
 On Android TV it is the same pages and the same server: the app (`android/`) shows the pages in a WebView and runs the Rust server (`server-rs/`, built for Android as `server-rs/jni`) inside the app. The pages notice the TV (`public/js/tv.js`), switch to the remote, and hand what should play to ExoPlayer.
 
@@ -125,9 +124,11 @@ On Android TV it is the same pages and the same server: the app (`android/`) sho
 ## Files
 
 ```
-electron/main.js        desktop window, mirror window placement
-electron/preload.js     lets the page ask which monitors exist
-server.js               proxy + EPG parser + ffmpeg conversion + static files
+src-tauri/              the desktop app (Tauri): windows, updater, keychain, mirror window placement
+server-rs/              the server inside the apps (Rust)
+desktop/                downloads and the sync folder, run by the app's server sidecar (sidecar/)
+public/js/tauri-shell.js  the page's bridge to the desktop app
+server.js               the 2.x server: the reference the Rust server is tested against
 public/index.html       page structure
 public/style.css        styles (dark / light, accent colours)
 public/js/core.js       storage, Xtream / M3U loading, EPG lookups
@@ -139,7 +140,6 @@ public/js/audio.js      the audio-language button, preferred audio language
 public/js/sync-core.js  sync codes, encryption, merging history / progress / favorites
 public/js/sync.js       Settings › Sync, when to sync, the folder and cloud storage
 public/js/sync-config.js  the sync server's address (empty: folder only)
-electron/sync.js        the sync code in the keychain, reading and writing the sync folder
 supabase/sync.sql       tables and functions for the optional sync server
 public/js/boot.js       start-up, drag & drop
 public/mirror.html/js   the mirror window

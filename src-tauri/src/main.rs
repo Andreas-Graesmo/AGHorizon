@@ -189,7 +189,7 @@ fn start_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         ("AGH_DATA_DIR".into(), data_dir.to_string_lossy().into_owned()),
         ("AGH_DOCUMENTS_DIR".into(), documents.to_string_lossy().into_owned()),
     ];
-    // API keys: set at build time by CI from its secrets (as release.yml writes secrets.json for Electron)
+    // API keys: set at build time by CI from its secrets (or by whoever builds it, as env)
     if let Some(k) = option_env!("TMDB_API_KEY") {
         envs.push(("TMDB_API_KEY".into(), k.into()));
     }

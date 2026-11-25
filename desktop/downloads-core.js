@@ -8,7 +8,7 @@
  * so it stays in the app's data folder (like the playlists) and never goes into the file names.
  * The page talks to this through preload.js; the local server plays finished files at /api/local/<id>.
  *
- * No Electron here (MIGRATION_PLAN.md 3.5): the same engine runs in the Electron app (electron/downloads.js, its IPC)
+ * No Electron here (MIGRATION_PLAN.md 3.5): the engine runs in the Tauri app's server sidecar (and ran in the Electron app, its IPC)
  * and in the Tauri app's server sidecar (sidecar/entry.js, its stdin/stdout). configure() says where things live and
  * how the page hears of changes; the folder picker and "show in folder" stay with each shell.
  */

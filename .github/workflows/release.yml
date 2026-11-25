@@ -62,7 +62,6 @@ jobs:
             echo "npm ci failed (try $i of 3), trying again in 30 seconds"; sleep 30
           done
           exit 1
-        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Test
         run: npm test
       - name: Download the video libraries so the app also works offline

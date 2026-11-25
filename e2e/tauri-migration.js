@@ -2,18 +2,18 @@
 'use strict';
 /*
  * MIGRATION_PLAN.md Phase 6 gate, on Windows: the first start of the Tauri app after the Electron app.
- *   1. The real Electron app (this checkout) runs with some data (playlists, favourites, theme, a playlist file in
- *      IndexedDB, a downloads folder, a sync folder) and writes %APPDATA%\Tuner IPTV\migration.json (Phase 1).
- *   2. The sync code is added to that file, as the hand-over does (electron/handover.js).
+ *   1. The Electron app's export (Phase 1), as 2.6.0 writes it to %APPDATA%\Tuner IPTV\migration.json: recorded from
+ *      the real app (test/fixtures/migration/electron-export.json; playlists, favourites, theme, a playlist file in
+ *      IndexedDB), with its downloads and sync folders in the files it keeps them in.
+ *   2. The sync code is added to that file, as the hand-over does (2.6.0's handover.js).
  *   3. The Tauri app starts: everything is there, the code is in Credential Manager and out of the file, a marker says
  *      the import is done.
  *   4. A change made in the Tauri app survives a restart (the import never runs twice).
  *   5. Without migration.json, but with an Electron profile, the app says so once (6.4).
  * Runs on a CI runner: it removes both apps' data folders first. Do not run it on a PC whose data you want to keep.
- * Usage (Windows, after `node scripts/tauri-prep.js` and `cargo build --release` in src-tauri, with Electron's
- * binary installed): node e2e/tauri-migration.js
+ * Usage (Windows, after `node scripts/tauri-prep.js` and `cargo build --release` in src-tauri): node e2e/tauri-migration.js
  */
-const { chromium, _electron: electron } = require('playwright');
+const { chromium } = require('playwright');
 const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -73,25 +73,11 @@ async function closeTauri({ child, browser, page }) {
   const cloudDir = path.join(tmp, 'Cloud');
   fs.mkdirSync(dlDir); fs.mkdirSync(cloudDir);
 
-  /* 1: the Electron app stores data and exports it */
-  const eapp = await electron.launch({ executablePath: require('electron'), args: [root], env: { ...process.env, AGH_MIGRATION_EXPORT: '1', TUNER_PORT: '47999' } });
-  const userData = await eapp.evaluate(({ app }) => app.getPath('userData'));
-  check('Electron: data folder is %APPDATA%\\Tuner IPTV', path.resolve(userData).toLowerCase() === path.resolve(oldDir).toLowerCase(), userData);
-  const ewin = await eapp.firstWindow();
-  await ewin.waitForFunction(() => typeof LS === 'object' && typeof idb === 'object', null, { timeout: 30000 });
-  await ewin.evaluate(async () => {
-    LS.set('tuner.playlists', [{ id: 'p1', name: 'From Electron', type: 'm3u', url: 'file' }]);
-    LS.set('tuner.favs', ['p1:live:7']);
-    LS.set('tuner.theme', 'light');
-    await idb.put('file:p1', '#EXTM3U\n#EXTINF:-1,One\nhttp://x/1.ts\n');
-  });
-  let data = null;
-  for (let i = 0; i < 40; i++) {
-    try { data = JSON.parse(fs.readFileSync(exportFile, 'utf8')); if (data.localStorage['tuner.theme'] === '"light"' || data.localStorage['tuner.theme'] === 'light') break; } catch { /* not yet */ }
-    await sleep(500);
-  }
-  await eapp.close();
-  check('Electron: migration.json written', !!data && data.format === 1 && data.indexedDB.tuner.files.some((r) => r.key === 'file:p1'), data ? `${Object.keys(data.localStorage).length} keys` : 'missing');
+  /* 1: the Electron app's export, as 2.6.0 writes it to %APPDATA%\Tuner IPTV (recorded from the real app before
+     Electron left this repository: playlists, favourites, a light theme, a playlist file in IndexedDB) */
+  // the Electron profile next to it (Chromium's Local Storage folder): what the app recognises an Electron profile by
+  fs.mkdirSync(path.join(oldDir, 'Local Storage', 'leveldb'), { recursive: true });
+  const data = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'migration', 'electron-export.json'), 'utf8'));
   // the folders as the person picked them in the Electron app (its dialogs can't be clicked here), in the files the Electron app keeps them in (downloads.js / sync.js)
   const dlJson = path.join(oldDir, 'downloads.json');
   const prev = fs.existsSync(dlJson) ? JSON.parse(fs.readFileSync(dlJson, 'utf8')) : {};

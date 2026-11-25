@@ -1,5 +1,6 @@
 'use strict';
-// Own file: electron is replaced by a stand-in here, with the download folder in a temp dir.
+// The download engine (desktop/downloads-core.js; the Rust server's downloads.rs does the same), with the download
+// folder in a temp dir.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -7,13 +8,9 @@ const os = require('os');
 const path = require('path');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agh-dl-'));
-const noop = () => {};
-require.cache[require.resolve('electron')] = {
-  id: 'electron', loaded: true,
-  exports: { app: { getPath: () => tmp, on: noop }, ipcMain: { handle: noop, on: noop }, BrowserWindow: { getAllWindows: () => [] }, dialog: {}, shell: {} },
-};
-const downloads = require('../electron/downloads');
-downloads.init();   // reads downloads.json (none) -> download folder <tmp>/AGHorizon
+const downloads = require('../desktop/downloads-core');
+downloads.configure({ dataDir: tmp, documentsDir: tmp });
+downloads.start();   // reads downloads.json (none) -> download folder <tmp>/AGHorizon
 const root = path.join(tmp, 'AGHorizon');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 

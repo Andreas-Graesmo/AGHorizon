@@ -242,7 +242,7 @@ async function launch() {
   // window size: changed now, it must come back after a normal close and start
   await page.evaluate(() => window.__TAURI__.window.getCurrentWindow().setSize(new window.__TAURI__.window.LogicalSize(1111, 733)));
   await sleep(1000);
-  // closing the app window while picture-in-picture is open: both go, and the app quits (electron/main.js 'closed')
+  // closing the app window while picture-in-picture is open: both go, and the app quits (src-tauri/src/main.rs)
   await page.evaluate((url) => playChannel({ uid: 'e2e:movie:3', pid: null, kind: 'movie', name: 'E2E Film', url }), `${filmUrl}?again`);
   await page.waitForFunction(() => document.querySelector('#video').videoWidth > 0, null, { timeout: 30000 }).catch(() => {});
   await page.evaluate(() => togglePip());

@@ -812,7 +812,7 @@ const upd = { info: null, st: { state: 'idle' } };
 const whatsNewBtn = '<button class="btn ghost" data-act="whats-new"><svg class="ic"><use href="#i-article"/></svg>What’s new?</button>';   // on the About page and in the update banner
 const tmdbCredit = () => (state.tmdb ? '<p class="muted center">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>' : '');
 // ffmpeg is GPL v3: say which one this app ships and where its source is (MIGRATION_PLAN.md 5.9). Links open in the
-// system browser (Electron and the Tauri app both send target=_blank there).
+// system browser (the Tauri app sends target=_blank there).
 const FFMPEG_SOURCE = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-btbn-2026-10-31-source';
 // macOS: our own build of the same ffmpeg (scripts/ffmpeg-macos.sh), its release carrying its source (MIGRATION_PLAN.md 9.8)
 const FFMPEG_SOURCE_MAC = 'https://github.com/Andreas-Graesmo/AGHorizon/releases/tag/ffmpeg-n8.1.3-27-g8dca1586f4-macos-universal-3';
@@ -823,7 +823,7 @@ const ffmpegCredit = () => {
   if (TV) what = `Sound the TV can't decode is decoded by ${link('https://ffmpeg.org', 'ffmpeg')} (${gpl}), as built by the ${link('https://github.com/jellyfin/jellyfin-media3-ffmpeg-decoder', 'Jellyfin project')}.`;
   else if (window.__TAURI__ && /Mac/.test(navigator.userAgent)) what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} 8.1 (${gpl}), built for this app with x264, dav1d and OpenSSL. ${link(FFMPEG_SOURCE_MAC, 'Its complete source code')}.`;
   else if (window.__TAURI__) what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} 8.1 (${gpl}), built by ${link('https://github.com/BtbN/FFmpeg-Builds', 'BtbN/FFmpeg-Builds')}. ${link(FFMPEG_SOURCE, 'Its complete source code')}.`;
-  else what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} (${gpl}), from the ${link('https://github.com/eugeneware/ffmpeg-static', 'ffmpeg-static')} package.`;
+  else what = `Compatibility mode and downloads use ${link('https://ffmpeg.org', 'ffmpeg')} (${gpl}).`;
   // the Linux AppImage also bundles libraries from Ubuntu (GStreamer, WebKitGTK…; MIGRATION_PLAN.md 9.8): each release
   // has a file that lists them and says where their source is
   const v = upd.info && upd.info.version;

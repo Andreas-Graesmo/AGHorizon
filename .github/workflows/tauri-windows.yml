@@ -24,9 +24,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - name: npm ci (without Electron's binary; not needed here)
+      - name: npm ci
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
-        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
       - uses: dtolnay/rust-toolchain@stable

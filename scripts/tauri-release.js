@@ -7,7 +7,7 @@
  *   Linux    AG-Horizon-<version>.AppImage (+ .sig)         the AppImage, which is also the update
  *   macOS    AG-Horizon-<version>-universal.dmg             to install (one app: Apple silicon and Intel)
  *            AG-Horizon-<version>-universal.app.tar.gz (+ .sig)   the update, for both
- *   latest.json   what the Tauri updater (and on Windows the Electron hand-over, electron/handover.js) reads, with
+ *   latest.json   what the Tauri updater (and the Electron apps' hand-over, 2.5.0 / 2.6.0) reads, with
  *                 this system's entries
  * A release built on several systems needs one latest.json with every system's entries:
  *   node scripts/tauri-release.js --merge <out latest.json> <latest.json>...

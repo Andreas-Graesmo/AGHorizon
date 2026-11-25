@@ -402,10 +402,10 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
 
 - [x] **7.1** Ship Tauri for Windows on the **test channel** first. v3.1.0-beta.0 and v3.1.0-beta.1 (with the Rust server, 8.5) are out, and each passed the owner's manual check.
 - [ ] **7.2** Watch for media regressions on real hardware (HEVC, AC-3, GPUs), WebView2 runtime issues and upgrade problems.
-- [ ] **7.3** Promote to stable, all systems together (owner's go-ahead 2026-11-20, after Phase 9): `migration/tauri` into `main` (a PR), 3.1.0 tagged from `main` (*Tag a release*), the owner presses **Publish**. The stable bridge (2.6.0, and 2.5.0 on Windows) hands over by itself.
+- [x] **7.3** Promoted to stable, all systems together: **3.1.0, published 2026-11-20** ([Andreas-Graesmo/AGHorizon#39](https://github.com/Andreas-Graesmo/AGHorizon/pull/39), tagged from `main`). Checked after publishing: it is GitHub's latest release; `latest.json` and the bridge's three `latest*.yml` answer at `releases/latest/download/`; 2.6.0's own lookup (`handover.findRelease`, Stable) finds 3.1.0 and the right file for Windows, Apple silicon and Linux; 3.1.0 finds nothing newer. How it was done: `migration/tauri` into `main` (a PR), 3.1.0 tagged from `main` (*Tag a release*), the owner presses **Publish**. The stable bridge (2.6.0, and 2.5.0 on Windows) hands over by itself.
   - Found on the way: Electron apps **older** than the bridge (before 2.5.0 on Windows, before 2.6.0 on macOS and Linux) read `latest*.yml` in GitHub's latest release, which a Tauri release doesn't have: once 3.1.0 was the latest release they'd only get an update error and never reach the bridge. So a stable release carries the bridge's three update files, with each download pointing back at 2.6.0 (`scripts/bridge-feed.js`, the `bridge-feed` job in `release.yml`): those apps update to 2.6.0, which hands over. Checked with electron-updater's own parsing and file resolution (`test/bridge-feed.test.js`) and against the real 2.6.0 files (every download resolves).
 - [x] **7.4** `README.md` (built with Tauri from 3.1; the universal Mac download; the Mac updates itself; each system's ffmpeg), `RELEASING.md` (the Mac section; the bridge's files on a stable release) and `docs/` (the universal Mac download, #38; a computer keeps itself up to date).
-- [ ] **Gate:** two weeks of stable on Windows with no data-loss reports.
+- [ ] **Gate:** two weeks of stable with no data-loss reports, on every system (from 2026-11-20, so 2026-12-04 at the earliest). Then Phase 10.
 
 ### Phase 8: Port the server to Rust (started 2026-11-17, owner's request)
 
@@ -573,13 +573,15 @@ Everything the spike found for these platforms is collected here.
 
 ### Phase 10: Remove Electron (after Phase 9)
 
-- [ ] **10.1** Delete `electron/`. Remove `electron`, `electron-builder`, `electron-updater`, the `build` block and `allowScripts` from `package.json`. Make `ffmpeg-static` dev-only, or drop it in favour of the CI download.
-- [ ] **10.2** Update the tests:
+- [x] **10.1** Delete `electron/`. Remove `electron`, `electron-builder`, `electron-updater`, the `build` block and `allowScripts` from `package.json`. Make `ffmpeg-static` dev-only, or drop it in favour of the CI download.
+- [x] **10.2** Update the tests:
   - `test/downloads.test.js` stubs `require('electron')`; point it at the refactored module from 3.5.
   - `test/server.test.js:13-16` checks the publish target for `electron/updater.js`.
   - `test/versions.test.js` moves along with `versions.js`.
-- [ ] **10.3** Update `package.json` scripts: `start` → `tauri dev`, `dist*` → `tauri build`. Keep the `release:*` version scripts. Drop `ELECTRON_SKIP_BINARY_DOWNLOAD` from `android.yml:45`.
+- [x] **10.3** Update `package.json` scripts: `start` → `tauri dev`, `dist*` → `tauri build`. Keep the `release:*` version scripts. Drop `ELECTRON_SKIP_BINARY_DOWNLOAD` from `android.yml:45`.
 - [ ] **10.4** Remove the update-handover code paths once issue reports show the bridge releases have drained. Keep them published.
+  - 10.1–10.3 done 2026-11-25, on the owner's decision to go ahead before the Phase 7 gate's two weeks were up: `electron/` (with the handover code and its tests), `spike/migration/` and `release-backfill.yml` are gone; `package.json` has no Electron, electron-builder or ffmpeg-static, `npm start` / `npm run dist` run Tauri. `electron-updater` stays as a dev dependency only, for `test/bridge-feed.test.js`. `test/downloads.test.js` runs `desktop/downloads-core.js`; `test/tauri-shell.test.js` checks against the bridge's shape, frozen in the test. The Electron side of the migration e2e tests is now a recorded 2.6.0 export (`test/fixtures/migration/electron-export.json`) and, on Windows, 2.6.0's published installer.
+  - Still kept (10.4): the Tauri side of the import (`desktop/migration-import.js`, `main.rs`), the Windows installer hook, `server.js` (the parity tests' reference) and the `bridge-feed` job, until old apps have drained.
 
 ---
 

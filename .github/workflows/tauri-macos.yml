@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'test/fixtures/**', '!**/*.md', '.github/workflows/tauri-macos.yml']
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'test/fixtures/**', '!**/*.md', '.github/workflows/tauri-macos.yml']
 
 permissions:
   contents: read
@@ -26,9 +26,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - name: npm ci (without Electron's binary; not needed here)
+      - name: npm ci
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
-        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
       - uses: dtolnay/rust-toolchain@stable
@@ -54,15 +53,11 @@ jobs:
       - name: End to end
         timeout-minutes: 12
         run: node e2e/tauri-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app src-tauri/binaries/ffmpeg-universal-apple-darwin
-      # 9.10: from the Electron app to this one, as tauri-linux.yml does on Linux: the real Electron app writes its
-      # export, this app imports it once; the sync code goes into the Keychain
+      # 9.10: from the Electron app to this one, as tauri-linux.yml does on Linux: the export 2.6.0 writes (recorded in
+      # test/fixtures/migration), imported once; the sync code goes into the Keychain
       - name: Electron → Tauri (data and sync code)
         timeout-minutes: 12
-        run: |
-          node node_modules/electron/install.js
-          npm install --no-save --no-audit --no-fund playwright@1.63.0
-          node e2e/tauri-migration-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
-        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+        run: node e2e/tauri-migration-unix.js src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
       # the same app for the Apple silicon Mac below (tar keeps its signature and permissions)
       - name: The app, for the Apple silicon run
         run: tar -C src-tauri/target/universal-apple-darwin/release/bundle/macos -cf "$RUNNER_TEMP/app.tar" "AG Horizon.app"

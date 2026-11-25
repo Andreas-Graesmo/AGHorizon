@@ -91,11 +91,11 @@ When the test version is good, release it to everyone with `npm run release:mino
 - **Linux** – the `.AppImage` updates itself. Make it executable once (`chmod +x`).
 - **macOS** – one universal app for Apple silicon and Intel Macs (3.1 and later). It isn't signed by Apple (ad hoc only), so the first time macOS blocks it: **System Settings → Privacy & Security → Open Anyway** (on macOS 14 and earlier, right-click the app → **Open**). It updates itself (Tauri's updater, checked against the release key) once it is in a folder it can write, such as Applications; from the disk image, or where macOS runs it from a hidden copy, it says why it can't and links to the release page. (The 2.x Electron app was for Apple silicon only and could only point to the release page.)
 - **Version numbers** must always go up; the app only offers updates with a higher version than the installed one.
-- **OpenSubtitles** – the app's API key is a repository secret, not part of the code: **Settings → Secrets and variables → Actions → New repository secret**, name `OPENSUBTITLES_API_KEY`. The release build writes it into the app. Without it, the app works but can't search OpenSubtitles. To use it when running from source, create `secrets.json` in the app folder containing `{ "opensubtitlesApiKey": "your key" }` (it is in `.gitignore`).
-- **TMDB (cast photos)** – the same way: a repository secret named `TMDB_API_KEY`, holding the "API Key" from themoviedb.org → Settings → API (free account). Without it, the cast shows initials. From source: add `"tmdbApiKey": "your key"` to `secrets.json`.
+- **OpenSubtitles** – the app's API key is a repository secret, not part of the code: **Settings → Secrets and variables → Actions → New repository secret**, name `OPENSUBTITLES_API_KEY`. The release build writes it into the app. Without it, the app works but can't search OpenSubtitles.
+- **TMDB (cast photos)** – the same way: a repository secret named `TMDB_API_KEY`, holding the "API Key" from themoviedb.org → Settings → API (free account). Without it, the cast shows initials.
 - **Never** put passwords or provider logins in the repository. Playlists are stored inside the app on each computer, not in the code.
-- To run the app from source: [Node.js](https://nodejs.org) 18 or newer, then `npm install` (downloads Electron and ffmpeg once) and `npm start`. For Trending, cast photos and OpenSubtitles, put the API keys in a `secrets.json` next to `server.js`: `{ "tmdbApiKey": "…", "opensubtitlesApiKey": "…" }` (it is never committed).
-- To test an installer on your own machine without GitHub: `npm install`, then `npm run dist` (output in `dist/`).
+- To run the app from source: [Node.js](https://nodejs.org) 18 or newer, [Rust](https://rustup.rs) and [Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/), then `npm install` and `npm start` (downloads ffmpeg once). For Trending, cast photos and OpenSubtitles, set `TMDB_API_KEY` and `OPENSUBTITLES_API_KEY` in the environment when you run it (they are built in).
+- To test an installer on your own machine without GitHub: `npm install`, then `npm run dist` (output in `src-tauri/target/release/bundle/`).
 - If the Action fails, open the failed run in the **Actions** tab and read the red step. The most common causes are forgetting step 3 (workflow permissions) or a tag that doesn't match the version in `package.json`.
 
 ## 7. Android TV
@@ -154,7 +154,7 @@ The build copies `public/` into the app and builds the app's server, the Rust se
 
 On the `migration/tauri` branch, Windows is built as the Tauri app (`MIGRATION_PLAN.md`). Its updates are accepted only if they are signed with **your** update key. The release workflow signs them; installed apps check the signature against the public key built into them.
 
-- **The public key** is in the repository: `electron/tauri-updater.key.pub` and `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` (key ID `F074C66F1E88511B`). The Electron app's hand-over to the Tauri app checks against it too.
+- **The public key** is in the repository: `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` (key ID `F074C66F1E88511B`). The Electron apps' hand-over (2.5.0, 2.6.0) has it built in too.
 - **The private key** (`aghorizon.key`, made with `npx @tauri-apps/cli signer generate`) and its password are kept by you, with a copy somewhere other than your PC. They are the repository secrets `TAURI_SIGNING_PRIVATE_KEY` (the file's content) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The Windows release build stops with an error if the key is missing.
 - **If the private key or its password is lost**, installed copies can never be updated again: everyone would have to download and install the next version by hand, and the new key's public half would have to be built in. Keep the backup.
 - **Never** commit the private key, paste it anywhere, or use it in a test: the CI tests (`tauri-update.yml`) make their own throwaway key.

@@ -648,11 +648,9 @@ const { spawn, spawnSync } = require('child_process');
 function findFfmpeg() {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
   try {
-    const p = require('ffmpeg-static'); // optional dependency, bundled with the desktop app
+    const p = require('ffmpeg-static'); // if installed (npm install ffmpeg-static); the apps pass FFMPEG_PATH
     if (p) {
-      // Inside a packaged Electron app the binary lives next to the asar archive, not inside it.
-      const real = p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
-      if (fs.existsSync(real)) return real;
+      if (fs.existsSync(p)) return p;
     }
   } catch { /* not installed – fall back to PATH */ }
   return 'ffmpeg';
