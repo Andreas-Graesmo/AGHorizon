@@ -113,12 +113,24 @@ jobs:
           app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
           scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/src" --list-only
           tag="appimage-sources-ubuntu22.04-$(awk '/^== source packages/,/^$/' "$RUNNER_TEMP/src/MANIFEST.txt" | sha256sum | cut -c1-12)"
-          if ! gh release view "$tag" > /dev/null 2>&1; then
+          # Complete once MANIFEST.txt is there (uploaded last). Several hundred files: one at a time, only those
+          # still missing, with pauses and retries (GitHub's upload limit stopped 3.1.3-beta.0 part way; a re-run
+          # then has to finish the job, not take the half-filled release for done).
+          have="$(gh release view "$tag" --json assets -q '.assets[].name' 2>/dev/null || true)"
+          if ! grep -qxF MANIFEST.txt <<< "$have"; then
             rm -rf "$RUNNER_TEMP/src" && scripts/appimage-sources.sh "$app" "$RUNNER_TEMP/src"
-            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false \
+            gh release view "$tag" > /dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false \
               --title "Third-party sources for the Linux AppImage" \
               --notes "The source of every Ubuntu package bundled in AG Horizon's Linux AppImage (GStreamer, gst-libav and the libraries it uses, WebKitGTK, GTK and others; GPL and LGPL among them). MANIFEST.txt lists each bundled file and its package. This is not an app release."
-            ( cd "$RUNNER_TEMP/src" && gh release upload "$tag" -- * )
+            up() { for i in 1 2 3 4 5 6; do gh release upload "$tag" --clobber -- "$1" && return 0; echo "retrying $1 in $((i * 60)) s"; sleep $((i * 60)); done; return 1; }
+            cd "$RUNNER_TEMP/src"
+            for f in *; do
+              [ "$f" = MANIFEST.txt ] && continue
+              grep -qxF "$f" <<< "$have" && continue
+              up "$f"; sleep 1
+            done
+            up MANIFEST.txt
+            cd "$GITHUB_WORKSPACE"
           fi
           version="${GITHUB_REF_NAME#v}"
           { echo "The source of the third-party software in AG-Horizon-$version.AppImage: https://github.com/$GH_REPO/releases/tag/$tag"; echo; cat "$RUNNER_TEMP/src/MANIFEST.txt"; } > "release-out/AG-Horizon-$version-AppImage-sources.txt"
