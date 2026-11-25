@@ -313,14 +313,18 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
     - Its tag isn't a version number, so no updater offers it. electron-updater's Test channel skips tags that aren't valid semver, and Stable reads only GitHub's latest release, which a pre-release never is. The Tauri app, the Android TV app and `handover.js` skip it too.
   - [x] The media spike and the three Windows e2e suites pass with 8.1 (2026-11-17). The app's ffmpeg options (`-reconnect*`, `-copyts`, `-c:a aac`, `-movflags`, …) all exist in 8.1.
   - [x] ffmpeg and its licence are named in Settings › About & updates (`ffmpegCredit()` in `ui.js`: the BtbN build with a link to the source release in the Tauri app, `ffmpeg-static` in Electron, Jellyfin's decoder on Android TV) and in the README.
-  - [ ] **Versions already shipped with gyan's 6.1.1** (Electron ≤ 2.5.0 on Windows, and Tauri v3.1.0-beta.0) — "make do with what we have":
+  - [x] **Versions already shipped with gyan's 6.1.1** (Electron ≤ 2.5.0 on Windows, and Tauri v3.1.0-beta.0) — "make do with what we have":
     - 33 libraries come with versions from gyan's README;
     - zlib 1.2.13, bzip2 1.0.8, GnuTLS 3.6.16 and xz 5.2.9 were read from the binary;
     - libxml2 is a 2.13 development snapshot (commit unknown);
     - gmp, libiconv and fontconfig have no version.
 
-    Not pursued further for now. A best-effort archive can be assembled from this if ever needed.
-  - The macOS/Linux Electron apps' ffmpeg (`ffmpeg-static`'s other builders) is handled in Phase 9.
+    **Best effort, published 2026-11-25** (the owner's "make do with what we have"): the pre-release `ffmpeg-legacy-ffmpeg-static-b6.1.1-source` (`scripts/ffmpeg-legacy-source.sh`, its list `scripts/ffmpeg-legacy-sources.txt`, `.github/workflows/ffmpeg-legacy-source.yml`). It covers every ffmpeg the apps shipped from `ffmpeg-static` 5.3.0 (b6.1.1), which turned out to be three different builds:
+    - **Windows** (Electron ≤ 2.6.0, 3.1.0-beta.0): gyan.dev 6.1.1. FFmpeg at `e38092ef93` and the 33 libraries in its README, exact (x264 r3172 found by commit count); the four read from the binary, exact; libxml2 (master on 2024-01-01), gmp, nettle, libiconv, fontconfig and libogg: the releases current at the time.
+    - **Linux** (the Electron AppImage): John Van Sickle's static **7.0.2** (not 6.1.1). FFmpeg n7.0.2 and the libraries its README names, exact (Debian 10 packages from snapshot.debian.org); those it doesn't name: Debian 10's versions.
+    - **macOS** (the Electron app, Apple silicon): osxexperts.net's **6.0**, no README. FFmpeg n6.0 and 13 libraries whose versions the binary reports, exact; the rest, the releases current in early 2023.
+    - Each build's README, configure line and the sha256 of the shipped binary are in the release; `README.txt` marks every file exact or nearest.
+    - Found on the way: the Mac build was configured with `--enable-nonfree`, which by FFmpeg's terms makes the binary not redistributable, though no non-free library shows in its configure line. Nothing can change that for the versions out there; 3.1 replaced it (9.8).
 - [x] **Gate, self-update (CI):** `e2e/tauri-update.js`, 14/14. Versions 9.0.0 and 9.0.1 are built with a throwaway key and served locally.
   - A manifest for the installed version → up to date.
   - An installer with one byte changed → "The signature verification failed", and nothing is installed.
