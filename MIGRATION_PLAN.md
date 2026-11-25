@@ -132,14 +132,14 @@ It changes nothing a user notices until a Tauri release exists. The code is port
   - It reaches the Test channel too, because Test takes the newest of all published releases.
   - Its Windows assets are the Electron installer plus `latest.yml`.
   - That release has no macOS build (`.dmg` / `latest-mac.yml`). That doesn't matter for the hand-over, which is Windows only.
-  - [ ] **Wait:** keep v2.5.0 (or later Electron releases from `main`, which keep the bridge) as the newest Windows release for at least one release cycle, before the first tag with the Tauri `release.yml`.
+  - [x] **Wait:** keep v2.5.0 (or later Electron releases from `main`, which keep the bridge) as the newest Windows release for at least one release cycle, before the first tag with the Tauri `release.yml`. **Done:** 2.5.0 (then 2.6.0) stayed the newest stable release until 3.1.0 (2026-11-20).
 - **Checks:**
   - `npm test`: 67/67, including `test/handover.test.js`: signatures made by `tauri signer` (throwaway key in `test/fixtures/handover/`), tampering, wrong key, an edited trusted comment, release choice per channel, and the installer URL guard.
   - Signature verification also checked inside Electron 45 itself.
   - `spike/migration/check-roundtrip.js` (Chromium, real UI): Xtream credentials with special characters, a 3 MB file playlist, favourites, history, progress and settings all survive export → empty profile → import, 13/13. A second import doesn't overwrite.
   - `spike/migration/check-electron-export.js`: the real Electron app writes `migration.json` with the stored data and no sync code, on Linux and **on Windows** (`%APPDATA%\Tuner IPTV`; CI `bridge.yml` [run #2](https://github.com/Andreas-Graesmo/AGHorizon/actions/runs/44115287363), where `npm test` also passes). The first Windows run showed Git turning the signed fixture's LF into CRLF; `.gitattributes` now keeps `test/fixtures/**` byte-exact.
   - **Not testable before a Tauri release exists:** the full download → verify → install path against a real release. That is covered by the Phase 6 gate (Electron 2.5 → bridge → Tauri on clean VMs).
-- [ ] **Gate:** `migration.json` appears on Windows with real data (**done**, CI), the round trip restores everything (**done**), and **1.0 is done**. **Passed:** 1.4 shipped as v2.5.0.
+- [x] **Gate:** `migration.json` appears on Windows with real data (**done**, CI), the round trip restores everything (**done**), and **1.0 is done**. **Passed:** 1.4 shipped as v2.5.0.
 
 ### Phase 2: Tauri scaffold and server sidecar
 
@@ -335,7 +335,7 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
   - The **macOS job was cancelled** (as in v2.5.0's run), so this beta has no dmg. That needs a look before the next release.
   - The owner's manual pass on Windows: data, playback, window, PiP and mirror, downloads, sync and updates all passed.
   - Still to see: the Tauri app updating itself N → N+1 from a real release (the next beta).
-- [ ] ~~Gate, first real release:~~ the original wording, kept for reference: a `v3.0.0-beta.1` tag from this branch (after the bridge has been out a release cycle) produces one draft containing:
+- ~~Gate, first real release:~~ the original wording, kept for reference: a `v3.0.0-beta.1` tag from this branch (after the bridge has been out a release cycle) produces one draft containing:
   - the Windows Tauri installer with its `.sig` and `latest.json`;
   - the Electron dmg and AppImage with their `*-mac.yml` / `*-linux.yml`;
   - the APK.
@@ -386,7 +386,7 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
     - with real electron-builder and Tauri installers, installing without a hand-over keeps both apps;
     - installing after a hand-over removes the Electron app (its entry and its files), keeps its data, and the Tauri app is installed.
 - [x] **Owner's PC (2026-11-17):** the hand-over to v3.1.0-beta.0 passed. Data, downloads, sync code and the single installed app were all as expected.
-- [ ] **Gate, by hand:** run the full upgrade on clean Windows 10 and 11 machines, Electron 2.5.x → bridge 2.9.0 → Tauri 3.0.0-beta.1. Check that:
+- [x] **Gate, by hand:** run the full upgrade on clean Windows 10 and 11 machines, Electron 2.5.x → bridge 2.9.0 → Tauri 3.0.0-beta.1. Check that: **Replaced by** the installer and import checks on CI (`e2e/tauri-installer.js`, `e2e/tauri-migration.js`, with the published 2.6.0 installer), the owner's PC (above) and the betas by hand; clean Windows 10 and 11 machines were not used.
   - playlists, file playlists, favourites, history, settings, theme, downloads list, sync folder and sync code all survive;
   - exactly one app is installed.
 
@@ -435,7 +435,7 @@ Done on 2026-11-17; the CI gate passes (`.github/workflows/tauri-migration.yml`)
     - 256 MB at most queued for a reader that stopped.
 
     The stitcher's three cases from `shared.test.js` are Rust unit tests. Both servers take `AGH_SHARE_REVISIT` (test only).
-- [ ] **8.4 Contract tests against both.** `test/parity/parity.test.js` talks HTTP to whichever server `AGH_PARITY_SERVER` names (`node`, the default and part of `npm test`, or `rust`), with a fake provider. Both servers pass all of it. CI: `.github/workflows/server-rs.yml`, Linux and Windows.
+- [x] **8.4 Contract tests against both.** `test/parity/parity.test.js` talks HTTP to whichever server `AGH_PARITY_SERVER` names (`node`, the default and part of `npm test`, or `rust`), with a fake provider. Both servers pass all of it. CI: `.github/workflows/server-rs.yml`, Linux and Windows.
   - Covered so far:
     - the guard (Host, Origin, Sec-Fetch-Site);
     - static files (types, index, 404, dot segments, encoded slashes, NUL, bad encoding);
@@ -542,7 +542,7 @@ Everything the spike found for these platforms is collected here.
   - [x] `tauri-release.js` makes each system's release files and `latest.json` entries (`darwin-aarch64-app`, `linux-x86_64-appimage`); `--merge` combines the systems' `latest.json` into the release's one.
   - [x] `e2e/tauri-update-unix.js` (`tauri-update.yml`): N → N+1 on Linux and macOS, green on CI next to Windows (a tampered file is refused; the app restarts as N+1, one copy, nothing left). On macOS the restart goes through LaunchServices. It found that a build after only a version change kept the old version (fixed in `src-tauri/build.rs`).
   - [x] No `*-mac.yml` or `*-linux.yml` any more: `release.yml` builds no Electron files (checked on 3.1.0-beta.9's release: no `.yml` among its files).
-- [ ] **9.10 Bridge and migration.** Built and checked; what is left is releasing it, in this order:
+- [x] **9.10 Bridge and migration.** Built and checked; what is left is releasing it, in this order:
   1. [x] **A bridge release from `main`**: **2.6.0**, published 2026-11-18 ([Andreas-Graesmo/AGHorizon#30](https://github.com/Andreas-Graesmo/AGHorizon/pull/30), tagged with the new *Tag a release* workflow, `.github/workflows/tag-release.yml` on `main`). Leave it out for a while, as 2.5.0 was for Windows.
   2. [x] **3.1.0-beta.3** (2026-11-18), the first release with the Tauri app on all three desktop systems: published by itself as a pre-release, one `latest.json` for the three, the AppImage's third-party sources at `appimage-sources-ubuntu22.04-1d95bc2c5eb0` (703 files), a pointer to them in the release. (3.1.0-beta.2 stopped at the sources step and stayed a draft: Firefox's own copies of system libraries on the runner were matched by name; fixed.) What the step was: `release.yml` now builds the Tauri app for all three desktop systems and no Electron files (no `latest-mac.yml` / `latest-linux.yml`), so old Electron apps only ever find the bridge. Before step 1 is out, Electron apps on macOS and Linux on the Test channel would find a release without their update files (an error in their update check).
   - [x] Electron (`electron/handover.js`, `updater.js`, `main.js`): the hand-over on Linux replaces the AppImage it runs from (`$APPIMAGE`, the **same file name**) and on macOS the .app where it is (as Tauri's updater does, no Apple signature needed; better than the planned banner), both after the signature check, starting the new app once Electron has quit. Where it can't (no AppImage; a Mac app on the disk image, translocated, or in a folder that can't be written), the release page, as before. `migration.json` is now kept up to date on every system. 5 new unit tests (`test/handover.test.js`).
