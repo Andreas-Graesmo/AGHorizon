@@ -19,7 +19,8 @@ STATIC=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1
 declare -A DONE      # file -> already fetched (the same source serves several builds)
 ROWS=(); MISSING=(); EXACT_MISSING=0
 
-fetch() { curl -fsSL --retry 4 --retry-delay 5 --connect-timeout 30 -o "$1" "$2"; }
+# HTTP/1.1: snapshot.debian.org breaks HTTP/2 streams now and then
+fetch() { curl -fsSL --http1.1 --retry 6 --retry-all-errors --retry-delay 10 --connect-timeout 30 -o "$1" "$2"; }
 
 # a repository's tree at a ref, as <file>: tags and full or short commits
 git_archive() {   # <file> <repo> <ref | date> <kind>
@@ -41,7 +42,7 @@ git_archive() {   # <file> <repo> <ref | date> <kind>
 
 # a Debian source package (its .dsc, original archive and Debian changes), from snapshot.debian.org
 debsrc() {   # <file> <package> <version>
-  local file="$1" pkg="$2" ver="$3" dir="$WORK/deb/${file%.tar}"
+  local file="$1" pkg="$2" ver="$3" dir="$WORK/deb/${file%.tar}" hash fname
   mkdir -p "$dir"
   fetch "$WORK/deb.json" "https://snapshot.debian.org/mr/package/$pkg/$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$ver")/srcfiles?fileinfo=1" || return 1
   python3 - "$WORK/deb.json" > "$WORK/deb.list" <<'EOF' || return 1
@@ -51,7 +52,7 @@ for h in d['result']:
     print(h['hash'], d['fileinfo'][h['hash']][0]['name'])
 EOF
   [ -s "$WORK/deb.list" ] || return 1
-  while read -r hash name; do fetch "$dir/$name" "https://snapshot.debian.org/file/$hash" || return 1; done < "$WORK/deb.list"
+  while read -r hash fname; do fetch "$dir/$fname" "https://snapshot.debian.org/file/$hash" || return 1; done < "$WORK/deb.list"
   tar -C "$WORK/deb" -cf "$OUT/$file" "${file%.tar}"
 }
 
