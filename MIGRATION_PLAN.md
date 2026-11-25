@@ -573,13 +573,15 @@ Everything the spike found for these platforms is collected here.
 
 ### Phase 10: Remove Electron (after Phase 9)
 
-- [ ] **10.1** Delete `electron/`. Remove `electron`, `electron-builder`, `electron-updater`, the `build` block and `allowScripts` from `package.json`. Make `ffmpeg-static` dev-only, or drop it in favour of the CI download.
-- [ ] **10.2** Update the tests:
+- [x] **10.1** Delete `electron/`. Remove `electron`, `electron-builder`, `electron-updater`, the `build` block and `allowScripts` from `package.json`. Make `ffmpeg-static` dev-only, or drop it in favour of the CI download.
+- [x] **10.2** Update the tests:
   - `test/downloads.test.js` stubs `require('electron')`; point it at the refactored module from 3.5.
   - `test/server.test.js:13-16` checks the publish target for `electron/updater.js`.
   - `test/versions.test.js` moves along with `versions.js`.
-- [ ] **10.3** Update `package.json` scripts: `start` → `tauri dev`, `dist*` → `tauri build`. Keep the `release:*` version scripts. Drop `ELECTRON_SKIP_BINARY_DOWNLOAD` from `android.yml:45`.
+- [x] **10.3** Update `package.json` scripts: `start` → `tauri dev`, `dist*` → `tauri build`. Keep the `release:*` version scripts. Drop `ELECTRON_SKIP_BINARY_DOWNLOAD` from `android.yml:45`.
 - [ ] **10.4** Remove the update-handover code paths once issue reports show the bridge releases have drained. Keep them published.
+  - 10.1–10.3 done 2026-11-25, on the owner's decision to go ahead before the Phase 7 gate's two weeks were up: `electron/` (with the handover code and its tests), `spike/migration/` and `release-backfill.yml` are gone; `package.json` has no Electron, electron-builder or ffmpeg-static, `npm start` / `npm run dist` run Tauri. `electron-updater` stays as a dev dependency only, for `test/bridge-feed.test.js`. `test/downloads.test.js` runs `desktop/downloads-core.js`; `test/tauri-shell.test.js` checks against the bridge's shape, frozen in the test. The Electron side of the migration e2e tests is now a recorded 2.6.0 export (`test/fixtures/migration/electron-export.json`) and, on Windows, 2.6.0's published installer.
+  - Still kept (10.4): the Tauri side of the import (`desktop/migration-import.js`, `main.rs`), the Windows installer hook, `server.js` (the parity tests' reference) and the `bridge-feed` job, until old apps have drained.
 
 ---
 

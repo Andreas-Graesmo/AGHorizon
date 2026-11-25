@@ -27,9 +27,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - name: npm ci (without Electron's binary; not needed here)
+      - name: npm ci
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
-        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
       - uses: dtolnay/rust-toolchain@stable
@@ -88,9 +87,8 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev file xvfb \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
           for p in /usr/lib/x86_64-linux-gnu/gstreamer-1.0/*.so; do ldd "$p" | grep -q 'libsoup-2.4' && sudo rm "$p"; done; true
-      - name: npm ci (without Electron's binary; not needed here)
+      - name: npm ci
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
-        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
       - uses: dtolnay/rust-toolchain@stable

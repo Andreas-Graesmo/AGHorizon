@@ -1,7 +1,7 @@
 'use strict';
 /*
- * The desktop bridge (window.tunerDesktop, the shape of electron/preload.js) for the Tauri build.
- * MIGRATION_PLAN.md Phase 3. Does nothing in Electron (its preload set tunerDesktop already), on Android TV (tv.js)
+ * The desktop bridge (window.tunerDesktop, the shape the Electron app's preload had) for the Tauri build.
+ * MIGRATION_PLAN.md Phase 3. Does nothing on Android TV (tv.js)
  * and in a plain browser (no window.__TAURI__). Defined synchronously: downloads.js reads it as soon as it loads.
  *   downloads.* and sync.*  → the app's `downloads` / `sync` commands (src-tauri/src/main.rs); their engines run in
  *                             the server sidecar (desktop/), the folder dialogs, Explorer and the keychain in Rust

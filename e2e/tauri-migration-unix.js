@@ -2,19 +2,18 @@
 'use strict';
 /*
  * MIGRATION_PLAN.md 9.10 gate, on Linux and macOS: from the Electron app to the Tauri AppImage or .app.
- *   1. The real Electron app (this checkout) runs with some data (playlists, favourites, a playlist file in IndexedDB)
- *      and writes migration.json in its data folder (~/.config/Tuner IPTV, ~/Library/Application Support/Tuner IPTV),
- *      as the bridge version now does on every system.
- *   2. The sync code is added to that file, as the hand-over does (electron/handover.js, updater.js).
+ *   1. The Electron app's export, as 2.6.0 writes it (test/fixtures/migration/electron-export.json, recorded from the
+ *      real app before Electron left this repository: playlists, favourites, a theme, a playlist file in IndexedDB),
+ *      put where 2.6.0 writes it: its data folder (~/.config/Tuner IPTV, ~/Library/Application Support/Tuner IPTV).
+ *   2. The sync code is added to that file, as the hand-over does (2.6.0's handover.js).
  *   3. The Tauri AppImage starts with the same home folder. Its page is swapped for a test page (WebKitGTK has no
  *      DevTools protocol), which the import script still runs in; like tauri-shell.js it reports the import done.
  *      Everything is there, the sync code is in the keyring (macOS: the Keychain; Linux without one: the app's
  *      file) and out of migration.json, and the import is marked done.
  *   4. A second start doesn't import again.
- * Usage, with Electron's binary installed: node e2e/tauri-migration-unix.js <AppImage or .app>
+ * Usage: node e2e/tauri-migration-unix.js <AppImage or .app>
  * (Linux: under xvfb-run, with a Secret Service on the session bus if wanted.)
  */
-const { _electron: electron } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const http = require('http');
@@ -104,30 +103,8 @@ async function runTauri(launch, logName) {
 setTimeout(() => { console.error('timed out after 8 minutes'); process.exit(1); }, 8 * 60e3).unref();
 
 (async () => {
-  /* 1. the Electron app writes migration.json */
-  const eapp = await electron.launch({ executablePath: require('electron'), args: [root, '--no-sandbox'], env: { ...env, TUNER_PORT: '47999' } });
-  const win = await eapp.firstWindow();
-  await win.waitForFunction(() => typeof LS === 'object' && typeof idb === 'object', null, { timeout: 30000 });
-  await win.evaluate(async () => {
-    LS.set('tuner.playlists', [{ id: 'p1', name: 'From Electron', type: 'm3u' }]);
-    LS.set('tuner.favs', ['p1:live:7']);
-    await idb.put('file:p1', '#EXTM3U\n#EXTINF:-1,One\nhttp://x/1.ts\n');
-  });
-  // Electron's own data folder; on a Mac it may not follow $HOME: the export is then put where the Tauri app looks
-  const userData = await eapp.evaluate(({ app }) => app.getPath('userData'));
-  const written = path.join(userData, 'migration.json');
-  let data = null;
-  for (let i = 0; i < 40; i++) {
-    try { data = JSON.parse(fs.readFileSync(written, 'utf8')); if (data.localStorage['tuner.playlists']) break; } catch { /* not yet */ }
-    await sleep(500);
-  }
-  // closed, but not waited for forever: on a Mac the Electron app stays running without a window (as Mac apps do),
-  // and Playwright's close() then never returns. The export is on disk by now.
-  const proc = eapp.process();
-  await Promise.race([eapp.close().catch(() => {}), sleep(10000)]);
-  if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL');
-  check('the Electron app wrote migration.json in its data folder (no longer Windows only)', data && /From Electron/.test(data.localStorage['tuner.playlists'] || ''), written);
-  check('Electron\'s data folder is the one the Tauri app looks in ("Tuner IPTV")', path.basename(userData) === 'Tuner IPTV', userData);
+  /* 1. the Electron app's export: as 2.6.0 writes it (recorded from the real app, test/fixtures/migration) */
+  const data = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 'fixtures', 'migration', 'electron-export.json'), 'utf8'));
   fs.mkdirSync(oldDir, { recursive: true });
 
   /* 2. the sync code, as the hand-over adds it */

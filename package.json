@@ -4,15 +4,11 @@
   "version": "3.1.0",
   "description": "A desktop IPTV player: Xtream Codes and M3U playlists, live TV with EPG, movies and series, picture mirroring, ffmpeg compatibility mode.",
   "author": "AG Horizon",
-  "main": "electron/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/tauri-prep.js && npx --yes @tauri-apps/cli@2.12.4 dev",
     "test": "node --test",
     "setup": "node scripts/get-vendor.js",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux",
+    "dist": "node scripts/tauri-prep.js && npx --yes @tauri-apps/cli@2.12.4 build",
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
     "release:major": "npm version major && git push --follow-tags",
@@ -24,90 +20,12 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "electron": "^45.1.0",
-    "electron-builder": "^26.18.1"
-  },
-  "build": {
-    "appId": "app.aghorizon.desktop",
-    "productName": "AG Horizon",
-    "files": [
-      "electron/**",
-      "desktop/**",
-      "public/**",
-      "server.js",
-      "subtitles.js",
-      "unicode-ln.js",
-      "secrets.json",
-      "package.json",
-      "node_modules/**/*"
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
-        }
-      ],
-      "category": "public.app-category.entertainment"
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "category": "AudioVideo"
-    },
-    "asarUnpack": [
-      "node_modules/ffmpeg-static/**"
-    ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Andreas-Graesmo",
-        "repo": "AGHorizon",
-        "releaseType": "draft"
-      }
-    ]
+    "electron-updater": "^6.8.11"
   },
   "license": "MIT",
   "private": true,
-  "optionalDependencies": {
-    "ffmpeg-static": "^5.2.0"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Andreas-Graesmo/AGHorizon.git"
-  },
-  "dependencies": {
-    "electron-updater": "^6.8.11"
-  },
-  "allowScripts": {
-    "electron@45.1.0": true,
-    "ffmpeg-static@5.3.0": true
   }
 }

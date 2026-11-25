@@ -20,7 +20,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // A TV app looks best at prime time: a fixed-offset time zone where it is about 20:30 right now.
 const EVENING = (() => { const h = new Date().getUTCHours() + new Date().getUTCMinutes() / 60; let off = Math.round(20.5 - h); if (off > 14) off -= 24; if (off < -12) off += 24; return off ? `Etc/GMT${off > 0 ? '-' : '+'}${Math.abs(off)}` : 'UTC'; })();
 
-// What the desktop shell (electron/preload.js) would answer: nothing to update, no downloads, one monitor.
+// What the desktop shell (public/js/tauri-shell.js) would answer: nothing to update, no downloads, one monitor.
 const desktopStub = () => {
   const never = () => new Promise(() => {});
   window.tunerDesktop = {

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [migration/tauri]
-    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'electron/**', 'test/fixtures/**', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
+    paths: ['desktop/**', 'src-tauri/**', 'scripts/tauri-prep.js', 'server-rs/**', 'public/**', 'e2e/tauri-unix.js', 'e2e/tauri-migration-unix.js', 'test/fixtures/**', 'scripts/appimage-sources.sh', '!**/*.md', '.github/workflows/tauri-linux.yml']
 
 permissions:
   contents: read
@@ -41,9 +41,8 @@ jobs:
           for p in "$dir"/*.so; do
             if ldd "$p" | grep -q 'libsoup-2.4'; then echo "removing $(basename "$p")"; sudo rm "$p"; fi
           done
-      - name: npm ci (without Electron's binary; not needed here)
+      - name: npm ci
         run: for i in 1 2 3; do npm ci --no-audit --no-fund && break; sleep 15; done
-        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - name: Player libraries into public/vendor
         run: for i in 1 2 3; do npm run setup && break; sleep 10; done
       - uses: dtolnay/rust-toolchain@stable
@@ -67,17 +66,14 @@ jobs:
       - name: End to end
         timeout-minutes: 12
         run: node e2e/tauri-unix.js src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
-      # 9.10: from the Electron app to this one: the real Electron app writes its export, this AppImage imports it;
-      # the sync code goes into GNOME Keyring (a Secret Service on a private session bus)
+      # 9.10: from the Electron app to this one: the export 2.6.0 writes (recorded in test/fixtures/migration), imported
+      # once by this AppImage; the sync code goes into GNOME Keyring (a Secret Service on a private session bus)
       - name: Electron → Tauri (data and sync code)
         timeout-minutes: 12
         run: |
           sudo apt-get install -y -qq gnome-keyring > /dev/null
-          node node_modules/electron/install.js
-          npm install --no-save --no-audit --no-fund playwright@1.63.0
           app="$(ls src-tauri/target/release/bundle/appimage/*.AppImage)"
           dbus-run-session -- bash -c 'eval "$(echo -n e2e | gnome-keyring-daemon --unlock --components=secrets)" > /dev/null; xvfb-run -a node e2e/tauri-migration-unix.js "$1"' sh "$app"
-        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
       # the bundled Ubuntu packages and their source packages (scripts/appimage-sources.sh): listed on every build;
       # run by hand, also fetched, to see that every source can be (the release job publishes them, MIGRATION_PLAN.md 9.8)
       - name: Third-party sources (the list; fetched too when run by hand)

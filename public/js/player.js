@@ -607,7 +607,7 @@ let pipWin = null;
 const pipHandlers = [];   // document-level handlers the window needs too: [type, fn, capture]
 const onPipDoc = (type, fn, capture = false) => { pipHandlers.push([type, fn, capture]); if (pipDoc) pipDoc.addEventListener(type, fn, capture); };
 
-// A frameless always-on-top pop-up (electron/main.js); Electron doesn't create document picture-in-picture windows.
+// A frameless always-on-top pop-up (src-tauri/src/main.rs); the web view doesn't create document picture-in-picture windows.
 function togglePip() {
   if (pipWin) pipWin.close(); else openPipWindow();
 }

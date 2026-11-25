@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "app": "AG Horizon",
+  "appVersion": "2.6.0",
+  "exportedAt": "2026-11-25T05:42:08.690Z",
+  "origin": "http://127.0.0.1:47831",
+  "localStorage": {
+    "tuner.playlists": "[{\"id\":\"p1\",\"name\":\"From Electron\",\"type\":\"m3u\",\"url\":\"file\"}]",
+    "tuner.theme": "\"light\"",
+    "tuner.favs": "[\"p1:live:7\"]"
+  },
+  "indexedDB": {
+    "tuner": {
+      "files": [
+        {
+          "key": "file:p1",
+          "value": "#EXTM3U\n#EXTINF:-1,One\nhttp://x/1.ts\n"
+        }
+      ]
+    }
+  }
+}

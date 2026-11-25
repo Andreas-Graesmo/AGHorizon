@@ -1,7 +1,7 @@
 'use strict';
 /* AG Horizon – sync between computers: Settings › Sync, and keeping Recently viewed, where you stopped and favorites
    the same on all of them. The code, the encryption and the merging are in sync-core.js; the desktop side (the code
-   in the keychain, the folder) in electron/sync.js; the server side in supabase/sync.sql.
+   in the keychain, the folder) in the Tauri app (src-tauri/src/main.rs, desktop/sync-folder.js); the server side in supabase/sync.sql.
 
    Each computer stores one encrypted blob – everything it knows – in the vault its sync code points to, and reads
    the others'. So two computers never write the same thing, and one that's off for a month just catches up. */

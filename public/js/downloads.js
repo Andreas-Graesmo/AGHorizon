@@ -1,5 +1,5 @@
 'use strict';
-/* AG Horizon – downloads for offline viewing (desktop app only). The downloading itself happens in electron/downloads.js;
+/* AG Horizon – downloads for offline viewing (desktop app only). The downloading itself happens in desktop/downloads-core.js;
    this is the page side: download buttons on movies and episodes, the Downloads page, and playing the saved copy instead of the stream. */
 
 const dlApi = window.tunerDesktop.downloads;
@@ -74,7 +74,7 @@ function dlMeta(it, series = null) {   // series: the episode's show, when it is
 // Video files in the download folder that aren't in the list (before 1.10.1, moving the folder lost the list).
 // Their Plex-style names say what they are; matched to a playlist they get their progress, checkmarks and pages
 // back. Needs the playlist to load; files that don't match yet are tried again next time.
-const dlClean = (s) => {   // the same as clean() in electron/downloads.js, which named the folders
+const dlClean = (s) => {   // the same as clean() in desktop/downloads-core.js, which named the folders
   let n = String(s || '').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
   if (n.length > 100) n = n.slice(0, 100).trim();
   return n;

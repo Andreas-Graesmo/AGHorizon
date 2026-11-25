@@ -29,13 +29,13 @@ if (TV) {
   window.tunerDesktop = tvShell();
 }
 
-/* ───────────────────── what the desktop shell would answer (see electron/preload.js) ───────────────────── */
+/* ───────────────────── what the desktop shell would answer (see tauri-shell.js) ───────────────────── */
 function tvShell() {
   const upd = { st: { state: 'idle' }, cbs: [] };
   const send = (st) => { upd.st = st; upd.cbs.forEach((cb) => cb(st)); return st; };
   const releasesUrl = `https://github.com/${TV_REPO}/releases/latest`;
   // Update channel (Settings › About & updates): 'stable' takes GitHub's latest release, 'test' also pre-releases.
-  // A test version installed by hand starts out on 'test', like on a computer (electron/updater.js).
+  // A test version installed by hand starts out on 'test', like on a computer (src-tauri/src/updater.rs).
   let channel = /-/.test(tv.info.version || '') ? 'test' : 'stable';
   const gh = (path) => fetch(`https://api.github.com/repos/${TV_REPO}/${path}`, { headers: { Accept: 'application/vnd.github+json' } });
   // The shell downloads a new version's APK and hands it to Android's installer (Updater.kt). An older shell can't:
