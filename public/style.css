@@ -391,8 +391,11 @@ html.tauri-mac.win-full #topbar { padding-left: 8px; }
 /* the backdrop behind both (#25): as tall as the window's width allows, at most as tall as what it is behind, so its
    fade always ends where the cast does */
 .dt-bg, .dt-main::before { position: absolute; top: 0; left: 0; right: 0; height: clamp(460px, 40vw, 760px); max-height: 100%; }
-.dt-bg { background-size: cover; background-position: right 20%; }
-.dt-bg.blur { filter: blur(26px) brightness(.55) saturate(1.1); transform: scale(1.25); background-position: center; }
+.dt-bg { background: var(--art) right 20% / cover no-repeat; }
+/* a poster for a backdrop, blurred: inside the backdrop's box, so the blur (and the scale that hides its soft edges)
+   doesn't reach below the fade over it (it showed as a band under the cast) */
+.dt-bg.blur { background: none; overflow: hidden; }
+.dt-bg.blur::before { content: ""; position: absolute; inset: 0; background: var(--art) center / cover no-repeat; filter: blur(26px) brightness(.55) saturate(1.1); transform: scale(1.25); }
 .dt-main::before { content: ""; z-index: 1; background: linear-gradient(90deg, var(--bg) 6%, color-mix(in srgb, var(--bg) 72%, transparent) 42%, color-mix(in srgb, var(--bg) 30%, transparent) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 46%); }
 .dt-hero, .dt-main > .dt-sec { position: relative; z-index: 2; }
 .dt-main > .dt-sec { padding-bottom: 28px; }
@@ -465,8 +468,9 @@ html.tauri-mac.win-full #topbar { padding-left: 8px; }
 .p-mini { display: none; }
 .player.mini .p-mini { display: inline-grid; }
 .player.mini .p-title { font-size: 12.5px; }
-.p-ctl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 34px 18px 12px; background: linear-gradient(transparent, rgba(0, 0, 0, .82)); opacity: 0; transition: opacity .15s; display: grid; gap: 2px; }
-.player.ctl-on .p-ctl, .player.paused .p-ctl { opacity: 1; }
+.p-ctl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 34px 18px 12px; background: linear-gradient(transparent, rgba(0, 0, 0, .82)); opacity: 0; transition: opacity .15s; display: grid; gap: 2px; pointer-events: none; }
+/* hidden, they take no clicks (a click there reached a button you couldn't see) */
+.player.ctl-on .p-ctl, .player.paused .p-ctl { opacity: 1; pointer-events: auto; }
 .pc-row { display: flex; align-items: center; gap: 6px; min-height: 44px; }
 .pc-time { color: #f1f3f8; font-size: 12.5px; font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-width: 38px; text-align: center; }
 .pc-livetime { position: absolute; left: 22px; bottom: 58px; min-width: 0; font-weight: 700; text-shadow: 0 1px 6px rgba(0, 0, 0, .7); }
@@ -986,6 +990,9 @@ html.tv .card:focus .c-img { transform: translateY(-2px); box-shadow: var(--shad
 html.tv .card:focus .c-title { color: var(--text); }
 html.tv .row.ch:focus, html.tv .ep:focus, html.tv .sw-row:focus, html.tv .cat:focus, html.tv .menu-i:focus, html.tv .g-prog:focus, html.tv .g-chan:focus { outline-offset: -1px; }
 html.tv .ep:focus { background: var(--panel); border-color: var(--line); }
+html.tv .dt-cast .cast:focus { outline: none; }
+html.tv .dt-cast .cast:focus .av { outline: 2px solid var(--accent); outline-offset: 2px; }
+html.tv .dt-cast .cast:focus b { color: var(--accent); }
 /* a search box: its own border shows the focus of the text field in it (a button in it, like the scope chip, has its own) */
 html.tv :is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
 html.tv .sw-search { border-color: var(--line); }

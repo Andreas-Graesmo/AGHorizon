@@ -16,7 +16,7 @@ globalThis.fetch = async (url) => {
   }
   const body = String(url).includes('/tv/')
     ? { episode_run_time: [], last_episode_to_air: { runtime: 47 }, aggregate_credits: { cast: [{ name: 'Bryan Cranston', profile_path: '/b.jpg', roles: [{ character: 'Walter White' }] }] } }
-    : { runtime: 136, credits: { cast: [{ name: 'Keanu Reeves', character: 'Neo', profile_path: '/k.jpg' }, { name: 'No Photo', character: '' }] } };
+    : { runtime: 136, poster_path: '/m.jpg', credits: { cast: [{ name: 'Keanu Reeves', character: 'Neo', profile_path: '/k.jpg' }, { name: 'No Photo', character: '' }] } };
   return new Response(JSON.stringify(body), { status: 200 });
 };
 const { start, server } = require('../server');
@@ -26,11 +26,11 @@ test('runtime and cast photos come from TMDB in one request per title, and are c
   t.after(() => server.close());
   const get = (q) => realFetch(`http://127.0.0.1:${port}/api/tmdb?${q}`).then(async (r) => [r.status, await r.json()]);
 
-  assert.deepStrictEqual(await get('type=movie&id=603'), [200, { runtime: 136, cast: [
+  assert.deepStrictEqual(await get('type=movie&id=603'), [200, { runtime: 136, poster: 'https://image.tmdb.org/t/p/w500/m.jpg', cast: [
     { name: 'Keanu Reeves', role: 'Neo', photo: 'https://image.tmdb.org/t/p/w185/k.jpg' },
     { name: 'No Photo', role: '', photo: '' },
   ] }]);
-  assert.deepStrictEqual(await get('type=tv&id=1396'), [200, { runtime: 47, cast: [   // a series: the latest episode's length
+  assert.deepStrictEqual(await get('type=tv&id=1396'), [200, { runtime: 47, poster: '', cast: [   // a series: the latest episode's length
     { name: 'Bryan Cranston', role: 'Walter White', photo: 'https://image.tmdb.org/t/p/w185/b.jpg' },
   ] }]);
   await get('type=movie&id=603');

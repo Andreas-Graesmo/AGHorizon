@@ -269,7 +269,8 @@ if (TV) {
 
 /* ───────────────────────────── the remote: moving the focus ───────────────────────────── */
 // What the focus can land on. Rows and tiles that are only clickable on a computer count too.
-const TV_ITEMS = 'button, a[href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"]), .row.ch, .ep[data-act], .sw-row, .g-prog, .g-chan';
+// (.dt-cast .cast: a title's cast and crew, so the remote can scroll along that row; OK on them does nothing)
+const TV_ITEMS = 'button, a[href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"]), summary, .row.ch, .ep[data-act], .sw-row, .g-prog, .g-chan, .dt-cast .cast';
 // Small buttons inside a tile or row (♥, ⋮ …) are reached with a long press on it instead.
 const TV_INSIDE = '.card, .row.ch, .ep[data-act]';
 // Rows in a list with their buttons at the end (Reload, Edit, ⋯): → from the row goes into them, ← back out.
@@ -433,6 +434,12 @@ function tvNext(cur, dir, items) {
   }
   // something straight ahead wins, unless it is far away and something beside it is right here
   if (best && side && sideScore * 4 < bestScore) return side;
+  // Up and down never jump over a whole row: down from the last tile of a long row, with nothing right under it in
+  // the next (shorter) row, goes to that row's nearest tile, not to a tile in the row after it.
+  if (best && side && !horiz) {
+    const s = side.getBoundingClientRect(), b = best.getBoundingClientRect();
+    if (dir === 'down' ? s.bottom <= b.top : s.top >= b.bottom) return side;
+  }
   return best || side || far;
 }
 
@@ -441,7 +448,10 @@ function tvMove(dir) {
   const items = tvItems(scope);
   const cur = document.activeElement;
   if (!cur || cur === document.body || !scope.contains(cur) || !tvShown(cur)) { tvEnsureFocus(true); return; }
-  let next = tvNext(cur, dir, items);
+  // In a form (adding or editing a playlist) up and down go through its fields in their order, one by one: by
+  // position, fields side by side (Username | Password), the Advanced toggle and the buttons at the end got skipped.
+  const form = (dir === 'up' || dir === 'down') && scope.tagName === 'DIALOG' && cur.closest('form');
+  let next = form ? items[items.indexOf(cur) + (dir === 'down' ? 1 : -1)] || null : tvNext(cur, dir, items);
   // ← from a row's first button goes back to the row, not out of it
   const row = cur.parentElement && cur.parentElement.closest(TV_ROWS);
   if (row && dir === 'left' && !(next && row.contains(next)) && items.includes(row)) next = row;

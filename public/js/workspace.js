@@ -784,7 +784,11 @@ function renderDetail() {
   } else if (d.loading) seriesBlock = '<p class="muted">Loading episodes…</p>';
   else if (d.error) seriesBlock = `<p class="err-text">Couldn’t load episodes: ${esc(d.error)}</p>`;
 
-  const art = (offline && dlPosterUrl(it.uid)) || (poster && /^https?:\/\//i.test(poster) ? poster : '');   // offline: the poster saved with the download
+  // the poster: offline, the one saved with the download; else TMDB's (sharp, where a provider's cover is often
+  // small and blurry), then the provider's
+  const own = poster && /^https?:\/\//i.test(poster) ? poster : '';
+  const art = (offline && dlPosterUrl(it.uid)) || (tm && tm.poster) || own;
+  const artBackup = art !== own ? own : '';   // if TMDB's doesn't load, the provider's
   const back = !offline && bd && /^https?:\/\//i.test(bd) ? bd : '';
   const chips = [year, runtime, ...genres.slice(0, 3), info.country, rating && '★ ' + rating].filter(Boolean);
   const trailer = offline ? '' : info.youtube_trailer ? (/^https?:/.test(info.youtube_trailer) ? info.youtube_trailer : 'https://www.youtube.com/watch?v=' + info.youtube_trailer) : '';
@@ -796,10 +800,10 @@ function renderDetail() {
   box.innerHTML = `<div class="detail-in">
     ${docked ? '<div class="dt-slot-wrap"><div id="detailSlot" class="player-slot detail-slot"></div></div>' : ''}
     <div class="dt-main">
-    <div class="dt-bg${back ? '' : ' blur'}" style="${(back || art) ? `background-image:url('${esc(back || art)}')` : ''}"></div>
+    <div class="dt-bg${back ? '' : ' blur'}" style="${(back || art) ? `--art:url('${esc(back || art)}')` : ''}"></div>
     <div class="dt-hero">
       <div class="dt-in"><div class="dt-top">
-        <div class="dt-poster">${art ? `<img referrerpolicy="no-referrer" src="${esc(art)}" alt="">` : `<span>${esc(initials(it.name))}</span>`}</div>
+        <div class="dt-poster">${art ? `<img referrerpolicy="no-referrer" src="${esc(art)}" alt=""${artBackup ? ` data-backup="${esc(artBackup)}"` : ''}>` : `<span>${esc(initials(it.name))}</span>`}</div>
         <div class="dt-info">
           <div class="dt-eyebrow">${it.kind === 'movie' ? 'Movie' : 'Series'} · ${esc(pl ? pl.name : '')}${offline ? ' · Offline' : ''}</div>
           <h2>${esc(it.name)}</h2>
@@ -824,7 +828,12 @@ function renderDetail() {
   layoutPlayer();
 }
 
-$('#wsDetail').addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
+$('#wsDetail').addEventListener('error', (e) => {
+  const img = e.target;
+  if (img.tagName !== 'IMG') return;
+  if (img.dataset.backup) { img.src = img.dataset.backup; delete img.dataset.backup; return; }   // TMDB's poster failed: the provider's
+  img.remove();
+}, true);
 $('#wsDetail').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
   const it = ws.detail;

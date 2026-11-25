@@ -459,7 +459,13 @@ video.addEventListener('dblclick', () => { clearTimeout(clickTimer); toggleFulls
 ['play', 'pause', 'loadedmetadata', 'volumechange', 'ratechange', 'durationchange'].forEach((ev) => video.addEventListener(ev, syncCtl));
 // show the controls while the pointer moves over the player
 let ctlTimer = 0;
-const showCtl = () => { playerEl.classList.add('ctl-on'); clearTimeout(ctlTimer); ctlTimer = setTimeout(() => playerEl.classList.remove('ctl-on'), 2600); };
+// They stay while the pointer rests on them: on a tall (portrait) screen they are far below the picture, and they
+// faded away under the pointer of someone about to click one.
+const showCtl = () => {
+  playerEl.classList.add('ctl-on');
+  clearTimeout(ctlTimer);
+  ctlTimer = setTimeout(() => { if (playerEl.querySelector('.p-ctl:hover, .p-top:hover')) showCtl(); else playerEl.classList.remove('ctl-on'); }, 2600);
+};
 playerEl.addEventListener('mousemove', showCtl);
 playerEl.addEventListener('mouseenter', showCtl);
 playerEl.addEventListener('mouseleave', () => { clearTimeout(ctlTimer); playerEl.classList.remove('ctl-on'); });

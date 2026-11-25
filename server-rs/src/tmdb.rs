@@ -22,7 +22,7 @@ async fn get_json(url: &str) -> ApiResult<(u16, Option<Value>)> {
 
 static TITLES: LazyLock<Mutex<VecDeque<(String, Value)>>> = LazyLock::new(|| Mutex::new(VecDeque::new()));
 
-/// GET /api/tmdb?type=movie|tv&id=… -> { runtime, cast: [{ name, role, photo }] }; one request per title
+/// GET /api/tmdb?type=movie|tv&id=… -> { runtime, poster, cast: [{ name, role, photo }] }; one request per title
 pub async fn handle_tmdb(base: &str, key: &str, q: &Query) -> ApiResult<Resp> {
     if key.is_empty() {
         return Err(ApiError::new(501, "TMDB isn’t available in this build"));
@@ -65,7 +65,11 @@ pub async fn handle_tmdb(base: &str, key: &str, q: &Query) -> ApiResult<Resp> {
             json!({ "name": js_or(c.get("name"), json!("")), "role": role, "photo": photo })
         })
         .collect();
-    let v = json!({ "runtime": js_num(runtime), "cast": cast });
+    let poster = match j.get("poster_path") {
+        Some(p) if truthy(Some(p)) => json!(format!("https://image.tmdb.org/t/p/w500{}", js_string(p))),
+        _ => json!(""),
+    };
+    let v = json!({ "runtime": js_num(runtime), "poster": poster, "cast": cast });
     let mut t = TITLES.lock().unwrap();
     t.retain(|(k, _)| *k != ck);
     t.push_back((ck, v.clone()));

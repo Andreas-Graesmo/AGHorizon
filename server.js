@@ -949,7 +949,8 @@ async function handleSubsApi(req, res, pathname) {
 }
 
 /* ------------------------------------------------------------- TMDB */
-// GET /api/tmdb?type=movie|tv&id=<tmdb id> -> { runtime, cast: [{ name, role, photo }] }, one TMDB request per title.
+// GET /api/tmdb?type=movie|tv&id=<tmdb id> -> { runtime, poster, cast: [{ name, role, photo }] }, one TMDB request per title.
+// poster: TMDB's (sharp, where a provider's cover is often small), '' when it has none.
 // runtime: minutes (a series: per episode), 0 when TMDB doesn't know. Providers' own runtimes are often wrong.
 // (TMDB, with the app's key like OpenSubtitles: env TMDB_API_KEY or "tmdbApiKey" in secrets.json, written by the release build)
 const TMDB_KEY = process.env.TMDB_API_KEY || (() => { try { return require('./secrets.json').tmdbApiKey || ''; } catch { return ''; } })();
@@ -974,7 +975,8 @@ async function handleTmdb(req, res, q) {
       role: c.character || (c.roles && c.roles[0] && c.roles[0].character) || '',
       photo: c.profile_path ? `https://image.tmdb.org/t/p/w185${c.profile_path}` : '',
     }));
-    tmdbCache.set(key, { runtime, cast });
+    const poster = j.poster_path ? `https://image.tmdb.org/t/p/w500${j.poster_path}` : '';
+    tmdbCache.set(key, { runtime, poster, cast });
     if (tmdbCache.size > 200) tmdbCache.delete(tmdbCache.keys().next().value);
   }
   sendJson(res, 200, tmdbCache.get(key));

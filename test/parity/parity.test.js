@@ -194,7 +194,7 @@ function tmdb(req, res, u) {
   hits.tmdb++;
   if (p === '/movie/603') {
     assert.strictEqual(u.searchParams.get('append_to_response'), 'credits');
-    return json(200, { runtime: 136, credits: { cast: Array.from({ length: 14 }, (_, i) => ({ name: `Actor ${i}`, character: i === 1 ? '' : `Role ${i}`, profile_path: i === 2 ? null : `/p${i}.jpg` })) } });
+    return json(200, { runtime: 136, poster_path: '/m.jpg', credits: { cast: Array.from({ length: 14 }, (_, i) => ({ name: `Actor ${i}`, character: i === 1 ? '' : `Role ${i}`, profile_path: i === 2 ? null : `/p${i}.jpg` })) } });
   }
   if (p === '/tv/1399') {
     assert.strictEqual(u.searchParams.get('append_to_response'), 'aggregate_credits');
@@ -638,6 +638,7 @@ test('tmdb: runtime and cast, once per title', async () => {
   assert.strictEqual(r.status, 200, r.text);
   const j = r.json();
   assert.strictEqual(j.runtime, 136);
+  assert.strictEqual(j.poster, 'https://image.tmdb.org/t/p/w500/m.jpg');
   assert.strictEqual(j.cast.length, 12);
   assert.deepStrictEqual(j.cast.slice(0, 3), [
     { name: 'Actor 0', role: 'Role 0', photo: 'https://image.tmdb.org/t/p/w185/p0.jpg' },
@@ -647,8 +648,8 @@ test('tmdb: runtime and cast, once per title', async () => {
   const before = hits.tmdb;
   assert.deepStrictEqual((await req('/api/tmdb?id=603')).json(), j);   // movie is the default type; from the cache
   assert.strictEqual(hits.tmdb, before);
-  assert.deepStrictEqual((await req('/api/tmdb?type=tv&id=1399')).json(), { runtime: 58, cast: [{ name: 'Sean', role: 'Ned', photo: 'https://image.tmdb.org/t/p/w185/s.jpg' }, { name: 'Nobody', role: '', photo: '' }] });
-  assert.deepStrictEqual((await req('/api/tmdb?id=7')).json(), { runtime: 0, cast: [] });
+  assert.deepStrictEqual((await req('/api/tmdb?type=tv&id=1399')).json(), { runtime: 58, poster: '', cast: [{ name: 'Sean', role: 'Ned', photo: 'https://image.tmdb.org/t/p/w185/s.jpg' }, { name: 'Nobody', role: '', photo: '' }] });
+  assert.deepStrictEqual((await req('/api/tmdb?id=7')).json(), { runtime: 0, poster: '', cast: [] });
   for (const [qs, status, error] of [['id=404', 404, 'TMDB answered HTTP 404'], ['id=500', 502, 'TMDB answered HTTP 500'], ['id=12a', 400, 'Invalid id'], ['id=', 400, 'Invalid id'], ['', 400, 'Invalid id'], ['id=12345678901', 400, 'Invalid id']]) {
     r = await req(`/api/tmdb?${qs}`);
     assert.deepStrictEqual([r.status, r.json()], [status, { error }], qs);

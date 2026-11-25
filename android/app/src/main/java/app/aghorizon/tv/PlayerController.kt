@@ -129,6 +129,8 @@ class PlayerController(
     fun play(json: JSONObject) {
         val r = Request(json)
         req = r
+        handler.removeCallbacks(hideLayer)
+        playerView.videoSurfaceView?.visibility = View.VISIBLE   // hidden when the last one closed (see close)
         if (!visible) {
             layer.visibility = View.VISIBLE
             onVisibility(true)
@@ -193,19 +195,27 @@ class PlayerController(
         controls.hide()
         controls.player = null
         player?.let { p ->
+            // The picture is on a surface of its own (on many TVs a hardware video plane), which kept showing the last
+            // frame over the page for a moment after the player went away: take it off the surface and hide the
+            // surface first, and the player's black for a frame, then the page.
+            p.clearVideoSurface()
             playerView.player = null
             p.removeListener(listener)
             p.release()
         }
         player = null
+        playerView.videoSurfaceView?.visibility = View.INVISIBLE
         message.visibility = View.GONE
         banner.visibility = View.GONE
         layer.keepScreenOn = false
-        if (visible) {
+        if (visible) handler.post(hideLayer)
+        updateSnapshot()
+    }
+    private val hideLayer = Runnable {
+        if (req == null && visible) {
             layer.visibility = View.GONE
             onVisibility(false)
         }
-        updateSnapshot()
     }
 
     /* ───────────────────────────────── playing ───────────────────────────────── */
