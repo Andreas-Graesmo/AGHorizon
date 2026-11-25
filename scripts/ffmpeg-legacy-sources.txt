@@ -1,0 +1,135 @@
+# The sources of the ffmpeg builds that AG Horizon shipped before 3.1 (MIGRATION_PLAN.md 5.9, best effort), read by
+# scripts/ffmpeg-legacy-source.sh. These builds came from ffmpeg-static 5.3.0 (its release b6.1.1):
+#   win      Electron <= 2.6.0 on Windows, and 3.1.0-beta.0: gyan.dev 6.1.1 "essentials" (win32-x64)
+#   linux    the Electron AppImage: John Van Sickle's static 7.0.2 (linux-x64)
+#   mac      the Electron Mac app (Apple silicon): osxexperts.net's 6.0 (darwin-arm64)
+# Their makers publish no build scripts, and pin some libraries nowhere. Each line says how its version was found:
+#   exact    named by the build (its README, or the version the binary reports)
+#   nearest  not named anywhere: the release, or the commit, current when the build was made
+#
+# os  name  version  exact|nearest  kind  source  [ref]
+#   kind git      source = repository, ref = tag or commit (short ones are resolved)
+#   kind gitdate  source = repository, ref = the last commit before this date on the default branch
+#   kind x264rev  source = repository, ref = x264's revision number (its commit count)
+#   kind url      source = a release archive
+#   kind debsrc   source = Debian source package, ref = its version (snapshot.debian.org)
+
+# ── Windows: gyan.dev 6.1.1 essentials (README: win32-x64.README) ──
+win ffmpeg 6.1.1 exact git https://github.com/FFmpeg/FFmpeg e38092ef93
+win amf 1.4.32 exact git https://github.com/GPUOpen-LibrariesAndSDKs/AMF v1.4.32
+win aom 3.8.0-180-g0eeb62d344 exact git https://aomedia.googlesource.com/aom 0eeb62d344
+win avisynthplus 3.7.3-38-geb3c4330 exact git https://github.com/AviSynth/AviSynthPlus eb3c4330
+win nv-codec-headers 12.1.14.0-1-g75f032b exact git https://github.com/FFmpeg/nv-codec-headers 75f032b
+win freetype 2.13.2 exact git https://github.com/freetype/freetype VER-2-13-2
+win fribidi 1.0.13-2-g5b9a242 exact git https://github.com/fribidi/fribidi 5b9a242
+win gsm 1.0.22 exact url https://www.quut.com/gsm/gsm-1.0.22.tar.gz
+win harfbuzz 8.3.0-41-gd455066ad exact git https://github.com/harfbuzz/harfbuzz d455066ad
+win lame 3.100 exact url https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+win libass 0.17.0-63-gc047dd2 exact git https://github.com/libass/libass c047dd2
+win libgme 0.6.3 exact git https://github.com/libgme/game-music-emu 0.6.3
+win opencore-amr 0.1.6 exact url https://downloads.sourceforge.net/project/opencore-amr/opencore-amr/opencore-amr-0.1.6.tar.gz
+win libssh 0.10.4 exact url https://www.libssh.org/files/0.10/libssh-0.10.4.tar.xz
+win libtheora 1.1.1 exact url https://downloads.xiph.org/releases/theora/libtheora-1.1.1.tar.bz2
+win libwebp 1.3.2-109-ge78e924f exact git https://github.com/webmproject/libwebp e78e924f
+win onevpl 2.9 nearest git https://github.com/intel/libvpl v2023.3.0
+win libopenmpt 0.6.12-54-g7ec8c1440 exact git https://github.com/OpenMPT/openmpt 7ec8c1440
+win opus 1.4-9-gc8549975 exact git https://github.com/xiph/opus c8549975
+win rubberband 1.8.1 exact git https://github.com/breakfastquay/rubberband v1.8.1
+win sdl 2.28.0-345-g0f8f4f676 exact git https://github.com/libsdl-org/SDL 0f8f4f676
+win speex 1.2.1-20-g3693431 exact git https://github.com/xiph/speex 3693431
+win srt 1.5.3-21-g02acd18 exact git https://github.com/Haivision/srt 02acd18
+win vidstab 1.1.1-4-g05829db exact git https://github.com/georgmartius/vid.stab 05829db
+win vmaf 3.0.0-28-gcf67786b exact git https://github.com/Netflix/vmaf cf67786b
+win vo-amrwbenc 0.1.3 exact url https://downloads.sourceforge.net/project/opencore-amr/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz
+win vorbis 1.3.7-10-g84c02369 exact git https://github.com/xiph/vorbis 84c02369
+win libvpx 1.13.1-601-g655da33b8 exact git https://github.com/webmproject/libvpx 655da33b8
+win x264 0.164.3172 exact x264rev https://code.videolan.org/videolan/x264.git 3172
+win x265 3.5-153-gce8642f22 exact git https://bitbucket.org/multicoreware/x265_git.git ce8642f22
+win xvid 1.3.7 exact url https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
+win zeromq 4.3.5 exact url https://github.com/zeromq/libzmq/releases/download/v4.3.5/zeromq-4.3.5.tar.gz
+win zimg 3.0.5-150-g7143181 exact git https://github.com/sekrit-twc/zimg 7143181
+# read from the binary (the README names no version)
+win zlib 1.2.13 exact url https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.gz
+win bzip2 1.0.8 exact url https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+win gnutls 3.6.16 exact url https://www.gnupg.org/ftp/gcrypt/gnutls/v3.6/gnutls-3.6.16.tar.xz
+win xz 5.2.9 exact url https://github.com/tukaani-project/xz/releases/download/v5.2.9/xz-5.2.9.tar.gz
+# named nowhere: a 2.13 development snapshot (libxml2), and what was current at the build (6.1.1: 2023-12-31)
+win libxml2 2.13-dev nearest gitdate https://github.com/GNOME/libxml2 2024-01-01
+win gmp 6.3.0 nearest url https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+win nettle 3.9.1 nearest url https://ftp.gnu.org/gnu/nettle/nettle-3.9.1.tar.gz
+win libiconv 1.17 nearest url https://ftp.gnu.org/gnu/libiconv/libiconv-1.17.tar.gz
+win fontconfig 2.15.0 nearest url https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz
+win libogg 1.3.5 nearest url https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz
+
+# ── Linux: John Van Sickle's ffmpeg-7.0.2-amd64-static (README: linux-x64.README; built on Debian 10) ──
+linux ffmpeg 7.0.2 exact git https://github.com/FFmpeg/FFmpeg n7.0.2
+linux aom 3.2.0-393-g402e264b94 exact git https://aomedia.googlesource.com/aom 402e264b94
+linux libass 0.17.3 exact git https://github.com/libass/libass 0.17.3
+linux libgme 0.6.3 exact git https://github.com/libgme/game-music-emu 0.6.3
+linux srt 1.4.4 exact git https://github.com/Haivision/srt v1.4.4
+linux libvpx 1.11.0-30-g888bafc78 exact git https://github.com/webmproject/libvpx 888bafc78
+linux vmaf 2.3.0 exact git https://github.com/Netflix/vmaf v2.3.0
+linux x264 0.164.3191 exact x264rev https://code.videolan.org/videolan/x264.git 3191
+linux x265 3.5+1-f0c1022b6 exact git https://bitbucket.org/multicoreware/x265_git.git f0c1022b6
+linux xvid 1.3.7 exact url https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
+linux libwebp 0.6.1 exact url https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-0.6.1.tar.gz
+linux zimg 3.0.3 exact git https://github.com/sekrit-twc/zimg release-3.0.3
+linux zvbi 0.2.36 exact git https://github.com/zapping-vbi/zvbi v0.2.36
+linux dav1d 1.4.2 exact git https://code.videolan.org/videolan/dav1d.git 1.4.2
+linux gnutls 3.7.2 exact url https://www.gnupg.org/ftp/gcrypt/gnutls/v3.7/gnutls-3.7.2.tar.xz
+linux libtheora 1.2.0alpha1+git nearest gitdate https://github.com/xiph/theora 2024-08-01
+linux frei0r 1.6.1-2 exact debsrc frei0r 1.6.1-2
+linux vidstab 1.20 nearest gitdate https://github.com/georgmartius/vid.stab 2024-08-01
+linux freetype 2.9.1-3+deb10u1 exact debsrc freetype 2.9.1-3+deb10u1
+linux harfbuzz 3.1.1 exact git https://github.com/harfbuzz/harfbuzz 3.1.1
+linux openjpeg 2.4.0 exact git https://github.com/uclouvain/openjpeg v2.4.0
+linux alsa-lib 1.2.4 exact url https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.4.tar.bz2
+linux soxr 0.1.3 exact url https://downloads.sourceforge.net/project/soxr/soxr-0.1.3-Source.tar.xz
+linux opus 1.3.1 exact url https://downloads.xiph.org/releases/opus/opus-1.3.1.tar.gz
+linux speex 1.2 exact url https://downloads.xiph.org/releases/speex/speex-1.2.0.tar.gz
+linux vorbis 1.3.7 exact url https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz
+linux lame 3.100 exact url https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+linux rubberband 1.8.2 exact git https://github.com/breakfastquay/rubberband v1.8.2
+linux vo-amrwbenc 0.1.3-1 exact debsrc vo-amrwbenc 0.1.3-1
+linux opencore-amr 0.1.3-2.1 exact debsrc opencore-amr 0.1.3-2.1
+# enabled but named nowhere: Debian 10's own versions (the build links the system's libraries)
+linux fontconfig 2.13.1-2 nearest debsrc fontconfig 2.13.1-2
+linux fribidi 1.0.5-3.1+deb10u2 nearest debsrc fribidi 1.0.5-3.1+deb10u2
+linux gmp 6.1.2+dfsg-4+deb10u1 nearest debsrc gmp 2:6.1.2+dfsg-4+deb10u1
+linux nettle 3.4.1-1+deb10u1 nearest debsrc nettle 3.4.1-1+deb10u1
+linux libxml2 2.9.4+dfsg1-7+deb10u6 nearest debsrc libxml2 2.9.4+dfsg1-7+deb10u6
+linux zlib 1.2.11.dfsg-1+deb10u2 nearest debsrc zlib 1:1.2.11.dfsg-1+deb10u2
+linux libogg 1.3.2-1 nearest debsrc libogg 1.3.2-1
+linux libpng 1.6.36-6 nearest debsrc libpng1.6 1.6.36-6
+
+# ── macOS (Apple silicon): osxexperts.net's ffmpeg 6.0 (no README; versions read from the binary) ──
+mac ffmpeg 6.0 exact git https://github.com/FFmpeg/FFmpeg n6.0
+mac aom 3.5.0-693-g511574734 exact git https://aomedia.googlesource.com/aom 511574734
+mac x265 3.5+1-f0c1022b6 exact git https://bitbucket.org/multicoreware/x265_git.git f0c1022b6
+mac libvpx 1.12.0-251-g7a8052ccd exact git https://github.com/webmproject/libvpx 7a8052ccd
+mac svt-av1 1.4.1 exact git https://gitlab.com/AOMediaCodec/SVT-AV1.git v1.4.1
+mac kvazaar 2.2.0 exact git https://github.com/ultravideo/kvazaar v2.2.0
+mac libbluray 1.3.4 exact url https://download.videolan.org/pub/videolan/libbluray/1.3.4/libbluray-1.3.4.tar.bz2
+mac fribidi 1.0.12 exact git https://github.com/fribidi/fribidi v1.0.12
+mac vorbis 1.3.7 exact url https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz
+mac opus 1.3.1 exact url https://downloads.xiph.org/releases/opus/opus-1.3.1.tar.gz
+mac libtheora 1.1.1 exact url https://downloads.xiph.org/releases/theora/libtheora-1.1.1.tar.bz2
+mac zlib 1.2.13 exact url https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.gz
+mac vmaf 2.3.1 exact git https://github.com/Netflix/vmaf v2.3.1
+# named nowhere: what was current when 6.0 was built (2023-03)
+mac x264 stable-2023-03 nearest gitdate https://code.videolan.org/videolan/x264.git 2023-03-01
+mac lame 3.100 nearest url https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+mac libwebp 1.3.0 nearest url https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.0.tar.gz
+mac openjpeg 2.5.0 nearest git https://github.com/uclouvain/openjpeg v2.5.0
+mac zimg 3.0.4 nearest git https://github.com/sekrit-twc/zimg release-3.0.4
+mac freetype 2.13.0 nearest git https://github.com/freetype/freetype VER-2-13-0
+mac fontconfig 2.14.2 nearest url https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.14.2.tar.xz
+mac harfbuzz 7.1.0 nearest git https://github.com/harfbuzz/harfbuzz 7.1.0
+mac libass 0.17.1 nearest git https://github.com/libass/libass 0.17.1
+mac snappy 1.1.10 nearest git https://github.com/google/snappy 1.1.10
+mac vidstab 1.1.1 nearest git https://github.com/georgmartius/vid.stab v1.1.1
+mac sdl 2.26.4 nearest git https://github.com/libsdl-org/SDL release-2.26.4
+mac libpng 1.6.39 nearest url https://downloads.sourceforge.net/project/libpng/libpng16/1.6.39/libpng-1.6.39.tar.xz
+mac libxml2 2.10.3 nearest git https://github.com/GNOME/libxml2 v2.10.3
+mac libogg 1.3.5 nearest url https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz
+mac bzip2 1.0.8 nearest url https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz

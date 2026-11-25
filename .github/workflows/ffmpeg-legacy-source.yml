@@ -1,0 +1,43 @@
+# MIGRATION_PLAN.md 5.9, best effort: the sources of the ffmpeg builds AG Horizon shipped before 3.1 (ffmpeg-static
+# 5.3.0: gyan.dev 6.1.1 on Windows, John Van Sickle's 7.0.2 on Linux, osxexperts.net's 6.0 on the Mac), as one
+# pre-release whose tag is not a version number, so no update channel ever offers it. scripts/ffmpeg-legacy-sources.txt
+# lists them. Re-running is safe: the files are replaced.
+name: ffmpeg source release, before 3.1 (GPL)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [migration/tauri]
+    paths: ['scripts/ffmpeg-legacy-source*', '.github/workflows/ffmpeg-legacy-source.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      TAG: ffmpeg-legacy-ffmpeg-static-b6.1.1-source
+    steps:
+      - uses: actions/checkout@v6
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - name: Fetch every source that can be had
+        id: fetch
+        # an "exact" source that couldn't be fetched fails the job, after what was fetched is published
+        run: bash scripts/ffmpeg-legacy-source.sh "$RUNNER_TEMP/src" || echo "incomplete=1" >> "$GITHUB_OUTPUT"
+      - name: Publish as a pre-release (never "latest")
+        run: |
+          title="ffmpeg source (GPL) for AG Horizon before 3.1 (best effort)"
+          notes="The source code of the ffmpeg builds in AG Horizon 2.x and 3.1.0-beta.0, which came from the ffmpeg-static package (5.3.0): gyan.dev 6.1.1 (Windows), John Van Sickle's 7.0.2 (Linux) and osxexperts.net's 6.0 (Mac). Their makers don't publish everything, so this is best effort: README.txt says which versions are exact and which are the nearest. This is not an app release."
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false --title "$title" --notes "$notes"
+          gh release edit "$TAG" --title "$title" --notes "$notes"
+          gh release upload "$TAG" "$RUNNER_TEMP"/src/* --clobber
+          sed -n '/^Could not be fetched/,$p' "$RUNNER_TEMP/src/README.txt"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+      - name: Every exact source was fetched
+        if: steps.fetch.outputs.incomplete == '1'
+        run: exit 1
