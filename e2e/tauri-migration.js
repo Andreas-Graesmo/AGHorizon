@@ -75,7 +75,8 @@ async function closeTauri({ child, browser, page }) {
 
   /* 1: the Electron app's export, as 2.6.0 writes it to %APPDATA%\Tuner IPTV (recorded from the real app before
      Electron left this repository: playlists, favourites, a light theme, a playlist file in IndexedDB) */
-  fs.mkdirSync(oldDir, { recursive: true });
+  // the Electron profile next to it (Chromium's Local Storage folder): what the app recognises an Electron profile by
+  fs.mkdirSync(path.join(oldDir, 'Local Storage', 'leveldb'), { recursive: true });
   const data = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'migration', 'electron-export.json'), 'utf8'));
   // the folders as the person picked them in the Electron app (its dialogs can't be clicked here), in the files the Electron app keeps them in (downloads.js / sync.js)
   const dlJson = path.join(oldDir, 'downloads.json');
