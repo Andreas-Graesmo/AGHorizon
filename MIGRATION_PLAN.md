@@ -298,7 +298,7 @@ Built on 2026-11-17. The self-update gate passes on a Windows runner (`.github/w
   - `android-tv` is unchanged. `publish-test` now needs `windows`, `desktop` and `android-tv`.
 - [x] **5.7 Asset names.** `scripts/tauri-release.js` writes `AG-Horizon-Setup-<v>.exe`, `.exe.sig` and `latest.json`. `latest.json` has both the `windows-x86_64-nsis` and `windows-x86_64` keys, with URLs under this repository's releases, which the Electron hand-over requires. The website regex and README names still match.
 - [x] **5.8 `android.yml`:** no change.
-- [ ] **5.9 Licensing: ffmpeg GPL source.** **Changed on 2026-11-17 (owner's decision): Option B.** The Windows app now ships BtbN's ffmpeg, whose sources are all pinned.
+- [x] **5.9 Licensing: ffmpeg GPL source.** **Changed on 2026-11-17 (owner's decision): Option B.** The Windows app now ships BtbN's ffmpeg, whose sources are all pinned.
   - **The build:** BtbN/FFmpeg-Builds `autobuild-2026-10-31-12-59` (a month-end build, which BtbN keeps until 2028-10), `ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip`.
     - Zip sha256 `401dffcf…`, `ffmpeg.exe` sha256 `c46215f8…`, `LICENSE.txt` GPL v3.
     - BtbN no longer builds 6.1. 8.1 is the older of its two maintained release branches.
