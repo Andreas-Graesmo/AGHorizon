@@ -656,6 +656,9 @@ function refreshProgressBars(scope = '#vodGrid') {
 /* ───────────────────────────── movie / series detail ───────────────────────────── */
 function dockedInDetail() {
   const c = state.current;
+  // TV: the TV's own player plays, full screen, never in the page; the empty box kept for it at the top showed for a
+  // moment over the details when the player closed
+  if (TV) return false;
   return !pipWin && !!(ws.detail && c && (c.uid === ws.detail.uid || c.seriesUid === ws.detail.uid));   // no empty slot while it's in picture-in-picture
 }
 
