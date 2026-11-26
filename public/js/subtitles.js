@@ -323,7 +323,9 @@ async function subMenu(anchor) {
   const c = state.current;
   if (!c || !isVod(c)) return;
   const mark = (on) => (on ? '✓  ' : '      ');
-  const items = [{ label: mark(!sub.cues.length && !sub.stream) + 'Off', run: () => { subRemember(c, 'off'); subOff(); } }];
+  // Appearance… first: the list of tracks can be long, and it shouldn't have to be scrolled through to get to it
+  const items = [{ label: 'Appearance…', run: subShowPanel }, { sep: true },
+    { label: mark(!sub.cues.length && !sub.stream) + 'Off', run: () => { subRemember(c, 'off'); subOff(); } }];
   const counts = {};
   const numbered = (name) => { counts[name] = (counts[name] || 0) + 1; return name + (counts[name] > 1 ? ` ${counts[name]}` : ''); };
   const d = subLocalOf(c);
@@ -349,9 +351,8 @@ async function subMenu(anchor) {
     for (const s of fromOs) items.push(subRemembering(c, s.lang, subSavedItem(d, s, mark, numbered)));
   }
   if (sub.key.startsWith('os:')) items.push({ label: mark(true) + `${sub.label} (OpenSubtitles)`, run: () => {} });
-  // three groups: the tracks, finding more, and how they look
+  // three groups: how they look (first, above), the tracks, finding more
   items.push({ sep: true }, { label: 'Search OpenSubtitles…', run: () => subSearchMenu(anchor, c) });
-  items.push({ sep: true }, { label: 'Appearance…', run: subShowPanel });
   showMenu(anchor, items);
 }
 const subRemembering = (c, lang, item) => ({ ...item, run: () => { subRemember(c, lang); return item.run(); } });

@@ -311,6 +311,12 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         tracksTitle.text = if (audio) "Audio" else "Subtitles"
         tracksList.removeAllViews()
         var focus: View? = null
+        // Appearance… first: the list of subtitles can be long, and it shouldn't have to be scrolled through to get
+        // to it (the focus still starts on the track that is on)
+        if (!audio && look?.optJSONObject("choices") != null) {   // how they look, as CC › Appearance… on a computer (#29)
+            addItem("Appearance…", false) { appearance() }
+            addLine()
+        }
         if (!audio) {
             val off = list.none { it.selected }
             focus = addItem("Off", off) { choose(type, null) }.takeIf { off }
@@ -318,10 +324,6 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         for (c in list) {
             val item = addItem(trackName(c.format), c.selected) { choose(type, c) }
             if (c.selected && focus == null) focus = item
-        }
-        if (!audio && look?.optJSONObject("choices") != null) {   // how they look, as CC › Appearance… on a computer (#29)
-            addLine()
-            addItem("Appearance…", false) { appearance() }
         }
         level = 0
         pickingFrom = from
