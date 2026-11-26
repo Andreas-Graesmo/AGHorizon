@@ -19,6 +19,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
@@ -261,6 +262,7 @@ class PlayerController(
             .setPreferredAudioLanguage(r.audioLang.ifBlank { null })
             .setPreferredTextLanguage(r.subLang.ifBlank { null })
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)   // a track picked for what played before (wholeSubtitles, the menu)
             .build()
         val source = sources.createMediaSource(item)
         if (positionMs > 0 && !r.live) p.setMediaSource(source, positionMs) else p.setMediaSource(source)
@@ -344,7 +346,29 @@ class PlayerController(
                 ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).language } }
             if (spoken != null && sameLanguage(spoken, r.subLang)) {
                 player?.let { p -> p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setPreferredTextLanguage(null).build() }
+                return
             }
+            wholeSubtitles(tracks)
+        }
+
+        /** The subtitles chosen by language should be whole ones, as on a computer (subBest in subtitles.js): ExoPlayer
+         *  takes the track the file marks as its default, which can be a "forced" one (only the foreign-language lines),
+         *  so a film in English showed next to nothing. Then a whole track in the same language, without SDH if there's
+         *  a choice, is picked instead. */
+        private fun wholeSubtitles(tracks: Tracks) {
+            val p = player ?: return
+            val text = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+            val on = text.firstOrNull { it.isSelected } ?: return
+            val f = (0 until on.length).firstOrNull { on.isTrackSelected(it) }?.let { on.getTrackFormat(it) } ?: return
+            if (f.selectionFlags and C.SELECTION_FLAG_FORCED == 0) return
+            val same = text.flatMap { g -> (0 until g.length).map { g to it } }.filter { (g, i) ->
+                val o = g.getTrackFormat(i)
+                g.isTrackSupported(i) && o.selectionFlags and C.SELECTION_FLAG_FORCED == 0 && o.language != null && f.language != null && sameLanguage(o.language!!, f.language!!)
+            }
+            val sdh = { g: Tracks.Group, i: Int -> g.getTrackFormat(i).roleFlags and C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND != 0 }
+            val (g, i) = same.firstOrNull { (g, i) -> !sdh(g, i) } ?: same.firstOrNull() ?: return
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, i)).build()
         }
 
         override fun onPlayerError(error: PlaybackException) {
