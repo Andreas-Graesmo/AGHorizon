@@ -464,9 +464,9 @@ class PlayerController(
                 if (e.action == KeyEvent.ACTION_UP && !controls.back()) { if (shown && !failed) controls.hide() else close() }
                 return true
             }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (first && p != null && !failed) { if (p.playWhenReady) p.pause() else p.play(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (first && p != null && !failed) { if (p.playWhenReady) p.pause() else p.play(); controls.show(focusPlay = !p.playWhenReady) }; return true }
             KeyEvent.KEYCODE_MEDIA_PLAY -> { if (first && !failed) { p?.play(); controls.show() }; return true }
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> { if (first && !failed) { p?.pause(); controls.show() }; return true }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> { if (first && !failed) { p?.pause(); controls.show(focusPlay = true) }; return true }
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (down && !r.live && !failed) { p?.seekForward(); controls.show() }; return true }
             KeyEvent.KEYCODE_MEDIA_REWIND -> { if (down && !r.live && !failed) { p?.seekBack(); controls.show() }; return true }
             KeyEvent.KEYCODE_MEDIA_STOP -> { if (first) close(); return true }

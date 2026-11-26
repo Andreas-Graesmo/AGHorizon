@@ -183,13 +183,14 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         if (visible) update()
     }
 
-    fun show() {
+    /** focusPlay: playback was just paused, so the focus goes to play/pause (to carry on with OK), not the scrub bar. */
+    fun show(focusPlay: Boolean = false) {
         if (!visible) {
             panel.visibility = View.VISIBLE
             update()
-            (if (!live) seek else btnPlay).requestFocus()
+            (if (!live && !focusPlay) seek else btnPlay).requestFocus()
             onVisible(true)
-        }
+        } else if (focusPlay && !picking) btnPlay.requestFocus()
         hideLater()
     }
 
@@ -287,6 +288,7 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         val p = player ?: return
         if (p.playWhenReady) p.pause() else p.play()   // not isPlaying: that is false while it buffers, and pause would do nothing
         update()
+        if (!p.playWhenReady && !picking) btnPlay.requestFocus()   // paused from the scrub bar: OK on play/pause carries on
         hideLater()
     }
 
