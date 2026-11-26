@@ -435,10 +435,29 @@ function tvNext(cur, dir, items) {
   // something straight ahead wins, unless it is far away and something beside it is right here
   if (best && side && sideScore * 4 < bestScore) return side;
   // Up and down never jump over a whole row: down from the last tile of a long row, with nothing right under it in
-  // the next (shorter) row, goes to that row's nearest tile, not to a tile in the row after it.
-  if (best && side && !horiz) {
-    const s = side.getBoundingClientRect(), b = best.getBoundingClientRect();
-    if (dir === 'down' ? s.bottom <= b.top : s.top >= b.bottom) return side;
+  // the next (shorter) row, goes to that row's nearest tile, not to a tile in the row after it. So: the nearest row
+  // that way (in this part of the app and column), then its tile closest sideways.
+  const pick = best || side;
+  if (pick && !horiz && tvZone(pick) === zone) {
+    const near = [];
+    for (const el of items) {
+      if (el === cur || el.contains(cur) || cur.contains(el) || tvZone(el) !== zone || tvColumn(el) !== column) continue;
+      const b = el.getBoundingClientRect();
+      if (dir === 'down' ? !(b.top + b.height / 2 > ay + 1 && b.bottom > a.bottom + 1) : !(b.top + b.height / 2 < ay - 1 && b.top < a.top - 1)) continue;
+      near.push([el, b]);
+    }
+    let row = null;   // the closest one's vertical extent: its row
+    for (const [, b] of near) { const g = dir === 'down' ? b.top - a.bottom : a.top - b.bottom; if (!row || g < row.g) row = { g, top: b.top, bottom: b.bottom }; }
+    const p = pick.getBoundingClientRect();
+    if (row && tvGap(p.top, p.bottom, row.top, row.bottom) > 0) {
+      let take = null, score = Infinity;
+      for (const [el, b] of near) {
+        if (tvGap(b.top, b.bottom, row.top, row.bottom) > 0) continue;
+        const s = tvGap(a.left, a.right, b.left, b.right) * 3 + Math.abs(b.left + b.width / 2 - ax) * 0.15;
+        if (s < score) { score = s; take = el; }
+      }
+      if (take) return take;
+    }
   }
   return best || side || far;
 }
