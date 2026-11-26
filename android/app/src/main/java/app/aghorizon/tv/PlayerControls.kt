@@ -452,11 +452,15 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
         handler.postDelayed(autoHide, HIDE_MS)
     }
 
-    /** The desktop player's looks, with a focus a TV needs: a light circle behind a button, a ring round play / pause. */
+    /** The desktop player's looks, with a focus a TV needs: the icon in the accent colour, a ring round play / pause. */
     private fun restyle() {
-        for (b in listOf(btnAudio, btnSubs, btnBack, btnFwd)) b.background = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused), oval(0x40ffffff))
-            addState(intArrayOf(), oval(Color.TRANSPARENT))
+        // the sound, subtitle and skip buttons: no circle behind them; the icon (and the skip's "15") turns the
+        // accent colour with the focus (owner's request)
+        val tint = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()), intArrayOf(accent, Color.WHITE))
+        for (b in listOf(btnAudio, btnSubs, btnBack, btnFwd)) {
+            b.background = null
+            if (android.os.Build.VERSION.SDK_INT >= 26) b.defaultFocusHighlightEnabled = false
+            tintIn(b, tint, false)
         }
         // play / pause: white at rest, the accent colour with the focus (#34), as the desktop player
         btnPlay.background = StateListDrawable().apply {
@@ -477,6 +481,16 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
     }
 
     private fun oval(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
+
+    /** The icon and text in v take tint; inside a button made of several views they follow the button's focus. */
+    private fun tintIn(v: View, tint: ColorStateList, child: Boolean) {
+        if (child) v.isDuplicateParentStateEnabled = true
+        when (v) {
+            is android.widget.ImageView -> v.imageTintList = tint
+            is TextView -> v.setTextColor(tint)
+            is ViewGroup -> for (i in 0 until v.childCount) tintIn(v.getChildAt(i), tint, true)
+        }
+    }
 
     private fun round(color: Int, radiusDp: Float) = GradientDrawable().apply { setColor(color); cornerRadius = radiusDp * res.displayMetrics.density }
 
