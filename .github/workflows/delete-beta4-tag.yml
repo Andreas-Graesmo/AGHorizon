@@ -1,0 +1,20 @@
+# One-off, owner's request: remove the cancelled 3.1.3-beta.4's tag (no release was made). Removed again after it ran.
+name: Delete the v3.1.3-beta.4 tag
+on:
+  push:
+    branches: [migration/tauri]
+    paths: ['.github/workflows/delete-beta4-tag.yml']
+permissions:
+  contents: write
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the tag (and a release on it, if any)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete v3.1.3-beta.4 --yes 2>/dev/null && echo "release deleted" || echo "no release on it"
+          gh api -X DELETE "repos/$GH_REPO/git/refs/tags/v3.1.3-beta.4" && echo "tag deleted"
+          gh api "repos/$GH_REPO/git/refs/tags/v3.1.3-beta.4" > /dev/null 2>&1 && { echo "::error::the tag is still there"; exit 1; } || echo "confirmed: gone"
