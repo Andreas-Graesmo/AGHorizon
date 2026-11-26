@@ -124,6 +124,7 @@ function go(route, { push = true } = {}) {
   updateSwitcher();
   if (route === 'ws') renderWsChrome(); else { renderRoute(route); syncTopSearch(); syncNavState(); }
   updateBack();
+  try { renderUpdBanner(); } catch { /* before ui.js has set up the updater */ }   // hidden in Settings, which shows the update itself
   layoutPlayer();
   dlSyncWatching();   // multi view streams count as watching too
 }
@@ -867,10 +868,18 @@ function renderUpdBanner() {
   else if (st.state === 'downloading') { line = `Downloading AG Horizon ${v}… ${st.percent || 0}%<div class="bar upd-bar"><i style="width:${st.percent || 0}%"></i></div>`; }
   else if (st.state === 'ready') { line = `AG Horizon <b>${v}</b> is ready.${TV ? '' : ' It also installs when you close the app.'}`; btn = `<button class="btn" data-act="upd-install">${TV ? 'Install' : 'Restart and install'}</button>`; }
   else if (st.state === 'error' && st.version) { line = `Couldn’t download ${v}: ${esc(st.message || 'unknown error')}`; btn = '<button class="btn" data-act="upd-download">Try again</button>' + (upd.info && upd.info.releasesUrl ? '<button class="btn ghost" data-act="upd-open">Open releases page</button>' : ''); }
-  if (!line || LS.get('tuner.updDismissed', '') === st.state + ':' + st.version) { el.hidden = true; return; }
+  // Settings shows the update itself, with the same buttons: no banner over it as well
+  if (!line || ui.route === 'settings' || LS.get('tuner.updDismissed', '') === st.state + ':' + st.version) { el.hidden = true; return; }
   if (st.version) btn = whatsNewBtn + btn;
+  // TV: the focus stays in the banner as it changes (Download → the progress → Install), on its main button, or on
+  // the banner itself while it has none; drawn again, it fell to the nearest thing left (the Dashboard icon)
+  const had = TV && el.contains(document.activeElement);
   el.innerHTML = `<svg class="ic"><use href="#i-download"/></svg><div class="ub-text">${line}</div>${btn}<button class="icon-btn" data-act="upd-dismiss" title="Dismiss" aria-label="Dismiss"><svg class="ic"><use href="#i-x"/></svg></button>`;
   el.hidden = false;
+  if (had) {
+    el.tabIndex = -1;
+    (el.querySelector('.btn:not([data-act="whats-new"])') || el).focus({ preventScroll: true });
+  }
 }
 $('#updBanner').addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]');

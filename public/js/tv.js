@@ -671,6 +671,11 @@ function tvGuidePicked(cell) {
 /* ───────────────────────────── start (boot.js calls this) ───────────────────────────── */
 function tvInit() {
   if (!TV) return;
+  // A text box the pages focus by themselves (the playlist form's Name, the switcher's search…) is made read-only
+  // first, as when the remote moves onto one: focused while it could be typed in, Android brought up its keyboard,
+  // which then took the remote's arrows until it was closed by hand.
+  const focus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (opts) { tvLock(this); return focus.call(this, opts); };
   window.addEventListener('keydown', tvKeydown, true);
   window.addEventListener('keyup', tvKeyup, true);
   document.addEventListener('focusin', (e) => { tvLock(e.target); tvRemember(e.target); tvLiveFocus(e.target); });   // also what the pages focus themselves
