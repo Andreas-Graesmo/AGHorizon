@@ -997,6 +997,8 @@ html.tv .cat.on, html.tv .row.active { border-color: transparent; }
 html.tv .type-tiles button.on { border-color: var(--line); }
 html.tv .dt-cast .cast:focus { outline: none; }
 html.tv .dt-cast .cast:focus .av { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* room inside the scrolling row for that ring, which it otherwise cut off at the top (and at the left, on the first) */
+html.tv .dt-cast .cast-row { padding-top: 6px; padding-left: 6px; margin-left: -6px; }
 html.tv .dt-cast .cast:focus b { color: var(--accent); }
 /* a search box: its own border shows the focus of the text field in it (a button in it, like the scope chip, has its own) */
 html.tv :is(.top-search, .cat-search, .sw-search, .pal-in) input:focus { outline: none; }
