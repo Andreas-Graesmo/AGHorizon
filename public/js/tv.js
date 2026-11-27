@@ -21,6 +21,7 @@ const tv = {
   away: false,       // the player is up, or just closed: what gets the focus meanwhile is not where the person was
   editing: null,     // the text box OK opened for typing (the others are read-only while the focus passes by, see tvLock)
   timer: 0,
+  keyAt: 0,          // when the remote was last pressed
 };
 
 if (TV) {
@@ -554,6 +555,7 @@ function tvKeydown(e) {
   const key = tvKeyName(e);
   if (!key) return;
   tv.auto = false;
+  tv.keyAt = Date.now();
   const t = document.activeElement;
   if (key === 'back') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvBack(); return; }
   if (key === 'menu') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) window.tvMenu(); return; }
@@ -695,6 +697,23 @@ function tvInit() {
   // which then took the remote's arrows until it was closed by hand.
   const focus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function (opts) { tvLock(this); return focus.call(this, opts); };
+  // Something covered the app (Android's installer for an update, its settings…) and the app came back: Android hands
+  // the remote back to the page by focusing its first button (the left menu). Put the focus back where it was.
+  let before = null;
+  const away = () => { if (!before && document.activeElement && document.activeElement !== document.body) before = document.activeElement; };
+  const back = () => {
+    const el = before;
+    before = null;
+    if (!el || tv.away) return;   // the TV's player closing puts the focus back itself (tvBackFromPlayer)
+    const at = Date.now();
+    const put = () => { if (tv.keyAt < at && el.isConnected && tvShown(el) && tvScope().contains(el) && document.activeElement !== el) tvFocus(el, { scroll: false }); };
+    requestAnimationFrame(() => requestAnimationFrame(put));
+    setTimeout(put, 250);
+    setTimeout(put, 700);
+  };
+  window.addEventListener('blur', away);
+  document.addEventListener('visibilitychange', () => (document.hidden ? away() : back()));
+  window.addEventListener('focus', back);
   window.addEventListener('keydown', tvKeydown, true);
   window.addEventListener('keyup', tvKeyup, true);
   document.addEventListener('focusin', (e) => { tvLock(e.target); tvRemember(e.target); tvLiveFocus(e.target); });   // also what the pages focus themselves
