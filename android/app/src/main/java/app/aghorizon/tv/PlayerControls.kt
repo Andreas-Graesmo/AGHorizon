@@ -475,12 +475,15 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
             arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
             intArrayOf(INK, Color.parseColor("#0b0f19")),
         )
-        // the bar: what has played in white; the dot white, and the accent colour and larger with the focus (#35)
-        seek.progressTintList = ColorStateList.valueOf(Color.WHITE)
+        // the bar: what has played and the dot in white; with the focus both in the accent colour, the dot larger (#35;
+        // owner's request: the whole bar, handle included). Set as the focus comes and goes, like the buttons above.
         seek.thumb = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused), oval(accent).apply { setSize(dp(22), dp(22)); setStroke(dp(3), Color.WHITE) })
+            addState(intArrayOf(android.R.attr.state_focused), oval(accent).apply { setSize(dp(22), dp(22)) })
             addState(intArrayOf(), oval(Color.WHITE).apply { setSize(dp(22), dp(22)); setStroke(dp(5), Color.TRANSPARENT) })
         }
+        val barColour = { has: Boolean -> seek.progressTintList = ColorStateList.valueOf(if (has) accent else Color.WHITE) }
+        barColour(seek.hasFocus())
+        seek.setOnFocusChangeListener { _, has -> barColour(has) }
         seek.background = null
     }
 
