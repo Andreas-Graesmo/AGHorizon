@@ -4,6 +4,6 @@
     android:interpolator="@android:interpolator/decelerate_quint"
     android:propertyName="translateY"
     android:startOffset="380"
-    android:valueFrom="18"
+    android:valueFrom="20"
     android:valueTo="0"
     android:valueType="floatType" />

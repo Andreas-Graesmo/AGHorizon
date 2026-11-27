@@ -344,44 +344,61 @@
     </FrameLayout>
 
     <!-- shown while the app's server starts -->
-    <LinearLayout
+    <!-- the start screen: the logo's sun rising over a horizon across the screen (drawable/logo_rise_anim.xml), the
+         name under it; "Starting…" only when it takes long (MainActivity.startSplash) -->
+    <FrameLayout
         android:id="@+id/splash"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/app_background"
-        android:gravity="center"
-        android:orientation="vertical">
+        android:background="@color/app_background">
 
-        <!-- the logo, its sun rising (drawable/logo_rise_anim.xml) -->
         <ImageView
             android:id="@+id/splashLogo"
-            android:layout_width="128dp"
-            android:layout_height="128dp"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:contentDescription="@string/app_name"
+            android:scaleType="centerCrop"
             android:src="@drawable/logo_rise_anim" />
 
-        <TextView
-            android:id="@+id/splashName"
-            android:alpha="0"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/app_name"
-            android:textColor="#eef1f8"
-            android:textSize="26sp"
-            android:textStyle="bold" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/splashText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="64dp"
-            android:layout_marginTop="12dp"
-            android:layout_marginEnd="64dp"
-            android:gravity="center"
-            android:text="@string/starting"
-            android:visibility="invisible"
-            android:textColor="#9aa3b5"
-            android:textSize="15sp" />
-    </LinearLayout>
+            <!-- below the horizon (61 % of the height) and its second line (66 %) -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="0dp"
+                android:layout_weight="0.76" />
+
+            <TextView
+                android:id="@+id/splashName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0"
+                android:text="@string/app_name"
+                android:textColor="#eef1f8"
+                android:textSize="26sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/splashText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="64dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="64dp"
+                android:gravity="center"
+                android:text="@string/starting"
+                android:textColor="#9aa3b5"
+                android:textSize="15sp"
+                android:visibility="invisible" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="0dp"
+                android:layout_weight="0.24" />
+        </LinearLayout>
+    </FrameLayout>
 </FrameLayout>

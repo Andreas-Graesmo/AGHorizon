@@ -1,46 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The AG Horizon logo (public/index.html, #i-logo), drawn for the start screen's rising sun (logo_rise_anim.xml).
-     At rest: the sun below the horizon, the two lines not drawn yet. -->
+<!-- The start screen, full screen (16:9): the logo's horizon across the screen and its sun rising over it
+     (logo_rise_anim.xml; the logo itself: public/index.html, #i-logo). At rest: the sun below the horizon, the two lines
+     not drawn yet. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="128dp"
-    android:height="128dp"
-    android:viewportWidth="64"
-    android:viewportHeight="64">
-
-    <path
-        android:fillColor="#12304F"
-        android:pathData="M14,0 H50 A14,14 0 0 1 64,14 V50 A14,14 0 0 1 50,64 H14 A14,14 0 0 1 0,50 V14 A14,14 0 0 1 14,0 Z" />
+    android:width="1600dp"
+    android:height="900dp"
+    android:viewportWidth="160"
+    android:viewportHeight="90">
 
     <!-- the sky: the sun is only seen above the horizon -->
     <group android:name="sky">
-        <clip-path android:pathData="M0,0 H64 V41.5 H0 Z" />
+        <clip-path android:pathData="M0,0 H160 V53.4 H0 Z" />
         <group
             android:name="sun"
-            android:translateY="18">
+            android:translateY="20">
             <path
                 android:fillColor="#FF7A59"
-                android:pathData="M17,40 A15,15 0 0 1 47,40 Z" />
+                android:pathData="M64,52 A16,16 0 0 1 96,52 Z" />
         </group>
     </group>
 
+    <!-- the horizon, from one edge of the screen to the other -->
     <group
         android:name="horizon"
-        android:pivotX="32"
-        android:pivotY="44"
+        android:pivotX="80"
+        android:pivotY="54.6"
         android:scaleX="0">
         <path
             android:fillColor="#FF7A59"
-            android:pathData="M12,42 H52 A2,2 0 0 1 52,46 H12 A2,2 0 0 1 12,42 Z" />
+            android:pathData="M0,53.8 H160 V55.4 H0 Z" />
     </group>
 
     <group
         android:name="line"
-        android:pivotX="32"
-        android:pivotY="51.5"
+        android:pivotX="80"
+        android:pivotY="59"
         android:scaleX="0">
         <path
             android:fillAlpha="0.5"
             android:fillColor="#FF7A59"
-            android:pathData="M19.5,50 H44.5 A1.5,1.5 0 0 1 44.5,53 H19.5 A1.5,1.5 0 0 1 19.5,50 Z" />
+            android:pathData="M60.6,58.4 H99.4 A0.6,0.6 0 0 1 99.4,59.6 H60.6 A0.6,0.6 0 0 1 60.6,58.4 Z" />
     </group>
 </vector>
