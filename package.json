@@ -1,7 +1,7 @@
 {
   "name": "ag-horizon",
   "productName": "AG Horizon",
-  "version": "3.1.3-beta.5",
+  "version": "3.1.3-beta.6",
   "description": "A desktop IPTV player: Xtream Codes and M3U playlists, live TV with EPG, movies and series, picture mirroring, ffmpeg compatibility mode.",
   "author": "AG Horizon",
   "scripts": {
