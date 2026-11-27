@@ -1023,3 +1023,24 @@ html.tv .player-slot { background: var(--bg); overflow: hidden; }
 .tv-ch-hint { margin-top: auto; font-size: 12px; }
 html.tv .cats-col { width: 242px; }   /* the narrower columns of a small window crowd the icons in their heading */
 html.tv .chan-col { width: 300px; }
+
+/* ───────────── Football (football.js) ───────────── */
+.fb-search { display: flex; align-items: center; gap: 8px; max-width: 620px; margin: 4px 0 18px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.fb-search:focus-within { border-color: var(--accent); }
+.fb-search input { flex: 1; border: 0; background: none; padding: 10px 0; color: var(--text); font: inherit; outline: none; }
+.fb-team { margin-bottom: 26px; }
+.fb-team .rail-head { gap: 10px; align-items: baseline; }
+.fb-sub { margin: 14px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.fb-list { display: grid; gap: 8px; }
+.fb-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.fb-row.live { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.fb-when { display: grid; gap: 3px; font-weight: 650; }
+.fb-when small { color: var(--muted); font-weight: 500; font-size: 12px; }
+.fb-when .bar { height: 3px; border-radius: 2px; background: var(--panel-3); overflow: hidden; }
+.fb-when .bar i { display: block; height: 100%; background: var(--accent); }
+.fb-what b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-what p { margin: 3px 0 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-chs { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; max-width: 460px; }
+.fb-chs.wrap { justify-content: flex-start; max-width: none; }
+.fb-none { margin: 6px 0; }
+@media (max-width: 760px) { .fb-row { grid-template-columns: 1fr; gap: 8px; } .fb-chs { justify-content: flex-start; } }

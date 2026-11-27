@@ -371,6 +371,7 @@ function tvDefault(scope, items) {
   else if (ui.route === 'ws' && ws.mode !== 'live') el = pick('#vodGrid .card');
   else if (ui.route === 'dashboard') el = pick('[data-act="hero-open"]') || pick('#v-dashboard .card');
   else if (ui.route === 'settings') el = pick('#setIndex [aria-current="page"]');
+  else if (ui.route === 'football') el = pick('#v-football .fb-ch') || pick('#v-football [data-fb-team]');   // the first match's channel: OK plays it
   return el || inView.find((x) => x.matches('.card, .src-row, .btn')) || inView[0] || pick('#nav .nav-item.on') || items[0] || null;
 }
 

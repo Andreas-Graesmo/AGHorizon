@@ -1,0 +1,186 @@
+'use strict';
+/* AG Horizon – football: the teams, and finding their matches in the TV guide and in channel names (football.js
+   shows them). No page here: the tests load this file too (test/football.test.js).
+
+   Each team has the names it goes by. Most are taken as they stand ("manchester united", "mufc"). Some are words
+   that also mean other things ("brann" is Norwegian for fire, "arsenal", "wolves", "norway", the three-letter codes):
+   those only count when the text is about football too (a "v" between two names, "Premier League", "fotball"…).
+   "not" lists names that contain a team's name but are another team ("man city" for Manchester United's "man"). */
+
+const FB_LEAGUES = ['England', 'Norway', 'Spain', 'Italy', 'Germany', 'France', 'National teams'];
+
+// [id, name, league, names, names that only count about football, three-letter codes (only in "MUN v LIV"),
+//  other teams' names to ignore]
+const FB_TEAMS = [
+  // England
+  ['arsenal', 'Arsenal', 'England', ['arsenal fc', 'the gunners'], ['arsenal'], ['ARS', 'AFC']],
+  ['aston-villa', 'Aston Villa', 'England', ['aston villa', 'avfc'], ['villa'], ['AVL']],
+  ['bournemouth', 'Bournemouth', 'England', ['bournemouth', 'afc bournemouth', 'the cherries'], [], ['BOU']],
+  ['brentford', 'Brentford', 'England', ['brentford'], [], ['BRE']],
+  ['brighton', 'Brighton & Hove Albion', 'England', ['brighton and hove albion', 'brighton hove albion', 'brighton', 'bhafc'], ['seagulls'], ['BHA', 'BRI']],
+  ['burnley', 'Burnley', 'England', ['burnley'], [], ['BUR']],
+  ['chelsea', 'Chelsea', 'England', ['chelsea fc', 'cfc'], ['chelsea'], ['CHE']],
+  ['crystal-palace', 'Crystal Palace', 'England', ['crystal palace', 'cpfc'], ['palace'], ['CRY']],
+  ['everton', 'Everton', 'England', ['everton', 'efc', 'the toffees'], [], ['EVE']],
+  ['fulham', 'Fulham', 'England', ['fulham', 'ffc'], [], ['FUL']],
+  ['ipswich', 'Ipswich Town', 'England', ['ipswich town', 'ipswich', 'itfc'], [], ['IPS']],
+  ['leeds', 'Leeds United', 'England', ['leeds united', 'leeds utd', 'lufc'], ['leeds'], ['LEE']],
+  ['leicester', 'Leicester City', 'England', ['leicester city', 'leicester', 'lcfc', 'the foxes'], [], ['LEI']],
+  ['liverpool', 'Liverpool', 'England', ['liverpool fc', 'lfc'], ['liverpool', 'the reds'], ['LIV']],
+  ['man-city', 'Manchester City', 'England', ['manchester city', 'man city', 'mcfc', 'man c'], ['citizens'], ['MCI'], ['manchester united', 'man united', 'man utd']],
+  ['man-utd', 'Manchester United', 'England', ['manchester united', 'manchester utd', 'man united', 'man utd', 'man u', 'mufc'], ['manu', 'red devils'], ['MUN'], ['manchester city', 'man city', 'leeds united', 'west ham united', 'newcastle united', 'sheffield united']],
+  ['newcastle', 'Newcastle United', 'England', ['newcastle united', 'newcastle utd', 'newcastle', 'nufc', 'the magpies'], [], ['NEW']],
+  ['nottingham-forest', 'Nottingham Forest', 'England', ['nottingham forest', 'nottm forest', 'notts forest', 'nffc'], ['forest'], ['NFO']],
+  ['southampton', 'Southampton', 'England', ['southampton', 'saints fc'], ['saints'], ['SOU']],
+  ['sunderland', 'Sunderland', 'England', ['sunderland', 'safc', 'black cats'], [], ['SUN']],
+  ['tottenham', 'Tottenham Hotspur', 'England', ['tottenham hotspur', 'tottenham', 'thfc'], ['spurs'], ['TOT']],
+  ['west-ham', 'West Ham United', 'England', ['west ham united', 'west ham', 'whufc', 'the hammers'], ['hammers'], ['WHU']],
+  ['wolves', 'Wolverhampton Wanderers', 'England', ['wolverhampton wanderers', 'wolverhampton', 'wwfc'], ['wolves'], ['WOL']],
+  // Norway
+  ['aalesund', 'Aalesund', 'Norway', ['aalesund', 'aafk', 'aalesunds fk'], ['alesund'], []],
+  ['bodo-glimt', 'Bodø/Glimt', 'Norway', ['bodo glimt', 'fk bodo glimt', 'glimt'], ['bodo'], []],
+  ['brann', 'Brann', 'Norway', ['sk brann'], ['brann'], []],
+  ['bryne', 'Bryne', 'Norway', ['bryne fk'], ['bryne'], []],
+  ['fredrikstad', 'Fredrikstad', 'Norway', ['fredrikstad fk', 'fredrikstad', 'fffk'], [], ['FFF']],
+  ['hamkam', 'HamKam', 'Norway', ['hamkam', 'ham kam', 'hamarkameratene'], [], []],
+  ['haugesund', 'Haugesund', 'Norway', ['fk haugesund', 'haugesund'], [], ['FKH']],
+  ['kfum', 'KFUM Oslo', 'Norway', ['kfum oslo', 'kfum'], [], []],
+  ['kristiansund', 'Kristiansund', 'Norway', ['kristiansund bk', 'kristiansund', 'kbk'], [], []],
+  ['lillestrom', 'Lillestrøm', 'Norway', ['lillestrom', 'lsk'], [], []],
+  ['molde', 'Molde', 'Norway', ['molde fk', 'mfk'], ['molde'], []],
+  ['odd', 'Odd', 'Norway', ['odds bk', 'odd bk', 'odd ballklubb'], ['odd'], []],
+  ['rosenborg', 'Rosenborg', 'Norway', ['rosenborg', 'rbk'], [], []],
+  ['sandefjord', 'Sandefjord', 'Norway', ['sandefjord fotball', 'sandefjord'], [], ['SIF']],
+  ['sarpsborg', 'Sarpsborg 08', 'Norway', ['sarpsborg 08', 'sarpsborg'], [], ['S08']],
+  ['start', 'Start', 'Norway', ['ik start'], ['start'], []],
+  ['stromsgodset', 'Strømsgodset', 'Norway', ['stromsgodset', 'godset', 'sif'], [], []],
+  ['tromso', 'Tromsø', 'Norway', ['tromso il', 'til'], ['tromso'], []],
+  ['valerenga', 'Vålerenga', 'Norway', ['valerenga', 'vif'], [], []],
+  ['viking', 'Viking', 'Norway', ['viking fk'], ['viking'], []],
+  // Spain
+  ['athletic', 'Athletic Club', 'Spain', ['athletic club', 'athletic bilbao'], ['bilbao'], ['ATH']],
+  ['atletico', 'Atlético Madrid', 'Spain', ['atletico madrid', 'atletico de madrid', 'atleti'], ['atletico'], ['ATM']],
+  ['barcelona', 'Barcelona', 'Spain', ['fc barcelona', 'barcelona', 'barca'], [], ['FCB', 'BAR']],
+  ['real-betis', 'Real Betis', 'Spain', ['real betis', 'betis'], [], ['BET']],
+  ['real-madrid', 'Real Madrid', 'Spain', ['real madrid', 'real madrid cf'], [], ['RMA'], ['atletico madrid', 'atletico de madrid']],
+  ['real-sociedad', 'Real Sociedad', 'Spain', ['real sociedad', 'la real'], ['sociedad'], ['RSO']],
+  ['sevilla', 'Sevilla', 'Spain', ['sevilla fc', 'sevilla'], [], ['SEV']],
+  ['valencia', 'Valencia', 'Spain', ['valencia cf'], ['valencia'], ['VAL']],
+  ['villarreal', 'Villarreal', 'Spain', ['villarreal'], [], ['VIL']],
+  // Italy
+  ['atalanta', 'Atalanta', 'Italy', ['atalanta'], [], ['ATA']],
+  ['inter', 'Inter', 'Italy', ['inter milan', 'internazionale', 'fc internazionale'], ['inter'], ['INT']],
+  ['juventus', 'Juventus', 'Italy', ['juventus', 'juve'], [], ['JUV']],
+  ['lazio', 'Lazio', 'Italy', ['ss lazio', 'lazio'], [], ['LAZ']],
+  ['milan', 'AC Milan', 'Italy', ['ac milan'], ['milan'], ['ACM', 'MIL'], ['inter milan']],
+  ['napoli', 'Napoli', 'Italy', ['ssc napoli', 'napoli'], [], ['NAP']],
+  ['roma', 'Roma', 'Italy', ['as roma'], ['roma'], ['ROM']],
+  // Germany
+  ['bayern', 'Bayern Munich', 'Germany', ['bayern munich', 'bayern munchen', 'fc bayern', 'bayern'], [], ['FCB', 'BAY']],
+  ['dortmund', 'Borussia Dortmund', 'Germany', ['borussia dortmund', 'dortmund', 'bvb'], [], ['DOR']],
+  ['frankfurt', 'Eintracht Frankfurt', 'Germany', ['eintracht frankfurt'], ['frankfurt'], ['SGE']],
+  ['gladbach', "Borussia M'gladbach", 'Germany', ['borussia monchengladbach', 'monchengladbach', 'gladbach'], [], ['BMG']],
+  ['leipzig', 'RB Leipzig', 'Germany', ['rb leipzig', 'rasenballsport leipzig'], ['leipzig'], ['RBL']],
+  ['leverkusen', 'Bayer Leverkusen', 'Germany', ['bayer leverkusen', 'leverkusen', 'bayer 04'], [], ['B04', 'LEV']],
+  ['stuttgart', 'VfB Stuttgart', 'Germany', ['vfb stuttgart'], ['stuttgart'], ['VFB']],
+  // France
+  ['lille', 'Lille', 'France', ['losc lille', 'losc'], ['lille'], []],
+  ['lyon', 'Lyon', 'France', ['olympique lyonnais', 'olympique lyon', 'lyon'], [], ['OL']],
+  ['marseille', 'Marseille', 'France', ['olympique de marseille', 'olympique marseille', 'marseille'], [], ['OM']],
+  ['monaco', 'Monaco', 'France', ['as monaco'], ['monaco'], []],
+  ['nice', 'Nice', 'France', ['ogc nice'], ['nice'], []],
+  ['psg', 'Paris Saint-Germain', 'France', ['paris saint germain', 'paris sg', 'psg'], [], []],
+  // National teams (only about football: "Norway" alone is a documentary as often as a match)
+  ['nt-norway', 'Norway', 'National teams', ['norges landslag', 'norway national team'], ['norway', 'norge'], ['NOR']],
+  ['nt-england', 'England', 'National teams', ['three lions'], ['england'], ['ENG']],
+  ['nt-scotland', 'Scotland', 'National teams', [], ['scotland'], ['SCO']],
+  ['nt-wales', 'Wales', 'National teams', [], ['wales'], ['WAL']],
+  ['nt-sweden', 'Sweden', 'National teams', [], ['sweden', 'sverige'], ['SWE']],
+  ['nt-denmark', 'Denmark', 'National teams', [], ['denmark', 'danmark'], ['DEN']],
+  ['nt-germany', 'Germany', 'National teams', [], ['germany', 'tyskland'], ['GER']],
+  ['nt-france', 'France', 'National teams', [], ['france', 'frankrike'], ['FRA']],
+  ['nt-spain', 'Spain', 'National teams', [], ['spain', 'spania'], ['ESP']],
+  ['nt-italy', 'Italy', 'National teams', [], ['italy', 'italia'], ['ITA']],
+  ['nt-netherlands', 'Netherlands', 'National teams', [], ['netherlands', 'nederland', 'holland'], ['NED']],
+  ['nt-portugal', 'Portugal', 'National teams', [], ['portugal'], ['POR']],
+  ['nt-belgium', 'Belgium', 'National teams', [], ['belgium', 'belgia'], ['BEL']],
+  ['nt-croatia', 'Croatia', 'National teams', [], ['croatia', 'kroatia'], ['CRO']],
+  ['nt-brazil', 'Brazil', 'National teams', [], ['brazil', 'brasil'], ['BRA']],
+  ['nt-argentina', 'Argentina', 'National teams', [], ['argentina'], ['ARG']],
+  ['nt-usa', 'USA', 'National teams', ['usmnt'], ['united states'], ['USA']],
+].map(([id, name, league, names, weak, codes, not = []]) => ({ id, name, league, names, weak, codes, not }));
+
+// lower case, no accents, Norwegian letters spelt out, everything but letters and digits a space: "Bodø/Glimt" -> "bodo glimt"
+function fbNorm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/å/g, 'a').replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+// The text is about football: a competition, or the word itself.
+const FB_CONTEXT = / (fotball|football|soccer|fc|premier league|epl|eliteserien|obos ligaen|la ?liga|serie a|bundesliga|ligue 1|champions league|ucl|europa league|conference league|fa cup|carabao cup|league cup|efl|nm cup|norgesmesterskapet|landskamp|vm|em|world cup|euro \d{4}|nations league|kvalik|qualifier|qualifiers|derby|matchday|kampdag) /;
+// "A v B", "A - B", "A vs. B", "A mot B": one " vs " between the names
+const fbVersus = (raw) => String(raw || '').replace(/\s+(v|vs\.?|mot|-|–|—|@)\s+/gi, ' vs ');
+
+// Is the text (a programme's title and description, or a channel's name) about this team?
+function fbMatches(team, raw) {
+  let t = ` ${fbNorm(fbVersus(raw))} `;
+  for (const n of team.not) t = t.split(` ${n} `).join(' · ');   // another team whose name holds this one's
+  if (team.names.some((n) => t.includes(` ${n} `))) return true;
+  // a word that also means other things: in a pairing ("Brann vs Molde"), or in a text about football
+  if (team.weak.some((n) => t.includes(` ${n} vs `) || t.includes(` vs ${n} `) || (t.includes(` ${n} `) && FB_CONTEXT.test(t)))) return true;
+  // a code, only as providers name their match channels: "MUN v LIV", "LIV - MUN", in capitals
+  return team.codes.some((c) => new RegExp(`(^|[^A-Za-z0-9])(${c}\\s*(v|vs\\.?|-|–|@)\\s*[A-Z0-9]{2,3}|[A-Z0-9]{2,3}\\s*(v|vs\\.?|-|–|@)\\s*${c})(?![A-Za-z0-9])`).test(String(raw || '')));
+}
+
+// The teams a search could mean: by any of their names (or the start of one), best first.
+function fbFindTeams(q) {
+  const s = fbNorm(q);
+  if (!s) return [];
+  const score = (t) => {
+    const all = [fbNorm(t.name), ...t.names, ...t.weak, ...t.codes.map((c) => c.toLowerCase())];
+    if (all.includes(s)) return 3;
+    if (all.some((n) => n.startsWith(s))) return 2;
+    if (all.some((n) => n.includes(s))) return 1;
+    return 0;
+  };
+  return FB_TEAMS.map((t) => [t, score(t)]).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+}
+
+// What the guide and the channel names say about a team (or a text searched for, when no team is meant).
+//   channels: the live channels; guide(ch) -> [[start, stop, title, description], …] or null; now: ms
+//   -> { now: [{ ch, p }], later: [{ ch, p }], channels: [ch] }: the programmes that haven't ended, and the
+//      channels whose own name is about it (event channels, which often have no guide)
+function fbSearch(test, channels, guide, now) {
+  const out = { now: [], later: [], channels: [] };
+  for (const ch of channels) {
+    if (test(ch.name)) out.channels.push(ch);
+    const list = guide(ch);
+    if (!list) continue;
+    for (const p of list) {
+      if (p[1] <= now || !test(`${p[2] || ''} ${p[3] || ''}`)) continue;
+      (p[0] <= now ? out.now : out.later).push({ ch, p });
+    }
+  }
+  out.later.sort((a, b) => a.p[0] - b.p[0]);
+  return out;
+}
+// a plain text search: every word in the title, description or channel name
+const fbText = (q) => { const words = fbNorm(q).split(' ').filter(Boolean); return (raw) => { const t = ` ${fbNorm(raw)} `; return words.every((w) => t.includes(w)); }; };
+
+// The same programme on several channels (an HD and an SD feed, two providers' sport channels): one row, with
+// each channel to pick.
+function fbGroup(hits) {
+  const rows = new Map();
+  for (const h of hits) {
+    const key = `${h.p[0]}|${fbNorm(h.p[2])}`;
+    const r = rows.get(key) || { p: h.p, chs: [] };
+    if (!r.chs.includes(h.ch)) r.chs.push(h.ch);
+    rows.set(key, r);
+  }
+  return [...rows.values()];
+}
+
+if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbMatches, fbFindTeams, fbSearch, fbText, fbGroup };

@@ -1,0 +1,73 @@
+'use strict';
+// public/js/football-core.js: finding a team's matches in guide titles and channel names, without false hits.
+const test = require('node:test');
+const assert = require('node:assert');
+const { FB_TEAMS, fbMatches, fbFindTeams, fbSearch, fbText, fbGroup, fbNorm } = require('../public/js/football-core');
+const team = (id) => FB_TEAMS.find((t) => t.id === id);
+
+test('Manchester United by every name it goes by', () => {
+  const mu = team('man-utd');
+  for (const s of ['Premier League: Manchester United v Liverpool', 'Man Utd - Arsenal', 'Man. Utd vs Chelsea', 'Man United – Everton',
+    'EPL 03: MUN vs LIV 21:00', 'LIV - MUN', 'MUFC TV', 'Live: ManU v Spurs', 'Manchester Utd mot Brighton', 'Red Devils v Leeds (Premier League)']) {
+    assert.ok(fbMatches(mu, s), s);
+  }
+});
+
+test('…and not other teams, or other things', () => {
+  const mu = team('man-utd');
+  for (const s of ['Manchester City v Liverpool', 'Man City - Arsenal', 'Leeds United v Everton', 'West Ham United v Fulham', 'Newcastle United - Spurs',
+    'Munich: the city', 'MUNICH v LIV', 'Manu Ginobili: a career', 'Red Devils (documentary)', 'The Sun v the Moon', 'Carlisle United v Barrow']) {
+    assert.ok(!fbMatches(mu, s), s);
+  }
+  assert.ok(fbMatches(team('man-city'), 'Man City - Arsenal'));
+  assert.ok(!fbMatches(team('man-city'), 'Manchester United v Liverpool'));
+});
+
+test('words that mean other things only count about football', () => {
+  const brann = team('brann');
+  assert.ok(fbMatches(brann, 'Brann - Molde'));
+  assert.ok(fbMatches(brann, 'Eliteserien: Brann mot Rosenborg'));
+  assert.ok(fbMatches(brann, 'SK Brann – sesongen'));
+  assert.ok(!fbMatches(brann, 'Brann i Bergen sentrum'));
+  assert.ok(!fbMatches(team('viking'), 'Vikings: Valhalla'));
+  assert.ok(!fbMatches(team('viking'), 'The last Viking king'));
+  assert.ok(fbMatches(team('viking'), 'Viking - Bodø/Glimt'));
+  assert.ok(fbMatches(team('bodo-glimt'), 'Bodø/Glimt - Viking'));
+  assert.ok(!fbMatches(team('nt-norway'), 'Norway from above'));
+  assert.ok(fbMatches(team('nt-norway'), 'VM-kvalik: Norge - Italia'));
+  assert.ok(fbMatches(team('nt-norway'), 'Norway v Italy'));
+  assert.ok(!fbMatches(team('arsenal'), 'Arsenal of democracy'));
+  assert.ok(fbMatches(team('arsenal'), 'Arsenal v Spurs'));
+  assert.ok(fbMatches(team('real-madrid'), 'LaLiga: Real Madrid - Barcelona'));
+  assert.ok(!fbMatches(team('real-madrid'), 'Atlético Madrid v Sevilla'));
+  assert.ok(!fbMatches(team('milan'), 'Inter Milan v Roma'));
+});
+
+test('a search finds the team it means', () => {
+  assert.strictEqual(fbFindTeams('mufc')[0].id, 'man-utd');
+  assert.strictEqual(fbFindTeams('Man Utd')[0].id, 'man-utd');
+  assert.strictEqual(fbFindTeams('glimt')[0].id, 'bodo-glimt');
+  assert.strictEqual(fbFindTeams('Bodø')[0].id, 'bodo-glimt');
+  assert.strictEqual(fbFindTeams('vålerenga')[0].id, 'valerenga');
+  assert.deepStrictEqual(fbFindTeams(''), []);
+  assert.strictEqual(fbNorm('Bodø/Glimt'), 'bodo glimt');
+});
+
+test('the guide and channel names: now, later, event channels; one row per programme', () => {
+  const now = Date.parse('2026-11-28T15:00:00Z'), h = 3600e3;
+  const chs = [{ name: 'Sky Sports Main Event' }, { name: 'Sky Sports Main Event HD' }, { name: 'EPL 03: Man Utd vs Liverpool 20:00' }, { name: 'NRK1' }];
+  const guide = {
+    'Sky Sports Main Event': [[now - h, now + h, 'Premier League: Man Utd v Liverpool', ''], [now + 3 * h, now + 5 * h, 'Arsenal v Chelsea', '']],
+    'Sky Sports Main Event HD': [[now - h, now + h, 'Premier League: Man Utd v Liverpool', '']],
+    NRK1: [[now - 3 * h, now - 2 * h, 'Man Utd v Spurs', 'old'], [now + h, now + 2 * h, 'Nyheter', '']],
+  };
+  const r = fbSearch((s) => fbMatches(team('man-utd'), s), chs, (c) => guide[c.name] || null, now);
+  assert.strictEqual(r.now.length, 2);
+  assert.strictEqual(r.later.length, 0);   // the old one has ended
+  assert.deepStrictEqual(r.channels.map((c) => c.name), ['EPL 03: Man Utd vs Liverpool 20:00']);
+  const rows = fbGroup(r.now);
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].chs.length, 2);
+  const t = fbSearch(fbText('arsenal chelsea'), chs, (c) => guide[c.name] || null, now);
+  assert.strictEqual(t.later.length, 1);
+});

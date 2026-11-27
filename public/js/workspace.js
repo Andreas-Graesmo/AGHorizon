@@ -915,6 +915,7 @@ function uiEpgUpdated() {
   epgTimer = setTimeout(() => {
     mvRefreshNames();
     if (TV) tvBanner();
+    if (ui.route === 'football' && document.activeElement !== $('#fbInput')) renderFootball();
     if (ui.route !== 'ws' || ws.mode !== 'live') return;
     renderLiveStatus();
     if (ws.lv === 'channels') { renderLiveList(); renderLiveInfo(); if (TV) tvLiveCard(); } else { guideState.dirty = true; renderGuide(); }

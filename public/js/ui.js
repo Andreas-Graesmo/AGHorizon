@@ -142,7 +142,7 @@ async function goBack() {
 $('#btnBack').addEventListener('click', goBack);
 
 function renderRoute(route) {
-  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, settings: renderSettings, multiview: renderMultiview, downloads: openDownloads }[route];
+  const fn = { dashboard: renderDashboard, playlists: renderPlaylists, favorites: renderFavorites, recent: renderRecent, search: renderSearch, football: renderFootball, settings: renderSettings, multiview: renderMultiview, downloads: openDownloads }[route];
   if (fn) fn();
 }
 
