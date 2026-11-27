@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The start screen: the horizon is drawn, then the sun rises over it (MainActivity starts it). -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/logo_rise">
+    <target android:name="horizon" android:animation="@animator/logo_horizon" />
+    <target android:name="line" android:animation="@animator/logo_line" />
+    <target android:name="sun" android:animation="@animator/logo_sun" />
+</animated-vector>

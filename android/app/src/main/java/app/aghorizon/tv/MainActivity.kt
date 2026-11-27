@@ -9,6 +9,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.graphics.drawable.Animatable
+import android.widget.ImageView
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -38,6 +41,7 @@ class MainActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private var pageLoaded = false
     private var destroyed = false
+    private var splashSince = 0L   // when the rising sun started: the start screen stays until it is up
 
     private val prefs by lazy { getSharedPreferences("tv", Context.MODE_PRIVATE) }
     private val debuggable by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
@@ -48,6 +52,7 @@ class MainActivity : Activity() {
         web = findViewById(R.id.web)
         splash = findViewById(R.id.splash)
         splashText = findViewById(R.id.splashText)
+        startSplash()
         updater = Updater(this) { sendToPage("tvUpdate", it) }
         player = PlayerController(this, findViewById(R.id.playerLayer), { sendToPage("tvNative", it) }) { playing ->
             // while the player is up the remote belongs to it, not to the page underneath
@@ -137,14 +142,32 @@ class MainActivity : Activity() {
         }, "wait-for-server").start()
     }
 
+    /** The start screen: the logo's sun rises over the horizon, then the name fades in. "Starting…" shows only when
+     *  starting takes long (an error message shows at once, showSplash). */
+    private fun startSplash() {
+        splashSince = SystemClock.uptimeMillis()
+        (findViewById<ImageView>(R.id.splashLogo).drawable as? Animatable)?.start()
+        findViewById<View>(R.id.splashName).animate().alpha(1f).setStartDelay(900).setDuration(500).start()
+        ui.postDelayed({ if (splash.visibility == View.VISIBLE) splashText.visibility = View.VISIBLE }, SPLASH_WORDS_MS)
+    }
+
     private fun showSplash(text: String) {
+        splash.animate().cancel()
+        splash.alpha = 1f
         splashText.text = text
+        if (text != getString(R.string.starting)) splashText.visibility = View.VISIBLE   // a problem: say it at once
         splash.visibility = View.VISIBLE
     }
 
     private fun hideSplash() {
         if (!pageLoaded || splash.visibility != View.VISIBLE) return
-        splash.visibility = View.GONE
+        val left = SPLASH_MIN_MS - (SystemClock.uptimeMillis() - splashSince)
+        if (left > 0) { ui.postDelayed({ hideSplash() }, left); return }   // let the sun finish rising
+        splash.animate().alpha(0f).setDuration(350).withEndAction {
+            if (!pageLoaded) return@withEndAction   // shown again meanwhile (showSplash)
+            splash.visibility = View.GONE
+            splash.alpha = 1f
+        }.start()
         if (!player.visible) web.requestFocus()
     }
 
@@ -263,6 +286,8 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val SPLASH_MIN_MS = 1500L     // the sun is up (drawable/logo_rise_anim.xml: 380 + 1000 ms)
+        private const val SPLASH_WORDS_MS = 5000L   // after this long, the start screen also says "Starting…"
         private const val TAG = "AGHorizon"
         private const val WEB_TAG = "AGHorizonWeb"
         private const val CSS_WIDTH = 1120

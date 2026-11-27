@@ -352,13 +352,17 @@
         android:gravity="center"
         android:orientation="vertical">
 
+        <!-- the logo, its sun rising (drawable/logo_rise_anim.xml) -->
         <ImageView
-            android:layout_width="96dp"
-            android:layout_height="96dp"
+            android:id="@+id/splashLogo"
+            android:layout_width="128dp"
+            android:layout_height="128dp"
             android:contentDescription="@string/app_name"
-            android:src="@mipmap/ic_launcher" />
+            android:src="@drawable/logo_rise_anim" />
 
         <TextView
+            android:id="@+id/splashName"
+            android:alpha="0"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
@@ -376,6 +380,7 @@
             android:layout_marginEnd="64dp"
             android:gravity="center"
             android:text="@string/starting"
+            android:visibility="invisible"
             android:textColor="#9aa3b5"
             android:textSize="15sp" />
     </LinearLayout>
