@@ -458,11 +458,13 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
     private fun restyle() {
         // the sound, subtitle and skip buttons: no circle behind them; the icon (and the skip's "15") turns the
         // accent colour with the focus (owner's request)
-        val tint = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()), intArrayOf(accent, Color.WHITE))
+        // (set by hand as the focus comes and goes: the views inside the skip buttons don't get the button's focused
+        // state when it is asked for after the layout is built, so a colour list for "focused" never applied there)
         for (b in listOf(btnAudio, btnSubs, btnBack, btnFwd)) {
             b.background = null
             if (android.os.Build.VERSION.SDK_INT >= 26) b.defaultFocusHighlightEnabled = false
-            tintIn(b, tint, false)
+            tintIn(b, if (b.hasFocus()) accent else Color.WHITE)
+            b.setOnFocusChangeListener { v, has -> tintIn(v, if (has) accent else Color.WHITE) }
         }
         // play / pause: white at rest, the accent colour with the focus (#34), as the desktop player
         btnPlay.background = StateListDrawable().apply {
@@ -484,13 +486,12 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
 
     private fun oval(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
 
-    /** The icon and text in v take tint; inside a button made of several views they follow the button's focus. */
-    private fun tintIn(v: View, tint: ColorStateList, child: Boolean) {
-        if (child) v.isDuplicateParentStateEnabled = true
+    /** The icons and text in v (the button, or the views it is made of) in this colour. */
+    private fun tintIn(v: View, color: Int) {
         when (v) {
-            is android.widget.ImageView -> v.imageTintList = tint
-            is TextView -> v.setTextColor(tint)
-            is ViewGroup -> for (i in 0 until v.childCount) tintIn(v.getChildAt(i), tint, true)
+            is android.widget.ImageView -> v.imageTintList = ColorStateList.valueOf(color)
+            is TextView -> v.setTextColor(color)
+            is ViewGroup -> for (i in 0 until v.childCount) tintIn(v.getChildAt(i), color)
         }
     }
 
