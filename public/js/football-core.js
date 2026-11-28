@@ -135,7 +135,12 @@ const fbVersus = (raw) => String(raw || '').replace(/\s+(v|vs\.?|mot|-|–|—|@
 // A text made ready to search once (normalising is the slow part; the guide has tens of thousands of programmes):
 // raw as it was, t lower case with " vs " between the names of a match.
 const fbDoc = (raw) => ({ raw: String(raw || ''), t: ` ${fbNorm(fbVersus(raw))} ` });
-const fbIsMatchName = (doc) => doc.t.includes(' vs ');   // "EPL 03: Man Utd vs Liverpool": a match, not a channel's own name
+const fbIsMatchName = (doc) => doc.t.includes(' vs ');
+// On a team's own channel (MUTV…) most matches are old ones; a match there counts when it says it is live (a pre-season
+// friendly, a tour) and doesn't say it is a replay.
+const FB_LIVE = / (live|direkte|pre season|preseason|friendly|friendlies|treningskamp|privatkamp|tour) /;
+const FB_REPLAY = / (classic|classics|replay|re live|relive|rewind|highlights|full match|archive|delayed|repeat|reprise|repris|opptak|19\d\d) /;
+const fbLiveMatch = (doc) => fbIsMatchName(doc) && FB_LIVE.test(doc.t) && !FB_REPLAY.test(doc.t);   // "EPL 03: Man Utd vs Liverpool": a match, not a channel's own name
 
 // Is the text (a programme's title and description, or a channel's name) about this team?
 function fbMatchDoc(team, doc) {
@@ -182,9 +187,9 @@ function fbIndexAdd(index, ch, guide, now) {
 }
 //   test(doc) -> true for a hit
 //   -> { now: [{ ch, p }], later: [{ ch, p }], channels: [ch] }: the programmes that haven't ended, and the channels
-//      named after a match (event channels, which often have no guide). A channel that is the team's own (MUTV,
-//      "Manchester United TV": its name is about the team, but no match) is left out, its programmes too: they are
-//      old matches and club shows.
+//      named after a match (event channels, which often have no guide). On a channel that is the team's own (MUTV,
+//      "Manchester United TV": its name is about the team, but no match) only a live match counts (pre-season):
+//      the rest there are old matches and club shows.
 function fbSearchIndex(test, index, now, all = false) {
   const out = { now: [], later: [], channels: [] };
   const own = new Set();
@@ -193,7 +198,7 @@ function fbSearchIndex(test, index, now, all = false) {
     if (fbIsMatchName(c.doc)) out.channels.push(c.ch); else own.add(c.ch);
   }
   for (const h of all ? index.progs : index.sport) {
-    if (h.p[1] <= now || own.has(h.ch) || !test(h.doc)) continue;
+    if (h.p[1] <= now || !test(h.doc) || (own.has(h.ch) && !fbLiveMatch(h.doc))) continue;
     (h.p[0] <= now ? out.now : out.later).push({ ch: h.ch, p: h.p });
   }
   out.later.sort((a, b) => a.p[0] - b.p[0]);

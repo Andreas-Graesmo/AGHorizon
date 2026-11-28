@@ -72,17 +72,19 @@ test('the guide and channel names: now, later, event channels; one row per progr
   assert.strictEqual(t.later.length, 1);
 });
 
-test("a team's own channels (MUTV, Manchester United TV) are not match channels, nor their old matches", () => {
+test("a team's own channels (MUTV, Manchester United TV): not match channels; only their live matches count", () => {
   const mu = FB_TEAMS.find((t) => t.id === 'man-utd');
   const now = Date.parse('2026-11-28T15:00:00Z'), h = 3600e3;
   const chs = [{ name: 'UK: MUTV' }, { name: 'Manchester United TV HD' }, { name: 'EPL 03: Man Utd vs Liverpool 20:00' }, { name: 'Sky Sports Main Event' }];
   const guide = {
-    'UK: MUTV': [[now - h, now + h, 'Classic: Manchester United v Liverpool (1999)', '']],
+    'UK: MUTV': [[now - h, now + h, 'Classic: Manchester United v Liverpool (1999)', ''], [now + 4 * h, now + 6 * h, 'LIVE: Pre-season friendly: Man Utd v Celtic', ''],
+      [now + 7 * h, now + 9 * h, 'Man Utd v Arsenal', ''], [now + 10 * h, now + 12 * h, 'Live Replay: Man Utd v Spurs', '']],
     'Manchester United TV HD': [[now + h, now + 2 * h, 'Man Utd v Arsenal: highlights', '']],
     'Sky Sports Main Event': [[now + 2 * h, now + 4 * h, 'Man Utd v Liverpool', '']],
   };
   const r = fbSearch((s) => fbMatches(mu, s), chs, (c) => guide[c.name] || null, now);
   assert.deepStrictEqual(r.channels.map((c) => c.name), ['EPL 03: Man Utd vs Liverpool 20:00']);
   assert.strictEqual(r.now.length, 0);
-  assert.deepStrictEqual(r.later.map((x) => x.ch.name), ['Sky Sports Main Event']);
+  // there, only a live match (pre-season): not the classic, not a match without "live", not a replay
+  assert.deepStrictEqual(r.later.map((x) => `${x.ch.name}: ${x.p[2]}`), ['Sky Sports Main Event: Man Utd v Liverpool', 'UK: MUTV: LIVE: Pre-season friendly: Man Utd v Celtic']);
 });
