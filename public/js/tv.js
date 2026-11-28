@@ -180,6 +180,7 @@ function tvPlay(ch, token) {
   window.AGHorizonTV.play(JSON.stringify({
     token, url: ch.url, ua: (p && p.ua) || '', live: !vod, start,
     audioLang: audRemembered(ch) || audPrefLang(), subLang: tvSubLang(ch), subLook: subLookForTv(),   // how subtitles look (#29)
+    clock24: clock24(),   // Settings › Appearance › Time format: the player's clock and programme times
     accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),   // the player's controls follow the theme
     ...tvTitles(ch),
   }));

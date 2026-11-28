@@ -13,7 +13,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 // keep identical to normName in server.js: the guide matches channels by these names
 const normName = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 const uidOf = () => Math.random().toString(36).slice(2, 10);
-const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// Settings › Appearance › Time format: 24-hour (15:00, the default) or 12-hour (3:00 PM), whatever the device's language
+const clock24 = () => LS.get('tuner.clock', '24') !== '12';
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: clock24() ? 'h23' : 'h12' });
 const fmtDay = (ms) => new Date(ms).toLocaleDateString([], { weekday: 'short', day: 'numeric' });
 const initials = (name) => (String(name).match(/[\p{L}\p{N}]/gu) || ['?']).slice(0, 2).join('').toUpperCase();
 

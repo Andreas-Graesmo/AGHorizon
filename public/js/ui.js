@@ -547,7 +547,7 @@ const SRC_SORTS = [['added-desc', 'Date added (Newest first)'], ['added-asc', 'D
 const statusOf = (p) => state.status[p.id] || 'unknown';
 const srcKind = (p) => (p.type === 'xtream' ? 'xtream' : 'm3u');
 const fmtShortDate = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
-const fmtStamp = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtStamp = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: clock24() ? 'h23' : 'h12' });
 function srcMeta(p) {
   const parts = [typeLabel(p)];
   if (p.added) parts.push('added ' + fmtShortDate(p.added));
@@ -964,6 +964,7 @@ function renderSettings() {
   $('#v-settings').innerHTML = `<div class="page set-page"><nav class="set-index" id="setIndex" aria-label="Settings pages"></nav><div class="set-main"><div id="setHead"></div>
     ${pane('Appearance', 'i-sun', 'Theme, palettes and accent colour.', `<section class="set-card">
       <div class="set-row"><div><b>Theme</b><p class="muted">Dark, light, or follow your system.</p></div>${seg('theme', theme, [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']])}</div>
+      <div class="set-row"><div><b>Time format</b><p class="muted">How times show: in the guide, on the Football page, in the player.</p></div>${seg('clock', clock24() ? '24' : '12', [['24', '24-hour (15:00)'], ['12', '12-hour (3:00 PM)']])}</div>
       <div class="set-row"><div><b>Dark palette</b><p class="muted">Used when the app is dark. OLED black suits OLED screens and dark rooms.</p></div>${palSeg('dark')}</div>
       <div class="set-row"><div><b>Light palette</b><p class="muted">Used when the app is light. Channel logos get a dark backdrop so white logos stay visible.</p></div>${palSeg('light')}</div>
       ${TV ? `<div class="set-row"><div><b>Size</b><p class="muted">How large everything is on the TV.</p></div>${seg('tvWidth', String(tv.info.width || 1120), [['1280', 'Small'], ['1120', 'Normal'], ['960', 'Large']])}</div>` : ''}

@@ -7,7 +7,6 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.text.format.DateFormat
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -138,6 +137,8 @@ class PlayerController(
         }
         playerView.requestFocus()
         controls.reset(r.live, json.optString("accent"))
+        clock24 = json.optBoolean("clock24", true)
+        controls.clock24 = clock24
         controls.programme(json.optJSONArray("now"), json.optJSONArray("next"))
         subLook(json.optJSONObject("subLook"))
         setBanner(r.title, r.sub, json.optString("num"))
@@ -455,7 +456,8 @@ class PlayerController(
         bannerNum.background = GradientDrawable().apply { setColor(controls.accent); cornerRadius = 8 * activity.resources.displayMetrics.density }
     }
 
-    private fun showClock() { clock.text = DateFormat.getTimeFormat(activity).format(Date()) }
+    private var clock24 = true   // the pages' Settings › Appearance › Time format
+    private fun showClock() { clock.text = PlayerControls.time(Date().time, clock24) }
 
     private var bannerUntil = 0L   // the title stays up until then, also when the controls go away meanwhile
     private val hideBanner = Runnable { if (!controls.visible) banner.visibility = View.GONE }

@@ -8,7 +8,6 @@ import android.graphics.drawable.StateListDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.text.format.DateFormat
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -502,13 +501,16 @@ class PlayerControls(layer: ViewGroup, private val onVisible: (Boolean) -> Unit)
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), res.displayMetrics).toInt()
 
-    private fun clock(ms: Long): String = DateFormat.getTimeFormat(panel.context).format(Date(ms))
+    var clock24 = true   // the pages' Settings › Appearance › Time format
+    private fun clock(ms: Long): String = time(ms, clock24)
 
     companion object {
         private const val HIDE_MS = 5000L
         private const val LIVE_BEHIND_MS = 1500L
         private val LOOK_ROWS = listOf("size" to "Size", "color" to "Text colour", "opacity" to "Background", "pos" to "Height")   // from here on, and whenever paused, LIVE becomes GO LIVE
         private val DEFAULT_ACCENT = Color.parseColor("#ff7a59")
+        /** 15:00, or 3:00 PM: the pages' Time format, not the TV's language (often American on a TV set up in Norwegian). */
+        fun time(ms: Long, h24: Boolean): String = java.text.SimpleDateFormat(if (h24) "HH:mm" else "h:mm a", java.util.Locale.US).format(java.util.Date(ms))
         private val INK = Color.parseColor("#06142b")   // --accent-ink: the play / pause sign on the accent
 
         fun parseColor(css: String): Int? = runCatching { Color.parseColor(css.trim()) }.getOrNull()
