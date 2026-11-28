@@ -23,6 +23,30 @@ function fbChannels() {
   for (const pl of state.playlists) { const info = state.cache[pl.id]; if (info && info.channels) out.push(...info.channels); }
   return out;
 }
+// The guide and channel names, ready to search: built again when a playlist or its guide changes, a few hundred
+// channels at a time with a pause between (100: a TV does them in well under a tenth of a second), so the page (and a TV's remote) stays responsive while it builds.
+function fbIndex() {
+  const chans = fbChannels();
+  const key = state.playlists.map((p) => `${p.id}:${state.cache[p.id] ? state.cache[p.id].channels.length : 0}:${state.epg[p.id] ? Object.keys(state.epg[p.id].programmes).length : 0}`).join('|');
+  if (fb.index && fb.index.key === key) return fb.index.done ? fb.index.data : null;
+  if (fb.index && fb.index.key !== key && fb.index.job) clearTimeout(fb.index.job);
+  const job = { key, data: fbNewIndex(), done: false, job: 0 };
+  fb.index = job;
+  const now = Date.now();
+  let i = 0;
+  const step = () => {
+    if (fb.index !== job) return;
+    const end = Math.min(chans.length, i + 100);
+    for (; i < end; i++) fbIndexAdd(job.data, chans[i], (ch) => programmesFor(ch), now);
+    if (i < chans.length) { job.job = setTimeout(step, 0); return; }
+    job.done = true;
+    if (ui.route === 'football') fbRefresh();
+  };
+  step();
+  return job.done ? job.data : null;
+}
+const fbRefresh = () => { if ($('#fbBody')) $('#fbBody').innerHTML = fbBody(); };
+
 const fbGuideState = () => {
   const pid = curPid();
   return fb.loading ? 'loading' : String((pid && state.epgState[pid]) || '');
@@ -49,9 +73,11 @@ function fbRow(r, now) {
 }
 
 // What the guide and the channel names have for a test (a team, or a text): now, later, and channels named after it.
-function fbResults(test, emptyText) {
+function fbResults(test, emptyText, all = false) {
   const now = Date.now();
-  const r = fbSearch(test, fbChannels(), (ch) => programmesFor(ch), now);
+  const index = fbIndex();
+  if (!index) return '<p class="muted fb-none">Searching the TV guide…</p>';
+  const r = fbSearchIndex(test, index, now, all);
   const nowRows = fbGroup(r.now), later = fbGroup(r.later).slice(0, 30);
   const named = r.channels.filter((ch) => !r.now.some((h) => h.ch === ch) && !r.later.some((h) => h.ch === ch)).slice(0, 24);
   if (!nowRows.length && !later.length && !named.length) {
@@ -79,10 +105,10 @@ function fbSearchHtml() {
   const chosen = new Set(LS.get('tuner.fbTeams', []));
   const t = teams[0];
   // a team's name: all its names; anything else: the words, anywhere in a title, a description or a channel's name
-  const test = t ? (s) => fbMatches(t, s) : fbText(q);
+  const test = t ? (doc) => fbMatchDoc(t, doc) : fbText(q);
   const add = teams.length ? `<div class="fb-chs wrap">${teams.map((x) => chosen.has(x.id) ? '' : `<button class="chip-btn" data-fb-team="${x.id}">＋ Add ${esc(x.name)}</button>`).join('')}</div>` : '';
   return `<section class="sec fb-team"><div class="rail-head"><h3>${t ? esc(t.name) : `“${esc(q)}”`}</h3>${t ? `<span class="muted">${esc(t.league)}</span>` : ''}</div>
-    ${add}${fbResults(test, `Nothing for ${esc(t ? t.name : q)} in the TV guide or the channel names right now.`)}</section>`;
+    ${add}${fbResults(test, `Nothing for ${esc(t ? t.name : q)} in the TV guide or the channel names right now.`, !t)}</section>`;
 }
 
 function fbBody() {
@@ -91,7 +117,7 @@ function fbBody() {
   return fbSearchHtml() + teams.map((t) => `<section class="sec fb-team" data-team="${t.id}">
       <div class="rail-head"><h3>${esc(t.name)}</h3><span class="muted">${esc(t.league)}</span><div class="grow"></div>
         <button class="icon-btn sm" data-fb-team="${t.id}" title="Remove ${esc(t.name)}" aria-label="Remove ${esc(t.name)}"><svg class="ic"><use href="#i-x"/></svg></button></div>
-      ${fbResults((s) => fbMatches(t, s), `No ${esc(t.name)} match in the TV guide or the channel names right now. The guide covers about the next day and a half.`)}</section>`).join('');
+      ${fbResults((doc) => fbMatchDoc(t, doc), `No ${esc(t.name)} match in the TV guide or the channel names right now. The guide covers about the next day and a half.`)}</section>`).join('');
 }
 
 function renderFootball() {
@@ -109,12 +135,12 @@ $('#v-football').addEventListener('input', (e) => {
   if (e.target.id !== 'fbInput') return;
   fb.q = e.target.value;
   clearTimeout(fb.t);
-  fb.t = setTimeout(() => { $('#fbBody').innerHTML = fbBody(); }, 150);
+  fb.t = setTimeout(fbRefresh, 250);
 });
 $('#v-football').addEventListener('click', (e) => {
   const play = e.target.closest('[data-fb-play]');
   if (play) {
-    const ch = fbChannels().find((c) => c.uid === play.dataset.fbPlay);
+    const ch = (fb.index && fb.index.data.chans.find((c) => c.ch.uid === play.dataset.fbPlay) || {}).ch;
     if (ch) playChannel(ch);
     return;
   }

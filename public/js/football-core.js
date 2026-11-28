@@ -26,9 +26,9 @@ const FB_TEAMS = [
   ['ipswich', 'Ipswich Town', 'England', ['ipswich town', 'ipswich', 'itfc'], [], ['IPS']],
   ['leeds', 'Leeds United', 'England', ['leeds united', 'leeds utd', 'lufc'], ['leeds'], ['LEE']],
   ['leicester', 'Leicester City', 'England', ['leicester city', 'leicester', 'lcfc', 'the foxes'], [], ['LEI']],
-  ['liverpool', 'Liverpool', 'England', ['liverpool fc', 'lfc'], ['liverpool', 'the reds'], ['LIV']],
+  ['liverpool', 'Liverpool', 'England', ['liverpool fc', 'lfctv', 'lfc'], ['liverpool', 'the reds'], ['LIV']],
   ['man-city', 'Manchester City', 'England', ['manchester city', 'man city', 'mcfc', 'man c'], ['citizens'], ['MCI'], ['manchester united', 'man united', 'man utd']],
-  ['man-utd', 'Manchester United', 'England', ['manchester united', 'manchester utd', 'man united', 'man utd', 'man u', 'mufc'], ['manu', 'red devils'], ['MUN'], ['manchester city', 'man city', 'leeds united', 'west ham united', 'newcastle united', 'sheffield united']],
+  ['man-utd', 'Manchester United', 'England', ['manchester united', 'manchester utd', 'man united', 'man utd', 'man u', 'mufc', 'mutv'], ['manu', 'red devils'], ['MUN'], ['manchester city', 'man city', 'leeds united', 'west ham united', 'newcastle united', 'sheffield united']],
   ['newcastle', 'Newcastle United', 'England', ['newcastle united', 'newcastle utd', 'newcastle', 'nufc', 'the magpies'], [], ['NEW']],
   ['nottingham-forest', 'Nottingham Forest', 'England', ['nottingham forest', 'nottm forest', 'notts forest', 'nffc'], ['forest'], ['NFO']],
   ['southampton', 'Southampton', 'England', ['southampton', 'saints fc'], ['saints'], ['SOU']],
@@ -108,7 +108,15 @@ const FB_TEAMS = [
   ['nt-brazil', 'Brazil', 'National teams', [], ['brazil', 'brasil'], ['BRA']],
   ['nt-argentina', 'Argentina', 'National teams', [], ['argentina'], ['ARG']],
   ['nt-usa', 'USA', 'National teams', ['usmnt'], ['united states'], ['USA']],
-].map(([id, name, league, names, weak, codes, not = []]) => ({ id, name, league, names, weak, codes, not }));
+].map(([id, name, league, names, weak, codes, not = []]) => ({
+  id, name, league, names, weak, codes, not,
+  // made once: a code only as providers name their match channels, "MUN v LIV", "LIV - MUN", in capitals
+  // made once, as searched for: " name ", and for the words that need a pairing " word vs ", " vs word "
+  notPad: not.map((n) => ` ${n} `),
+  weakPad: weak.map((n) => [` ${n} `, ` ${n} vs `, ` vs ${n} `]),
+  namesPad: names.map((n) => ` ${n} `),
+  codeRe: codes.length ? new RegExp(`(^|[^A-Za-z0-9])((${codes.join('|')})\\s*(v|vs\\.?|-|–|@)\\s*[A-Z0-9]{2,3}|[A-Z0-9]{2,3}\\s*(v|vs\\.?|-|–|@)\\s*(${codes.join('|')}))(?![A-Za-z0-9])`) : null,
+}));
 
 // lower case, no accents, Norwegian letters spelt out, everything but letters and digits a space: "Bodø/Glimt" -> "bodo glimt"
 function fbNorm(s) {
@@ -124,16 +132,21 @@ const FB_CONTEXT = / (fotball|football|soccer|fc|premier league|epl|eliteserien|
 // "A v B", "A - B", "A vs. B", "A mot B": one " vs " between the names
 const fbVersus = (raw) => String(raw || '').replace(/\s+(v|vs\.?|mot|-|–|—|@)\s+/gi, ' vs ');
 
+// A text made ready to search once (normalising is the slow part; the guide has tens of thousands of programmes):
+// raw as it was, t lower case with " vs " between the names of a match.
+const fbDoc = (raw) => ({ raw: String(raw || ''), t: ` ${fbNorm(fbVersus(raw))} ` });
+const fbIsMatchName = (doc) => doc.t.includes(' vs ');   // "EPL 03: Man Utd vs Liverpool": a match, not a channel's own name
+
 // Is the text (a programme's title and description, or a channel's name) about this team?
-function fbMatches(team, raw) {
-  let t = ` ${fbNorm(fbVersus(raw))} `;
-  for (const n of team.not) t = t.split(` ${n} `).join(' · ');   // another team whose name holds this one's
-  if (team.names.some((n) => t.includes(` ${n} `))) return true;
+function fbMatchDoc(team, doc) {
+  let t = doc.t;
+  for (const n of team.notPad) if (t.includes(n)) t = t.split(n).join(' · ');   // another team whose name holds this one's
+  for (const n of team.namesPad) if (t.includes(n)) return true;
   // a word that also means other things: in a pairing ("Brann vs Molde"), or in a text about football
-  if (team.weak.some((n) => t.includes(` ${n} vs `) || t.includes(` vs ${n} `) || (t.includes(` ${n} `) && FB_CONTEXT.test(t)))) return true;
-  // a code, only as providers name their match channels: "MUN v LIV", "LIV - MUN", in capitals
-  return team.codes.some((c) => new RegExp(`(^|[^A-Za-z0-9])(${c}\\s*(v|vs\\.?|-|–|@)\\s*[A-Z0-9]{2,3}|[A-Z0-9]{2,3}\\s*(v|vs\\.?|-|–|@)\\s*${c})(?![A-Za-z0-9])`).test(String(raw || '')));
+  for (const [w, a, b] of team.weakPad) if (t.includes(w) && (t.includes(a) || t.includes(b) || FB_CONTEXT.test(t))) return true;
+  return !!team.codeRe && team.codes.some((c) => doc.raw.includes(c)) && team.codeRe.test(doc.raw);   // the costly test only where a code is
 }
+const fbMatches = (team, raw) => fbMatchDoc(team, fbDoc(raw));
 
 // The teams a search could mean: by any of their names (or the start of one), best first.
 function fbFindTeams(q) {
@@ -149,26 +162,51 @@ function fbFindTeams(q) {
   return FB_TEAMS.map((t) => [t, score(t)]).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).map(([t]) => t);
 }
 
-// What the guide and the channel names say about a team (or a text searched for, when no team is meant).
-//   channels: the live channels; guide(ch) -> [[start, stop, title, description], …] or null; now: ms
-//   -> { now: [{ ch, p }], later: [{ ch, p }], channels: [ch] }: the programmes that haven't ended, and the
-//      channels whose own name is about it (event channels, which often have no guide)
-function fbSearch(test, channels, guide, now) {
+// The guide and the channel names, made ready to search (fbIndexAdd, a channel at a time: the page builds it in
+// small steps, so a TV stays responsive), and searched as often as wanted.
+//   guide(ch) -> [[start, stop, title, description], …] or null
+// sport: the programmes that look like a match (a pairing, or a competition named): a team is only looked for in
+// those, a small part of a guide (most of it is news, films and shows); a plain text search goes through them all.
+const fbNewIndex = () => ({ chans: [], progs: [], sport: [] });
+function fbIndexAdd(index, ch, guide, now) {
+  index.chans.push({ ch, doc: fbDoc(ch.name) });
+  const list = guide(ch);
+  if (!list) return;
+  for (const p of list) {
+    if (p[1] <= now) continue;
+    // the title, and the start of the description (where a match names its teams, if the title doesn't)
+    const h = { ch, p, doc: fbDoc(`${p[2] || ''} ${String(p[3] || '').slice(0, 140)}`) };
+    index.progs.push(h);
+    if (fbIsMatchName(h.doc) || FB_CONTEXT.test(h.doc.t)) index.sport.push(h);
+  }
+}
+//   test(doc) -> true for a hit
+//   -> { now: [{ ch, p }], later: [{ ch, p }], channels: [ch] }: the programmes that haven't ended, and the channels
+//      named after a match (event channels, which often have no guide). A channel that is the team's own (MUTV,
+//      "Manchester United TV": its name is about the team, but no match) is left out, its programmes too: they are
+//      old matches and club shows.
+function fbSearchIndex(test, index, now, all = false) {
   const out = { now: [], later: [], channels: [] };
-  for (const ch of channels) {
-    if (test(ch.name)) out.channels.push(ch);
-    const list = guide(ch);
-    if (!list) continue;
-    for (const p of list) {
-      if (p[1] <= now || !test(`${p[2] || ''} ${p[3] || ''}`)) continue;
-      (p[0] <= now ? out.now : out.later).push({ ch, p });
-    }
+  const own = new Set();
+  for (const c of index.chans) {
+    if (!test(c.doc)) continue;
+    if (fbIsMatchName(c.doc)) out.channels.push(c.ch); else own.add(c.ch);
+  }
+  for (const h of all ? index.progs : index.sport) {
+    if (h.p[1] <= now || own.has(h.ch) || !test(h.doc)) continue;
+    (h.p[0] <= now ? out.now : out.later).push({ ch: h.ch, p: h.p });
   }
   out.later.sort((a, b) => a.p[0] - b.p[0]);
   return out;
 }
+// the same, in one go (the tests)
+function fbSearch(test, channels, guide, now) {
+  const index = fbNewIndex();
+  for (const ch of channels) fbIndexAdd(index, ch, guide, now);
+  return fbSearchIndex((doc) => test(doc.raw), index, now, true);
+}
 // a plain text search: every word in the title, description or channel name
-const fbText = (q) => { const words = fbNorm(q).split(' ').filter(Boolean); return (raw) => { const t = ` ${fbNorm(raw)} `; return words.every((w) => t.includes(w)); }; };
+const fbText = (q) => { const words = fbNorm(q).split(' ').filter(Boolean); return (raw) => { const t = typeof raw === 'object' ? raw.t : ` ${fbNorm(raw)} `; return words.every((w) => t.includes(w)); }; };
 
 // The same programme on several channels (an HD and an SD feed, two providers' sport channels): one row, with
 // each channel to pick.
@@ -183,4 +221,4 @@ function fbGroup(hits) {
   return [...rows.values()];
 }
 
-if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbMatches, fbFindTeams, fbSearch, fbText, fbGroup };
+if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup };
