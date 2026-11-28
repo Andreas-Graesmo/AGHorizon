@@ -226,4 +226,38 @@ function fbGroup(hits) {
   return [...rows.values()];
 }
 
-if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup };
+// Replays: a match from last weekend shown again looks like any other in the guide. What tells them apart, from the
+// strongest sign: it says so ("Replay", "Highlights", "(R)", "Reprise"…); it says it is live ("Live", "Direkte", "(L)");
+// a short slot (a live match with its build-up takes at least 100 minutes; highlights and cut-down replays less); the
+// same match on again at another time (an airing marked live is the match, else the first one).
+// -> { main: rows, replays: rows } (rows from fbGroup)
+const FB_SAYS_REPLAY = / (replay|replays|re run|rerun|repeat|repeated|classic|classics|re live|relive|rewind|highlights|extended highlights|full match|match of the day|goals|delayed|archive|reprise|repris|opptak|sammendrag|hoydepunkter|hoydepunktene|hele kampen) /;
+const FB_SAYS_LIVE = / (live|direkte|live coverage|kick off|kickoff) /;
+const FB_LIVE_MIN = 100 * 60e3;
+function fbSplitReplays(rows) {
+  const info = rows.map((r) => {
+    const doc = fbDoc(`${r.p[2] || ''} ${String(r.p[3] || '').slice(0, 140)}`);
+    const raw = doc.raw;
+    const replay = FB_SAYS_REPLAY.test(doc.t) || /\((r|rpt|repeat|repris)\)/i.test(raw);
+    const live = !replay && (FB_SAYS_LIVE.test(doc.t) || /\((l|live)\)/i.test(raw));
+    // the match: its two teams (whatever the competition says in front), else its title
+    const title = fbDoc(r.p[2] || '');
+    const teams = FB_TEAMS.filter((t) => fbMatchDoc(t, title)).map((t) => t.id).sort();
+    return { r, replay, live, key: teams.length >= 2 ? teams.join('|') : fbNorm(r.p[2] || '') };
+  });
+  const first = new Map(), liveOn = new Set();
+  for (const x of info) {
+    if (x.replay) continue;
+    if (x.live) liveOn.add(x.key);
+    if (!first.has(x.key) || x.r.p[0] < first.get(x.key)) first.set(x.key, x.r.p[0]);
+  }
+  const out = { main: [], replays: [] };
+  for (const x of info) {
+    const short = x.r.p[1] - x.r.p[0] < FB_LIVE_MIN;
+    const again = liveOn.has(x.key) ? !x.live : x.r.p[0] > first.get(x.key);
+    (x.replay || (!x.live && (short || again)) ? out.replays : out.main).push(x.r);
+  }
+  return out;
+}
+
+if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup, fbSplitReplays };

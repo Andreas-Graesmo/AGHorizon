@@ -88,3 +88,23 @@ test("a team's own channels (MUTV, Manchester United TV): not match channels; on
   // there, only a live match (pre-season): not the classic, not a match without "live", not a replay
   assert.deepStrictEqual(r.later.map((x) => `${x.ch.name}: ${x.p[2]}`), ['Sky Sports Main Event: Man Utd v Liverpool', 'UK: MUTV: LIVE: Pre-season friendly: Man Utd v Celtic']);
 });
+
+test('replays go apart: said so, a short slot, or the same match again', () => {
+  const { fbSplitReplays } = require('../public/js/football-core');
+  const h = 3600e3, t0 = Date.parse('2026-11-28T12:00:00Z');
+  const row = (start, mins, title, desc = '') => ({ p: [t0 + start * h, t0 + start * h + mins * 60e3, title, desc], chs: [{ name: 'x' }] });
+  const s = fbSplitReplays([
+    row(0, 150, 'Premier League: Man Utd v Liverpool', 'Live coverage'),      // the match
+    row(5, 150, 'Man Utd v Liverpool', ''),                                     // the same match again: a replay
+    row(8, 45, 'Man Utd v Liverpool: Highlights', ''),                          // said so
+    row(9, 60, 'Premier League: Arsenal v Man Utd', ''),                        // a short slot
+    row(20, 135, 'Man City v Man Utd', ''),                                     // one airing, long: the match
+    row(22, 120, 'Man Utd v Spurs (R)', ''),                                    // (R)
+    row(23, 120, 'Brann - Molde: reprise', ''),
+  ]);
+  assert.deepStrictEqual(s.main.map((r) => r.p[2]), ['Premier League: Man Utd v Liverpool', 'Man City v Man Utd']);
+  assert.strictEqual(s.replays.length, 5);
+  // the same match twice, neither marked: the first is the match, the later one the replay
+  const s2 = fbSplitReplays([row(3, 120, 'Leeds v Man Utd'), row(1, 120, 'Leeds United v Manchester United')]);
+  assert.deepStrictEqual(s2.main.map((r) => r.p[2]), ['Leeds United v Manchester United']);
+});

@@ -61,12 +61,12 @@ function fbWhen(ms) {
 }
 
 const FB_MAX_CHANNELS = 6;
-function fbRow(r, now) {
-  const live = r.p[0] <= now;
+function fbRow(r, now, replay = false) {
+  const live = r.p[0] <= now && !replay;
   const chs = r.chs.slice(0, FB_MAX_CHANNELS).map((ch) => `<button class="chip-btn fb-ch" data-fb-play="${esc(ch.uid)}" title="Watch on ${esc(ch.name)}">${esc(ch.name)}</button>`).join('');
   const more = r.chs.length > FB_MAX_CHANNELS ? `<span class="muted">+${r.chs.length - FB_MAX_CHANNELS} more</span>` : '';
   const pct = live ? Math.max(0, Math.min(100, ((now - r.p[0]) / (r.p[1] - r.p[0])) * 100)) : 0;
-  return `<div class="fb-row${live ? ' live' : ''}">
+  return `<div class="fb-row${live ? ' live' : ''}${replay ? ' replay' : ''}">
     <div class="fb-when">${live ? '<span class="live-badge"><i></i>LIVE</span>' : esc(fbWhen(r.p[0]))}<small>${esc(fmtTime(r.p[0]))} – ${esc(fmtTime(r.p[1]))}</small>${live ? `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>` : ''}</div>
     <div class="fb-what"><b>${esc(r.p[2] || '')}</b>${r.p[3] ? `<p class="muted">${esc(String(r.p[3]).slice(0, 160))}</p>` : ''}</div>
     <div class="fb-chs">${chs}${more}</div></div>`;
@@ -78,16 +78,20 @@ function fbResults(test, emptyText, all = false) {
   const index = fbIndex();
   if (!index) return '<p class="muted fb-none">Searching the TV guide…</p>';
   const r = fbSearchIndex(test, index, now, all);
-  const nowRows = fbGroup(r.now), later = fbGroup(r.later).slice(0, 30);
+  const split = fbSplitReplays(fbGroup([...r.now, ...r.later]));
+  const nowRows = split.main.filter((x) => x.p[0] <= now), later = split.main.filter((x) => x.p[0] > now).slice(0, 30);
+  const replays = split.replays.sort((a, b) => a.p[0] - b.p[0]).slice(0, 30);
   const named = r.channels.filter((ch) => !r.now.some((h) => h.ch === ch) && !r.later.some((h) => h.ch === ch)).slice(0, 24);
-  if (!nowRows.length && !later.length && !named.length) {
+  if (!nowRows.length && !later.length && !named.length && !replays.length) {
     const g = fbGuideState();
     const why = g === 'loading' ? 'Loading the TV guide…' : g === 'none' ? 'This playlist has no TV guide, so only channel names are searched.' : g.startsWith('error') ? `The TV guide could not be loaded (${esc(g.slice(7))}): only channel names are searched.` : '';
     return `<p class="muted fb-none">${emptyText}${why ? ` ${why}` : ''}</p>`;
   }
-  return `${nowRows.length ? `<div class="fb-list">${nowRows.map((x) => fbRow(x, now)).join('')}</div>` : ''}
+  // the channels named after a match first (owner's request), then the matches; replays and highlights last
+  return `${named.length ? `<h4 class="fb-sub">Channels</h4><div class="fb-chs wrap">${named.map((ch) => `<button class="chip-btn fb-ch" data-fb-play="${esc(ch.uid)}">${esc(ch.name)}</button>`).join('')}</div>` : ''}
+    ${nowRows.length ? `<h4 class="fb-sub">On now</h4><div class="fb-list">${nowRows.map((x) => fbRow(x, now)).join('')}</div>` : ''}
     ${later.length ? `<h4 class="fb-sub">Coming up</h4><div class="fb-list">${later.map((x) => fbRow(x, now)).join('')}</div>` : ''}
-    ${named.length ? `<h4 class="fb-sub">Channels</h4><div class="fb-chs wrap">${named.map((ch) => `<button class="chip-btn fb-ch" data-fb-play="${esc(ch.uid)}">${esc(ch.name)}</button>`).join('')}</div>` : ''}`;
+    ${replays.length ? `<h4 class="fb-sub">Replays and highlights</h4><div class="fb-list fb-replays">${replays.map((x) => fbRow(x, now, true)).join('')}</div>` : ''}`;
 }
 
 function fbPicker() {

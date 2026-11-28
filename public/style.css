@@ -1043,4 +1043,5 @@ html.tv .chan-col { width: 300px; }
 .fb-chs { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; max-width: 460px; }
 .fb-chs.wrap { justify-content: flex-start; max-width: none; }
 .fb-none { margin: 6px 0; }
+.fb-row.replay { opacity: .72; }
 @media (max-width: 760px) { .fb-row { grid-template-columns: 1fr; gap: 8px; } .fb-chs { justify-content: flex-start; } }
