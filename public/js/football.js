@@ -73,12 +73,13 @@ function fbRow(r, now, replay = false) {
 }
 
 // What the guide and the channel names have for a test (a team, or a text): now, later, and channels named after it.
-function fbResults(test, emptyText, all = false) {
+function fbResults(test, emptyText, all = false, team = null) {
   const now = Date.now();
   const index = fbIndex();
   if (!index) return '<p class="muted fb-none">Searching the TV guide…</p>';
   const r = fbSearchIndex(test, index, now, all);
-  const split = fbSplitReplays(fbGroup([...r.now, ...r.later]));
+  const rows = fbGroup([...r.now, ...r.later]);
+  const split = team ? fbSplitTeam(rows, team) : fbSplitReplays(rows);
   const nowRows = split.main.filter((x) => x.p[0] <= now), later = split.main.filter((x) => x.p[0] > now).slice(0, 30);
   const replays = split.replays.sort((a, b) => a.p[0] - b.p[0]).slice(0, 30);
   const named = r.channels.filter((ch) => !r.now.some((h) => h.ch === ch) && !r.later.some((h) => h.ch === ch)).slice(0, 24);
@@ -91,7 +92,7 @@ function fbResults(test, emptyText, all = false) {
   return `${named.length ? `<h4 class="fb-sub">Channels</h4><div class="fb-chs wrap">${named.map((ch) => `<button class="chip-btn fb-ch" data-fb-play="${esc(ch.uid)}">${esc(ch.name)}</button>`).join('')}</div>` : ''}
     ${nowRows.length ? `<h4 class="fb-sub">On now</h4><div class="fb-list">${nowRows.map((x) => fbRow(x, now)).join('')}</div>` : ''}
     ${later.length ? `<h4 class="fb-sub">Coming up</h4><div class="fb-list">${later.map((x) => fbRow(x, now)).join('')}</div>` : ''}
-    ${replays.length ? `<h4 class="fb-sub">Replays and highlights</h4><div class="fb-list fb-replays">${replays.map((x) => fbRow(x, now, true)).join('')}</div>` : ''}`;
+    ${replays.length ? `<h4 class="fb-sub">Replays, highlights and shows</h4><div class="fb-list fb-replays">${replays.map((x) => fbRow(x, now, true)).join('')}</div>` : ''}`;
 }
 
 function fbPicker() {
@@ -112,7 +113,7 @@ function fbSearchHtml() {
   const test = t ? (doc) => fbMatchDoc(t, doc) : fbText(q);
   const add = teams.length ? `<div class="fb-chs wrap">${teams.map((x) => chosen.has(x.id) ? '' : `<button class="chip-btn" data-fb-team="${x.id}">＋ Add ${esc(x.name)}</button>`).join('')}</div>` : '';
   return `<section class="sec fb-team"><div class="rail-head"><h3>${t ? esc(t.name) : `“${esc(q)}”`}</h3>${t ? `<span class="muted">${esc(t.league)}</span>` : ''}</div>
-    ${add}${fbResults(test, `Nothing for ${esc(t ? t.name : q)} in the TV guide or the channel names right now.`, !t)}</section>`;
+    ${add}${fbResults(test, `Nothing for ${esc(t ? t.name : q)} in the TV guide or the channel names right now.`, !t, t)}</section>`;
 }
 
 function fbBody() {
@@ -121,7 +122,7 @@ function fbBody() {
   return fbSearchHtml() + teams.map((t) => `<section class="sec fb-team" data-team="${t.id}">
       <div class="rail-head"><h3>${esc(t.name)}</h3><span class="muted">${esc(t.league)}</span><div class="grow"></div>
         <button class="icon-btn sm" data-fb-team="${t.id}" title="Remove ${esc(t.name)}" aria-label="Remove ${esc(t.name)}"><svg class="ic"><use href="#i-x"/></svg></button></div>
-      ${fbResults((doc) => fbMatchDoc(t, doc), `No ${esc(t.name)} match in the TV guide or the channel names right now. The guide covers about the next day and a half.`)}</section>`).join('');
+      ${fbResults((doc) => fbMatchDoc(t, doc), `No ${esc(t.name)} match in the TV guide or the channel names right now. The guide covers about the next day and a half.`, false, t)}</section>`).join('');
 }
 
 function renderFootball() {

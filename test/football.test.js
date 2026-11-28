@@ -108,3 +108,21 @@ test('replays go apart: said so, a short slot, or the same match again', () => {
   const s2 = fbSplitReplays([row(3, 120, 'Leeds v Man Utd'), row(1, 120, 'Leeds United v Manchester United')]);
   assert.deepStrictEqual(s2.main.map((r) => r.p[2]), ['Leeds United v Manchester United']);
 });
+
+test("a team's match: one stretch of time, whatever the channel's build-up; the rest apart (the owner's guide, 28 Nov)", () => {
+  const { fbSplitTeam } = require('../public/js/football-core');
+  const mu = FB_TEAMS.find((t) => t.id === 'man-utd');
+  const at = (h, m) => Date.parse(`2026-11-28T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`);
+  const row = (a, b, title, desc = '', chs = 1) => ({ p: [a, b, title, desc], chs: Array.from({ length: chs }, (_, i) => ({ name: `c${i}` })) });
+  const s = fbSplitTeam([
+    row(at(15, 0), at(17, 0), 'Fudbal – Engleska liga: Manchester United – Brentford', 'Svakog avgusta 20 ekipa započinje lov na najcenjeniji trofej engleskog fudbala.'),
+    row(at(15, 0), at(17, 0), 'Fussball: Liverpool FC – Manchester United', 'LFC TV – Premier League 11. Spieltag.'),
+    row(at(15, 5), at(16, 55), 'Fussball: Liverpool FC – Manchester United', 'LFC TV – Premier League 11. Spieltag.'),
+    row(at(15, 30), at(16, 0), 'Premier League Studie', 'Se med, når vi varmer op til den forestående Premier League-kamp mellem Manchester United og Brentford'),
+    row(at(15, 30), at(18, 30), 'Manchester United vs Brentford – English Premier League 2026/27', 'Manchester Utd vs Brentford At 28-11-2026, GMT 15:00', 2),
+    row(Date.parse('2026-11-29T07:00:00Z'), Date.parse('2026-11-29T09:00:00Z'), 'Fudbal – Liga šampiona: Sporting – Manchester United', 'Na predlog francuskog novinara…'),
+    row(Date.parse('2026-11-29T13:40:00Z'), Date.parse('2026-11-29T15:35:00Z'), 'Fussball: Sporting Clube de Portugal – Manchester United', 'UEFA Champions League, 5. Spieltag – Deutsch.'),
+  ], mu);
+  assert.deepStrictEqual(s.main.map((r) => r.p[2]), ['Fudbal – Engleska liga: Manchester United – Brentford', 'Manchester United vs Brentford – English Premier League 2026/27']);
+  assert.strictEqual(s.replays.length, 5);
+});

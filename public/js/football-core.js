@@ -231,7 +231,7 @@ function fbGroup(hits) {
 // a short slot (a live match with its build-up takes at least 100 minutes; highlights and cut-down replays less); the
 // same match on again at another time (an airing marked live is the match, else the first one).
 // -> { main: rows, replays: rows } (rows from fbGroup)
-const FB_SAYS_REPLAY = / (replay|replays|re run|rerun|repeat|repeated|classic|classics|re live|relive|rewind|highlights|extended highlights|full match|match of the day|goals|delayed|archive|reprise|repris|opptak|sammendrag|hoydepunkter|hoydepunktene|hele kampen) /;
+const FB_SAYS_REPLAY = / (lfc tv|lfctv|mutv|club tv|chelsea tv|barca tv|real madrid tv|bvb tv|inter tv|milan tv|juventus tv|replay|replays|re run|rerun|repeat|repeated|classic|classics|re live|relive|rewind|highlights|extended highlights|full match|match of the day|goals|delayed|archive|reprise|repris|opptak|sammendrag|hoydepunkter|hoydepunktene|hele kampen) /;
 const FB_SAYS_LIVE = / (live|direkte|live coverage|kick off|kickoff) /;
 const FB_LIVE_MIN = 100 * 60e3;
 function fbSplitReplays(rows) {
@@ -260,4 +260,43 @@ function fbSplitReplays(rows) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup, fbSplitReplays };
+// For one team: a team plays one match at a time, and at most one in the guide's day and a half. So its match is
+// one stretch of time: the airings that overlap (the same match starts at 15:00 on one channel and 15:30 on
+// another, with a different build-up), between the same teams. The stretch is the one said to be live, else the one
+// on the most channels at once (a live match is carried widely; a replay mostly by one channel). Everything else
+// about the team is apart: replays (said so, a club's channel, a short slot, another day or opponent) and shows
+// (a studio, a magazine: no match in the title).
+// -> { main: rows, replays: rows }
+function fbSplitTeam(rows, team) {
+  const info = rows.map((r) => {
+    const doc = fbDoc(`${r.p[2] || ''} ${String(r.p[3] || '').slice(0, 140)}`);
+    const replay = FB_SAYS_REPLAY.test(doc.t) || /\((r|rpt|repeat|repris)\)/i.test(doc.raw);
+    const live = !replay && (FB_SAYS_LIVE.test(doc.t) || /\((l|live)\)/i.test(doc.raw));
+    const title = fbDoc(r.p[2] || '');
+    const teams = FB_TEAMS.filter((t) => fbMatchDoc(t, title)).map((t) => t.id);
+    if (!teams.includes(team.id)) teams.push(team.id);
+    return { r, replay, live, match: title.t.includes(' vs '), short: r.p[1] - r.p[0] < FB_LIVE_MIN, key: teams.sort().join('|') };
+  });
+  // the stretches of overlapping airings that could be the match
+  const cands = info.filter((x) => !x.replay && x.match && (x.live || !x.short)).sort((a, b) => a.r.p[0] - b.r.p[0]);
+  let best = null, bestScore = -1;
+  for (let i = 0; i < cands.length;) {
+    let end = cands[i].r.p[1], j = i;
+    while (j < cands.length && cands[j].r.p[0] < end) { end = Math.max(end, cands[j].r.p[1]); j++; }
+    const byKey = new Map();
+    for (const x of cands.slice(i, j)) {
+      const k = byKey.get(x.key) || { xs: [], score: 0 };
+      k.xs.push(x);
+      k.score += (x.live ? 1000 : 0) + x.r.chs.length;
+      byKey.set(x.key, k);
+    }
+    for (const k of byKey.values()) if (k.score > bestScore) { bestScore = k.score; best = k.xs; }
+    i = j;
+  }
+  const main = new Set(best || []);
+  const out = { main: [], replays: [] };
+  for (const x of info) (main.has(x) ? out.main : out.replays).push(x.r);
+  return out;
+}
+
+if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup, fbSplitReplays, fbSplitTeam };
