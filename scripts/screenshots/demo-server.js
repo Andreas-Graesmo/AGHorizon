@@ -32,8 +32,25 @@ function schedule(chIndex) {
     out.push({ start: t, stop: t + len * 60e3, title: shows[Math.floor(r() * shows.length)], desc: SHOW_DESC[Math.floor(r() * SHOW_DESC.length)], ch: name });
     t += len * 60e3;
   }
+  // a few real matches on the sports channels, for the Football page: one on now (on two channels), one later, highlights
+  const m = MATCHES[name];
+  if (m) {
+    const hour = Math.floor(Date.now() / 3600e3) * 3600e3;
+    for (const [from, mins, title, desc] of m) {
+      const a = hour + from * 3600e3, b = a + mins * 60e3;
+      for (let i = out.length - 1; i >= 0; i--) if (out[i].start < b && out[i].stop > a) out.splice(i, 1);
+      out.push({ start: a, stop: b, title, desc, ch: name });
+    }
+    out.sort((x, y) => x.start - y.start);
+  }
   return out;
 }
+const MATCHES = {
+  'Arena Sports 1': [[-1, 150, 'Premier League: Manchester United v Liverpool', 'Live coverage from Old Trafford.']],
+  'Arena Sports 2': [[-1, 150, 'Premier League: Man Utd v Liverpool', 'Live: the big match of the weekend.'], [3, 135, 'Eliteserien: Brann - Molde', 'Direkte fra Brann Stadion.']],
+  'Goal TV': [[2, 45, 'Highlights: Man Utd v Arsenal', 'The goals and the talking points.']],
+  'Pulse Sports': [[20, 120, 'FA Cup: Chelsea v Manchester United', 'Live coverage of the fourth round.']],
+};
 const xmlTime = (ms) => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
 const xesc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 

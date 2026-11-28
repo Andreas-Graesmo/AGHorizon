@@ -202,6 +202,17 @@ async function main(only) {
       await save(page, 'multiview');
       await ctx.close();
     },
+    async football() {
+      const { page, ctx } = await open({ 'tuner.fbTeams': ['man-utd', 'brann'] });
+      await hideCursor(page);
+      await page.evaluate(() => openWorkspace('demo', 'live'));
+      await page.waitForFunction(() => state.epgState.demo === 'ready', null, { timeout: 30000 });
+      await page.evaluate(() => go('football'));
+      await page.waitForFunction(() => document.querySelectorAll('.fb-row').length >= 3, null, { timeout: 30000 });
+      await settle(page, 800);
+      await save(page, 'football');
+      await ctx.close();
+    },
     async light() {
       const { page, ctx } = await open({ 'tuner.theme': 'light', 'tuner.lightPalette': 'bright', 'tuner.accent': 'blue' });
       await hideCursor(page);
@@ -229,7 +240,7 @@ async function main(only) {
       p { font-size: 22px; color: #c3cbdc; margin: 22px 0 0; line-height: 1.4; }
       .s { position: absolute; left: 580px; top: 92px; width: 860px; border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.1); }
     </style></head><body><div class="t"><div class="b"><img src="icon.svg">AG Horizon</div>
-      <h1>All your TV.<br><span>One calm place.</span></h1><p>Live TV with a real guide, movies and series, multi view. Free for Windows, macOS &amp; Linux.</p></div>
+      <h1>All your TV.<br><span>One calm place.</span></h1><p>Live TV with a real guide, movies and series, your team’s matches. Free for Windows, macOS, Linux &amp; Android TV.</p></div>
       <img class="s" src="img/dashboard.webp"></body></html>`);
     await page.goto('file://' + path.join(docs, '.og.html'));
     await page.evaluate(() => document.fonts.ready);

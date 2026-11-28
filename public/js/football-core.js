@@ -262,8 +262,8 @@ function fbSplitReplays(rows) {
 
 // For one team: a team plays one match at a time, and at most one in the guide's day and a half. So its match is
 // one stretch of time: the airings that overlap (the same match starts at 15:00 on one channel and 15:30 on
-// another, with a different build-up), between the same teams. The stretch is the one said to be live, else the one
-// on the most channels at once (a live match is carried widely; a replay mostly by one channel). Everything else
+// another, with a different build-up), between the same teams: the stretch on the most channels at once (a live
+// match is carried widely; a replay mostly by one channel); and any other airing that says it is live. Everything else
 // about the team is apart: replays (said so, a club's channel, a short slot, another day or opponent) and shows
 // (a studio, a magazine: no match in the title).
 // -> { main: rows, replays: rows }
@@ -287,15 +287,25 @@ function fbSplitTeam(rows, team) {
     for (const x of cands.slice(i, j)) {
       const k = byKey.get(x.key) || { xs: [], score: 0 };
       k.xs.push(x);
-      k.score += (x.live ? 1000 : 0) + x.r.chs.length;
+      k.score += x.r.chs.length;   // (an airing that says it is live is added below, whatever this picks)
       byKey.set(x.key, k);
     }
     for (const k of byKey.values()) if (k.score > bestScore) { bestScore = k.score; best = k.xs; }
     i = j;
   }
   const main = new Set(best || []);
-  const out = { main: [], replays: [] };
-  for (const x of info) (main.has(x) ? out.main : out.replays).push(x.r);
+  // a match that says it is live is a match too (the next one, on another day; a replay rarely says so)
+  for (const x of cands) if (x.live && !main.has(x)) main.add(x);
+  // one row per match: its airings together, whatever each channel calls it ("Manchester United v Liverpool",
+  // "Man Utd v Liverpool"), from the first one's start
+  const merged = new Map();
+  for (const x of [...main].sort((a, b) => a.r.p[0] - b.r.p[0])) {
+    const key = [...merged.keys()].find((k) => k.key === x.key && x.r.p[0] < k.end) ;
+    if (key) { const m = merged.get(key); for (const c of x.r.chs) if (!m.chs.includes(c)) m.chs.push(c); key.end = Math.max(key.end, x.r.p[1]); }
+    else merged.set({ key: x.key, end: x.r.p[1] }, { p: x.r.p, chs: [...x.r.chs] });
+  }
+  const out = { main: [...merged.values()], replays: [] };
+  for (const x of info) if (!main.has(x)) out.replays.push(x.r);
   return out;
 }
 

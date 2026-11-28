@@ -117,7 +117,7 @@ code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 .codec { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px !important; }
 .codec span { font-weight: 700; color: var(--text); background: var(--deep); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
 .codec span:nth-child(2n) { color: var(--accent); }
-.card-light { padding: 0; overflow: hidden; grid-column: span 2; display: flex; }
+.card-light { padding: 0; overflow: hidden; grid-column: 1 / -1; display: flex; }   /* under the nine small cards, across */
 .card-light img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .swatches button { width: 30px; height: 30px; border-radius: 50%; border: 0; background: var(--c); cursor: pointer; box-shadow: 0 0 0 2px var(--panel), 0 0 0 2px transparent; transition: box-shadow .2s, transform .15s; }
@@ -179,7 +179,7 @@ details p { color: #c3cbdc; padding: 0 0 22px; }
   .feature-in, .feature.flip .feature-in { grid-template-columns: 1fr; }
   .feature.flip .copy { order: 0; }
   .cards { grid-template-columns: 1fr 1fr; }
-  .card-light { grid-column: span 2; }
+  .card-light { grid-column: 1 / -1; }
   .platforms { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {

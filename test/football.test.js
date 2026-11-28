@@ -123,6 +123,10 @@ test("a team's match: one stretch of time, whatever the channel's build-up; the 
     row(Date.parse('2026-11-29T07:00:00Z'), Date.parse('2026-11-29T09:00:00Z'), 'Fudbal – Liga šampiona: Sporting – Manchester United', 'Na predlog francuskog novinara…'),
     row(Date.parse('2026-11-29T13:40:00Z'), Date.parse('2026-11-29T15:35:00Z'), 'Fussball: Sporting Clube de Portugal – Manchester United', 'UEFA Champions League, 5. Spieltag – Deutsch.'),
   ], mu);
-  assert.deepStrictEqual(s.main.map((r) => r.p[2]), ['Fudbal – Engleska liga: Manchester United – Brentford', 'Manchester United vs Brentford – English Premier League 2026/27']);
+  // one row: the two airings of the match together, with both channels
+  assert.deepStrictEqual(s.main.map((r) => [r.p[2], r.chs.length]), [['Fudbal – Engleska liga: Manchester United – Brentford', 3]]);
   assert.strictEqual(s.replays.length, 5);
+  // a later match that says it is live is a match too
+  const s2 = fbSplitTeam([row(at(15, 0), at(17, 0), 'Man Utd v Brentford', ''), row(Date.parse('2026-11-29T16:00:00Z'), Date.parse('2026-11-29T18:00:00Z'), 'FA Cup: Chelsea v Manchester United', 'Live coverage of the fourth round.')], mu);
+  assert.strictEqual(s2.main.length, 2);
 });

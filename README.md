@@ -1,16 +1,17 @@
 # AG Horizon
 
-A desktop IPTV player (Windows, macOS, Linux) built with Tauri (from 3.1; 2.x was built with Electron), laid out like IPTVnator. It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
+A desktop IPTV player (Windows, macOS, Linux) built with Tauri (from 3.1; 2.x was built with Electron). It also runs on **Android TV**, steered with the remote (see [Android TV](#android-tv)).
 
 - **Dashboard** with a large slideshow, *Trending this week* (from TMDB, matched to your playlists), live channels on your favorites, and what you watched recently
 - **Live TV** – channel list (All / Groups / Favorites, numbers, search), the player, and a programme-guide column for the channel you watch; plus a full TV-guide grid
-- **Movies and series** – category list with poster grids, sorting, detail pages with plot, cast, seasons and episodes, "Resume", auto-play of the next episode
+- **Movies and series** – category list with poster grids, sorting, detail pages with plot, cast (with photos and sharp posters from TMDB), seasons and episodes, "Resume", auto-play of the next episode
+- **Football** – pick your teams and see their matches from the TV guide and the channel names: what's on now, what's coming up, and the channels showing it (see below)
 - **Several playlists** – Xtream Codes (server + login, or paste a `get.php?username=…&password=…` link), M3U/M3U8 by URL or file; drag an `.m3u` file onto the window to add it
 - **Mirror picture** – show the same picture onto another monitor or TV (see below)
 - **Compatibility mode** – HEVC video and DTS / AC-3 audio are converted on the fly with ffmpeg
 - **Audio language and subtitles** – switch between a video's languages, with a preferred language for each (see below)
 - **Sync between computers** – Recently viewed, where you stopped and favorites, end-to-end encrypted with a sync code (see below)
-- Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, mini player that keeps playing while you browse
+- Favorites and recently viewed across playlists, global search, command palette (**Ctrl K**), light / dark theme with accent colours, 24- or 12-hour clock, mini player that keeps playing while you browse
 - Keyboard: press **?** in the app for the full list
 
 ## Download
@@ -35,7 +36,7 @@ Building from source and publishing releases: see [RELEASING.md](RELEASING.md).
 
 ## Android TV
 
-The same app on a TV: Android TV and Google TV boxes and sets with Android 7 or newer. (Fire TV runs Android apps too, but the app hasn't been tried there.) It has the dashboard, Live TV with the guide, movies and series, favorites, recently viewed, search, several playlists and sync (AG Horizon cloud).
+The same app on a TV: Android TV and Google TV boxes and sets with Android 7 or newer. (Fire TV runs Android apps too, but the app hasn't been tried there.) It has the dashboard, Live TV with the guide, movies and series, the Football page, favorites, recently viewed, search, several playlists and sync (AG Horizon cloud). It opens with the AG Horizon sun rising over the horizon while it starts.
 
 **Installing.** Download `AG-Horizon-TV-<version>.apk` from the [releases page](https://github.com/Andreas-Graesmo/AGHorizon/releases/latest) and install it on the TV. The usual ways: the *Downloader* app on the TV (type the address of the file), *Send files to TV* from a phone, or `adb install` from a computer. The TV asks once whether that app may install apps. After that the app updates itself: it tells you when there is a new version, downloads it, and hands it to Android's installer, which asks you once more (**Settings › About & updates**). Your playlists, favorites and history are kept.
 
@@ -58,6 +59,17 @@ The same app on a TV: Android TV and Google TV boxes and sets with Android 7 or 
 **Size.** **Settings › Appearance › Size** makes everything larger or smaller.
 
 **If pages look wrong** (missing colours, broken layout), the TV's *Android System WebView* is old: the app needs version 111 or newer. Update it in the TV's app store.
+
+## Football
+
+The ball in the left rail (under Live TV, Series and Movies) opens your teams' matches.
+
+- **Your teams:** pick as many as you like, from England, Norway, Spain, Italy, Germany, France and the national teams. Each gets its own part of the page: the channels named after a match first, then what's **on now**, what's **coming up**, and apart from those, **replays, highlights and shows**.
+- **Where it looks:** the TV guide of your playlists and the channel names (many providers have match channels such as "EPL 03: Man Utd vs Liverpool 20:00", often without a guide). The guide covers about the next day and a half, so a match further ahead shows up when the guide has it.
+- **Every name a team goes by:** Manchester United is found as Manchester United, Man United, Man Utd, Man. Utd, MUFC, ManU, Red Devils and "MUN v LIV". Words that also mean something else (Brann, Viking, Arsenal, Norway) only count when the text is about football ("Brann – Molde", not "Brann i Bergen"), and other teams with the same words (Man City, Leeds United) never do.
+- **One match, all its channels:** the same match on several channels (an HD and an SD feed, a 15:00 and a 15:30 start with different build-ups) is one row with a button per channel. Pick one and it plays.
+- **Replays are kept apart:** what says so (replay, highlights, classic, "(R)", reprise…), short slots, a club's own channel (MUTV, LFC TV: only its live matches, such as pre-season friendlies, count), and the team's other airings in the guide's day and a half. A replay that shows once, in a long slot and without any mark, looks like a live match in the guide: that one can still show among the matches.
+- **Search** for any team (by any of its names) or for any words, such as "Champions League", from the box at the top.
 
 ## Sources and startup
 
@@ -146,6 +158,8 @@ public/js/boot.js       start-up, drag & drop
 public/mirror.html/js   the mirror window
 scripts/get-vendor.js   optional: download player libraries locally
 public/js/tv.js         Android TV: the remote, what a TV leaves out, handing playback to the TV's player
+public/js/football.js   the Football page
+public/js/football-core.js  the teams and their names, finding their matches in the guide and channel names
 unicode-ln.js           letters and numbers, for the Node.js inside the Android TV app (made by scripts/gen-unicode-ln.js)
 android/                the Android TV app: WebView, the Rust server (server-rs/jni), ExoPlayer
 android/ci/smoke.js     tries the Android TV app on an emulator

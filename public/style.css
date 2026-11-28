@@ -1,4 +1,4 @@
-/* AG Horizon – styles. IPTVnator-inspired: near-black chrome, navy surfaces, one accent colour (set from JS). */
+/* AG Horizon – styles: near-black chrome, navy surfaces, one accent colour (set from JS). */
 
 /* DM Sans, bundled (SIL Open Font License, fonts/OFL.txt): Google Fonts' latin and latin-ext files, so start-up doesn't wait for the internet */
 @font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400 800; font-display: swap; src: url(fonts/dm-sans-latin-ext.woff2) format('woff2');
