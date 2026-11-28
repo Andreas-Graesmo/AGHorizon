@@ -63,7 +63,7 @@ pub fn parse_xmltv_time(s: &str) -> Option<f64> {
 }
 
 /// Date.UTC, which also accepts out-of-range months, days, hours… by carrying them over.
-fn date_utc(y: i64, mo: i64, d: i64, h: i64, mi: i64, s: i64) -> f64 {
+pub(crate) fn date_utc(y: i64, mo: i64, d: i64, h: i64, mi: i64, s: i64) -> f64 {
     let y = y + mo.div_euclid(12);
     let mo = mo.rem_euclid(12) + 1;
     // days from civil (Howard Hinnant)

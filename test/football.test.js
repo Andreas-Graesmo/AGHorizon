@@ -130,3 +130,29 @@ test("a team's match: one stretch of time, whatever the channel's build-up; the 
   const s2 = fbSplitTeam([row(at(15, 0), at(17, 0), 'Man Utd v Brentford', ''), row(Date.parse('2026-11-29T16:00:00Z'), Date.parse('2026-11-29T18:00:00Z'), 'FA Cup: Chelsea v Manchester United', 'Live coverage of the fourth round.')], mu);
   assert.strictEqual(s2.main.length, 2);
 });
+
+test("with the real fixtures: an airing at a kick-off is that match; last weekend's match again is a replay", () => {
+  const { fbSplitTeam, fbNextLast } = require('../public/js/football-core');
+  const mu = FB_TEAMS.find((t) => t.id === 'man-utd');
+  const T = (s) => Date.parse(`2026-${s}:00Z`);
+  const row = (a, b, title, desc = '', chs = 1) => ({ p: [T(a), T(b), title, desc], chs: Array.from({ length: chs }, (_, i) => ({ name: `${title}${i}` })) });
+  const fixtures = [
+    { home: 'Manchester United', away: 'Brentford', league: 'English Premier League', at: T('11-28T15:00'), score: '' },
+    { home: 'Liverpool', away: 'Manchester United', league: 'English Premier League', at: T('11-22T17:30'), score: '1-2' },
+  ];
+  const s = fbSplitTeam([
+    row('11-28T14:30', '11-28T17:00', 'Manchester United – Brentford', '', 2),             // the match
+    row('11-28T14:55', '11-28T17:05', 'Man Utd v Brentford', 'Live'),                      // the match, another channel
+    row('11-28T14:00', '11-28T15:00', 'Man Utd v Brentford: build-up'),                    // ends at kick-off
+    row('11-28T15:00', '11-28T17:00', 'Chelsea v Arsenal', 'Also: Man Utd news'),          // another match at the time
+    row('11-28T15:00', '11-28T17:00', 'Liverpool FC – Manchester United', 'Premier League'), // last weekend's, not marked
+    row('11-28T19:00', '11-28T21:00', 'Manchester United – Brentford'),                    // the match again
+    row('12-04T19:00', '12-04T21:00', 'Friendly: Man Utd v Celtic', 'Live from Dublin'),   // live, no fixture near it
+  ], mu, fixtures);
+  assert.deepStrictEqual(s.main.map((r) => [r.p[2], r.chs.length, r.fx && r.fx.away]), [['Manchester United – Brentford', 3, 'Brentford'], ['Friendly: Man Utd v Celtic', 1, undefined]]);
+  assert.deepStrictEqual(s.replays.map((r) => r.p[2]), ['Man Utd v Brentford: build-up', 'Chelsea v Arsenal', 'Liverpool FC – Manchester United', 'Manchester United – Brentford']);
+  // no kick-offs known (still loading, or TheSportsDB is down): the guide alone decides, as before
+  assert.strictEqual(fbSplitTeam([row('11-28T15:00', '11-28T17:00', 'Liverpool FC – Manchester United')], mu, [{ at: 0 }]).main.length, 1);
+  const nl = fbNextLast(fixtures, T('11-28T12:00'));
+  assert.deepStrictEqual([nl.next.away, nl.last.score], ['Brentford', '1-2']);
+});

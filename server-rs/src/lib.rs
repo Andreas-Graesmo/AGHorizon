@@ -14,6 +14,7 @@ pub mod stream;
 pub mod subtitles;
 pub mod sync_folder;
 pub mod tmdb;
+pub mod fixtures;
 pub mod util;
 
 use bytes::Bytes;
@@ -35,6 +36,9 @@ pub struct Config {
     /// AGH_TMDB_BASE / AGH_OPENSUBTITLES_BASE: the test suite's fakes; the real services otherwise
     pub tmdb_base: String,
     pub opensubtitles_base: String,
+    /// TheSportsDB (football fixtures): THESPORTSDB_API_KEY / "tsdbApiKey", else the free key; AGH_TSDB_BASE: the tests' fake
+    pub tsdb_key: String,
+    pub tsdb_base: String,
     /// finished downloads by id (server.js: setLocalFiles); None: /api/local answers "Not downloaded"
     pub local_files: Option<local::LocalFiles>,
 }
@@ -54,6 +58,8 @@ impl Config {
             opensubtitles_key: key("OPENSUBTITLES_API_KEY", "opensubtitlesApiKey"),
             tmdb_key: key("TMDB_API_KEY", "tmdbApiKey"),
             tmdb_base: std::env::var("AGH_TMDB_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://api.themoviedb.org/3".into()),
+            tsdb_key: Some(key("THESPORTSDB_API_KEY", "tsdbApiKey")).filter(|s| !s.is_empty()).unwrap_or_else(|| "123".into()),
+            tsdb_base: std::env::var("AGH_TSDB_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://www.thesportsdb.com/api/v1/json".into()),
             opensubtitles_base: std::env::var("AGH_OPENSUBTITLES_BASE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "https://api.opensubtitles.com/api/v1".into()),
             // with a data folder, the downloads engine runs here (main.rs) and hands out its finished files
             local_files: std::env::var_os("AGH_DATA_DIR").filter(|s| !s.is_empty()).map(|_| -> local::LocalFiles { std::sync::Arc::new(downloads::local_file) }),
@@ -277,6 +283,7 @@ pub async fn handle(cfg: Arc<Config>, req: Request<Incoming>) -> Resp {
             &json!({ "ffmpeg": ffmpeg(&cfg).await.is_some(), "opensubtitles": !cfg.opensubtitles_key.is_empty(), "tmdb": !cfg.tmdb_key.is_empty() }),
         )),
         ("/api/tmdb", &Method::GET) => tmdb::handle_tmdb(&cfg.tmdb_base, &cfg.tmdb_key, &q).await,
+        ("/api/fixtures", &Method::GET) => fixtures::handle_fixtures(&cfg.tsdb_base, &cfg.tsdb_key, &q).await,
         ("/api/trending", &Method::GET) => tmdb::handle_trending(&cfg.tmdb_base, &cfg.tmdb_key).await,
         ("/api/probe", &Method::GET) => ffmpeg::probe(ffmpeg(&cfg).await, &q).await,
         ("/api/keyframe", &Method::GET) => ffmpeg::keyframe(ffmpeg(&cfg).await, &q).await,

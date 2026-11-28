@@ -267,7 +267,14 @@ function fbSplitReplays(rows) {
 // about the team is apart: replays (said so, a club's channel, a short slot, another day or opponent) and shows
 // (a studio, a magazine: no match in the title).
 // -> { main: rows, replays: rows }
-function fbSplitTeam(rows, team) {
+// A guide entry is that real match when it starts by 20 minutes after the kick-off (and not more than 3 hours
+// before: a long build-up) and lasts at least an hour past it: not the build-up alone, nor the highlights after.
+const fbAtKickoff = (p, at) => p[0] <= at + 20 * 60e3 && p[0] >= at - 3 * 3600e3 && p[1] >= at + 60 * 60e3;
+const FB_NEAR = 36 * 3600e3;
+
+function fbSplitTeam(rows, team, fixtures = null) {
+  const kickoffs = (fixtures || []).filter((f) => f.at > 0);
+  if (kickoffs.length) return fbSplitByFixtures(rows, team, kickoffs);
   const info = rows.map((r) => {
     const doc = fbDoc(`${r.p[2] || ''} ${String(r.p[3] || '').slice(0, 140)}`);
     const replay = FB_SAYS_REPLAY.test(doc.t) || /\((r|rpt|repeat|repris)\)/i.test(doc.raw);
@@ -309,4 +316,41 @@ function fbSplitTeam(rows, team) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup, fbSplitReplays, fbSplitTeam };
+// With the team's real matches (TheSportsDB): an airing at a kick-off is that match, one row per match whatever each
+// channel calls it, with the match itself on it (r.fx); one that says it is live, a day and a half from any known
+// match, is one too (a friendly or a cup match the fixture list lacks); everything else is a replay or a show.
+function fbSplitByFixtures(rows, team, kickoffs) {
+  const merged = new Map(), out = { main: [], replays: [] };
+  // the teams we know in each match: a guide entry naming another one ("Liverpool – Manchester United" at the kick-off
+  // of Manchester United – Brentford) is another match
+  const sides = new Map(kickoffs.map((f) => [f, new Set(FB_TEAMS.filter((t) => fbMatches(t, `${f.home} v ${f.away}`)).map((t) => t.id))]));
+  for (const r of [...rows].sort((a, b) => a.p[0] - b.p[0])) {
+    const doc = fbDoc(`${r.p[2] || ''} ${String(r.p[3] || '').slice(0, 140)}`);
+    const replay = FB_SAYS_REPLAY.test(doc.t) || /\((r|rpt|repeat|repris)\)/i.test(doc.raw);
+    const title = fbDoc(r.p[2] || '');
+    // a title that names a match names this team's ("Chelsea v Arsenal" at the same time, with Man Utd in its description, is not it)
+    const ours = !title.t.includes(' vs ') || fbMatchDoc(team, title);
+    const named = FB_TEAMS.filter((t) => fbMatchDoc(t, title));
+    const fx = !replay && ours ? kickoffs.find((f) => fbAtKickoff(r.p, f.at) && named.every((t) => t.id === team.id || sides.get(f).has(t.id))) : null;
+    if (fx) {
+      const m = merged.get(fx);
+      if (m) { for (const c of r.chs) if (!m.chs.includes(c)) m.chs.push(c); }
+      else { const row = { p: r.p, chs: [...r.chs], fx }; merged.set(fx, row); out.main.push(row); }
+      continue;
+    }
+    const live = !replay && (FB_SAYS_LIVE.test(doc.t) || /\((l|live)\)/i.test(doc.raw));
+    if (live && ours && !kickoffs.some((f) => Math.abs(f.at - r.p[0]) < FB_NEAR)) out.main.push(r);
+    else out.replays.push(r);
+  }
+  return out;
+}
+
+// The next match and the last result, for under a team's name: { next, last } (either may be null)
+function fbNextLast(fixtures, now) {
+  const all = (fixtures || []).filter((f) => f.at > 0);
+  const next = all.filter((f) => f.at + 2 * 3600e3 > now && !f.score).sort((a, b) => a.at - b.at)[0] || null;
+  const last = all.filter((f) => f.score && f.at < now).sort((a, b) => b.at - a.at)[0] || null;
+  return { next, last };
+}
+
+if (typeof module !== 'undefined') module.exports = { FB_TEAMS, FB_LEAGUES, fbNorm, fbDoc, fbMatches, fbMatchDoc, fbFindTeams, fbNewIndex, fbIndexAdd, fbSearchIndex, fbSearch, fbText, fbGroup, fbSplitReplays, fbSplitTeam, fbNextLast };

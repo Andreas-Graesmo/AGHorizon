@@ -131,6 +131,7 @@ function provider() {
       default:
         if (u.pathname.startsWith('/share/')) return shareLive(req, res, u);
         if (u.pathname.startsWith('/tmdb/')) return tmdb(req, res, u);
+        if (u.pathname.startsWith('/tsdb/')) return tsdb(req, res, u);
         if (u.pathname.startsWith('/os/')) return opensubs(req, res, u);
         return send(404, 'no such thing');
     }
@@ -175,7 +176,36 @@ function shareLive(req, res, u) {
 }
 
 // a fake TMDB (AGH_TMDB_BASE = <provider>/tmdb/3)
-const hits = { tmdb: 0, trending: 0, os: [] };
+const hits = { tmdb: 0, trending: 0, os: [], tsdb: 0 };
+// a fake TheSportsDB (AGH_TSDB_BASE = <provider>/tsdb/json; the key is the first part of the path)
+function tsdb(req, res, u) {
+  const json = (status, j) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(j)); };
+  const [, , , key, page] = u.pathname.split('/');
+  if (key !== 'parity-tsdb') return json(401, { error: 'key' });
+  hits.tsdb++;
+  const t = u.searchParams.get('t'), id = u.searchParams.get('id');
+  if (page === 'searchteams.php') {
+    if (t === 'Broken') return json(500, {});
+    if (t === 'Nobody') return json(200, { teams: null });
+    return json(200, { teams: [
+      { idTeam: '1', strTeam: 'Manchester United W.F.C.', strSport: 'Soccer', strGender: 'Female' },
+      { idTeam: '2', strTeam: 'Manchester United Rugby', strSport: 'Rugby', strGender: 'Male' },
+      { idTeam: 3, strTeam: 'Wigan', strSport: 'Soccer', strGender: 'Male' },
+      { idTeam: '133612', strTeam: 'Manchester United', strTeamAlternate: 'Man United, Man Utd', strSport: 'Soccer', strGender: 'Male' },
+    ] });
+  }
+  if (page === 'eventsnext.php' && id === '133612') return json(200, { events: [
+    { strHomeTeam: 'Manchester United', strAwayTeam: 'Liverpool', strLeague: 'English Premier League', strTimestamp: '2026-11-29T16:30:00', intHomeScore: null, intAwayScore: null },
+    { strHomeTeam: 'Brentford', strAwayTeam: 'Manchester United', strLeague: 'English Premier League', strTimestamp: '2026-12-03T20:00:00+01:00', intHomeScore: '', intAwayScore: '' },
+    { strHomeTeam: 'Man Utd', strAwayTeam: 'Everton', strLeague: 'FA Cup', strTimestamp: '', dateEvent: '2026-12-07', strTime: '14:00:00' },
+    { strHomeTeam: 'X', strAwayTeam: 'Y', strTimestamp: 'soon' },
+  ] });
+  if (page === 'eventslast.php' && id === '133612') return json(200, { results: [
+    { strHomeTeam: 'Chelsea', strAwayTeam: 'Manchester United', strLeague: 'English Premier League', strTimestamp: '2026-11-22T17:30:00Z', intHomeScore: '1', intAwayScore: 2 },
+  ] });
+  if (page.startsWith('events')) return json(200, { events: null, results: null });
+  return json(404, {});
+}
 function tmdb(req, res, u) {
   const json = (status, j) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(j)); };
   if (u.searchParams.get('api_key') !== 'parity-tmdb') return json(401, { status_message: 'Invalid API key' });
@@ -317,6 +347,7 @@ test.before(async () => {
   const s = await startServer({
     PUBLIC_DIR: path.join(pub, 'public'), FFMPEG_PATH: FFMPEG,
     OPENSUBTITLES_API_KEY: 'parity-os', TMDB_API_KEY: 'parity-tmdb',
+    THESPORTSDB_API_KEY: 'parity-tsdb', AGH_TSDB_BASE: `${P}/tsdb/json`,
     AGH_TMDB_BASE: `${P}/tmdb/3`, AGH_OPENSUBTITLES_BASE: `${P}/os/api/v1`,
     AGH_DATA_DIR: path.join(pub, 'data'), AGH_DOCUMENTS_DIR: pub,
     AGH_SHARE_REVISIT: '0.4',   // the real 3 s would make the sharing test take half a minute
@@ -652,6 +683,31 @@ test('tmdb: runtime and cast, once per title', async () => {
   assert.deepStrictEqual((await req('/api/tmdb?id=7')).json(), { runtime: 0, poster: '', cast: [] });
   for (const [qs, status, error] of [['id=404', 404, 'TMDB answered HTTP 404'], ['id=500', 502, 'TMDB answered HTTP 500'], ['id=12a', 400, 'Invalid id'], ['id=', 400, 'Invalid id'], ['', 400, 'Invalid id'], ['id=12345678901', 400, 'Invalid id']]) {
     r = await req(`/api/tmdb?${qs}`);
+    assert.deepStrictEqual([r.status, r.json()], [status, { error }], qs);
+  }
+});
+
+test('fixtures: the men\'s football team, its next and last matches, kept', async () => {
+  let r = await req('/api/fixtures?q=Man%20Utd');
+  assert.strictEqual(r.status, 200, r.text);
+  const j = r.json();
+  assert.deepStrictEqual(j, {
+    id: '133612', name: 'Manchester United',
+    next: [
+      { home: 'Manchester United', away: 'Liverpool', league: 'English Premier League', at: Date.UTC(2026, 10, 29, 16, 30), score: '' },
+      { home: 'Brentford', away: 'Manchester United', league: 'English Premier League', at: Date.UTC(2026, 11, 3, 19, 0), score: '' },
+      { home: 'Man Utd', away: 'Everton', league: 'FA Cup', at: Date.UTC(2026, 11, 7, 14, 0), score: '' },
+      { home: 'X', away: 'Y', league: '', at: 0, score: '' },
+    ],
+    last: [{ home: 'Chelsea', away: 'Manchester United', league: 'English Premier League', at: Date.UTC(2026, 10, 22, 17, 30), score: '1-2' }],
+  });
+  const before = hits.tsdb;
+  assert.deepStrictEqual((await req('/api/fixtures?q=man%20utd')).json(), j);   // from the cache: no request
+  assert.strictEqual(hits.tsdb, before);
+  // no alternate name matches: the first men's football team
+  assert.deepStrictEqual((await req('/api/fixtures?q=Manchester')).json(), { id: '3', name: 'Wigan', next: [], last: [] });
+  for (const [qs, status, error] of [['q=Nobody', 404, 'Team not found'], ['q=Broken', 502, 'TheSportsDB answered HTTP 500'], ['q=', 400, 'Invalid team'], ['', 400, 'Invalid team'], [`q=${'x'.repeat(81)}`, 400, 'Invalid team']]) {
+    r = await req(`/api/fixtures?${qs}`);
     assert.deepStrictEqual([r.status, r.json()], [status, { error }], qs);
   }
 });

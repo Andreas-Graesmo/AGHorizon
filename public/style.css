@@ -1039,6 +1039,10 @@ html.tv .chan-col { width: 300px; }
 .fb-when .bar { height: 3px; border-radius: 2px; background: var(--panel-3); overflow: hidden; }
 .fb-when .bar i { display: block; height: 100%; background: var(--accent); }
 .fb-what b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-what .fb-ok { display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.fb-fx { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: -4px 0 10px; font-size: 13.5px; }
+.fb-fx b { font-weight: 600; }
+.fb-fx .fb-score { margin-left: 4px; color: var(--accent); }
 .fb-what p { margin: 3px 0 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fb-chs { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; max-width: 460px; }
 .fb-chs.wrap { justify-content: flex-start; max-width: none; }

@@ -982,6 +982,60 @@ async function handleTmdb(req, res, q) {
   sendJson(res, 200, tmdbCache.get(key));
 }
 
+/* ------------------------------------------------------------- football fixtures (TheSportsDB) */
+// GET /api/fixtures?q=<team name> -> { id, name, next: [match], last: [match] }, match: { home, away, league, at, score }
+// (at: kick-off, ms; score: "2-1" once played, else ""). The Football page checks guide entries against the real
+// kick-offs. The team is looked up by name once (kept a week), its matches kept 6 hours.
+// THESPORTSDB_API_KEY (or "tsdbApiKey" in secrets.json), else TheSportsDB's free key; AGH_TSDB_BASE: the tests' fake.
+const TSDB_KEY = process.env.THESPORTSDB_API_KEY || (() => { try { return require('./secrets.json').tsdbApiKey || ''; } catch { return ''; } })() || '123';
+const TSDB_API = process.env.AGH_TSDB_BASE || 'https://www.thesportsdb.com/api/v1/json';
+const tsdbTeams = new Map();   // name (lower case) -> { id, name, t }
+const tsdbMatches = new Map(); // id -> { v, t }
+const tsdbGet = async (path) => {
+  const r = await fetch(`${TSDB_API}/${encodeURIComponent(TSDB_KEY)}/${path}`, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw httpError(502, `TheSportsDB answered HTTP ${r.status}`);
+  return r.json();
+};
+// kick-off, ms: "2026-11-28T15:00:00+00:00", "2026-11-28T15:00:00" (UTC), else the date and time apart; 0: unknown
+const TSDB_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/;
+function tsdbTime(e) {
+  const m = TSDB_TIME.exec(String(e.strTimestamp || '')) || TSDB_TIME.exec(`${e.dateEvent || ''}T${e.strTime || '00:00:00'}`);
+  if (!m) return 0;
+  let t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  if (m[7] && m[7] !== 'Z') {
+    const z = m[7].replace(':', '');
+    t -= (z[0] === '-' ? -1 : 1) * (+z.slice(1, 3) * 60 + +z.slice(3, 5)) * 60000;
+  }
+  return t;
+}
+const tsdbMatch = (e) => ({
+  home: e.strHomeTeam || '', away: e.strAwayTeam || '', league: e.strLeague || '', at: tsdbTime(e),
+  score: e.intHomeScore != null && e.intHomeScore !== '' && e.intAwayScore != null && e.intAwayScore !== '' ? `${e.intHomeScore}-${e.intAwayScore}` : '',
+});
+async function handleFixtures(req, res, q) {
+  const name = String(q.get('q') || '').trim();
+  if (!name || name.length > 80) throw httpError(400, 'Invalid team');
+  const key = name.toLowerCase();
+  let team = tsdbTeams.get(key);
+  if (!team || Date.now() - team.t > 7 * 864e5) {
+    const j = await tsdbGet(`searchteams.php?t=${encodeURIComponent(name)}`);
+    // the men's football team of that name (or of that alternate name), else the first men's football team found
+    const all = (j.teams || []).filter((t) => t.strSport === 'Soccer' && t.strGender !== 'Female');
+    const same = (t) => [t.strTeam, ...String(t.strTeamAlternate || '').split(',')].some((n) => n.trim().toLowerCase() === key);
+    const t = all.find(same) || all[0];
+    if (!t) throw httpError(404, 'Team not found');
+    team = { id: String(t.idTeam), name: t.strTeam || name, t: Date.now() };
+    tsdbTeams.set(key, team);
+  }
+  let m = tsdbMatches.get(team.id);
+  if (!m || Date.now() - m.t > 6 * 3600e3) {
+    const [next, last] = await Promise.all([tsdbGet(`eventsnext.php?id=${team.id}`), tsdbGet(`eventslast.php?id=${team.id}`)]);
+    m = { t: Date.now(), v: { next: (next.events || []).map(tsdbMatch), last: (last.results || []).map(tsdbMatch) } };
+    tsdbMatches.set(team.id, m);
+  }
+  sendJson(res, 200, { id: team.id, name: team.name, ...m.v });
+}
+
 // GET /api/trending -> { movie: [...], tv: [...] }, this week's 40 most popular of each on TMDB, best first:
 // { id, title, original, year, overview, backdrop }. The page matches them against the playlists. Kept 6 hours.
 let trending = null;   // { t, job }
@@ -1062,6 +1116,7 @@ const server = http.createServer(async (req, res) => {
     else if (url.pathname === '/api/tracks' && req.method === 'GET') handleTracks(req, res, url.searchParams);
     else if (url.pathname === '/api/capabilities' && req.method === 'GET') handleCapabilities(req, res);
     else if (url.pathname === '/api/tmdb' && req.method === 'GET') await handleTmdb(req, res, url.searchParams);
+    else if (url.pathname === '/api/fixtures' && req.method === 'GET') await handleFixtures(req, res, url.searchParams);
     else if (url.pathname === '/api/trending' && req.method === 'GET') await handleTrending(req, res);
     else if (url.pathname === '/api/probe' && req.method === 'GET') handleProbe(req, res, url.searchParams);
     else if (url.pathname === '/api/keyframe' && req.method === 'GET') handleKeyframe(req, res, url.searchParams);
