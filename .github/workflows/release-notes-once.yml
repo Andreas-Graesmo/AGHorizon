@@ -1,0 +1,22 @@
+# One-off, owner's request: release notes for the 3.1.3 betas (.github/release-notes/). Removed again after it ran.
+name: Release notes for the 3.1.3 betas
+on:
+  push:
+    branches: [migration/tauri]
+    paths: ['.github/workflows/release-notes-once.yml']
+permissions:
+  contents: write
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Write each beta's notes on its release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for f in .github/release-notes/*.md; do
+            tag="$(basename "$f" .md)"
+            gh release edit "$tag" --notes-file "$f" && echo "$tag: done"
+          done
